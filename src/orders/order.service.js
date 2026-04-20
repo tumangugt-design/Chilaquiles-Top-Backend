@@ -41,37 +41,37 @@ export const getOrdersByRole = async (user, statusFilter = null) => {
     query.userId = user._id;
   } else if (user.role === USER_ROLES.CHEF) {
     if (statusFilter === 'finished') {
-      // History for this specific chef: Orders they finished
       query.chefId = user._id;
-      query.status = { $in: [ORDER_STATUS.LISTO_PARA_DESPACHO, ORDER_STATUS.EN_CAMINO, ORDER_STATUS.ENTREGADO] };
+      query.status = { $in: [ORDER_STATUS.LISTO_PARA_DESPACHO, ORDER_STATUS.RECOLECTADO, ORDER_STATUS.EN_CAMINO, ORDER_STATUS.ENTREGADO] };
     } else {
-      // Active orders for cocina
       query.$or = [
         { status: ORDER_STATUS.RECIBIDO, chefId: { $exists: false } },
         { status: ORDER_STATUS.RECIBIDO, chefId: null },
-        { chefId: user._id, status: { $in: [ORDER_STATUS.EN_PROCESO] } }
+        { chefId: user._id, status: { $in: [ORDER_STATUS.EN_PROCESO, ORDER_STATUS.RECIBIDO] } }
       ];
     }
   } else if (user.role === USER_ROLES.REPARTIDOR) {
     if (statusFilter === 'delivered') {
-      // History for this specific courier
       query.repartidorId = user._id;
       query.status = ORDER_STATUS.ENTREGADO;
     } else {
-      // Active orders for delivery
       query.$or = [
         { status: ORDER_STATUS.LISTO_PARA_DESPACHO, repartidorId: { $exists: false } },
         { status: ORDER_STATUS.LISTO_PARA_DESPACHO, repartidorId: null },
-        { repartidorId: user._id, status: { $in: [ORDER_STATUS.EN_CAMINO] } }
+        { repartidorId: user._id, status: { $in: [ORDER_STATUS.RECOLECTADO, ORDER_STATUS.EN_CAMINO] } }
       ];
     }
-  } else if (user.role === USER_ROLES.ADMIN) {
+  }
+ else if (user.role === USER_ROLES.ADMIN) {
     if (statusFilter && statusFilter !== 'all') {
       query.status = statusFilter;
     }
   }
 
-  return Order.find(query).sort({ updatedAt: -1 });
+  return Order.find(query)
+    .populate('chefId', 'name photoUrl')
+    .populate('repartidorId', 'name photoUrl')
+    .sort({ updatedAt: -1 });
 };
 
 export const validateStatusTransition = ({ currentStatus, nextStatus, role }) => {
