@@ -5,8 +5,11 @@ import { discountInventoryForOrder } from '../inventory/inventory.service.js';
 import { publishOrderRealtimeEvent } from '../realtime/realtime.service.js';
 
 const buildNavigationLinks = (location) => {
+  if (!location || typeof location.lat !== 'number' || typeof location.lng !== 'number') {
+    return { googleMaps: null, waze: null };
+  }
   const googleMaps = buildMapsLink(location);
-  const waze = location?.lat && location?.lng ? `https://waze.com/ul?ll=${location.lat},${location.lng}&navigate=yes` : null;
+  const waze = `https://waze.com/ul?ll=${location.lat},${location.lng}&navigate=yes`;
   return { googleMaps, waze };
 };
 

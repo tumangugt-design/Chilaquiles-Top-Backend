@@ -13,7 +13,8 @@ export const calculateOrderTotal = (ordersCount = 0) => {
   return (groupsOfThree * ORDER_PRICING[3]) + (remainder ? ORDER_PRICING[remainder] : 0);
 };
 
-export const buildMapsLink = ({ lat, lng } = {}) => {
-  if (typeof lat !== 'number' || typeof lng !== 'number') return null;
+export const buildMapsLink = (location) => {
+  if (!location || typeof location.lat !== 'number' || typeof location.lng !== 'number') return null;
+  const { lat, lng } = location;
   return `https://www.google.com/maps/search/?api=1&query=${lat},${lng}`;
 };
