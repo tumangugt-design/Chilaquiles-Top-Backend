@@ -49,9 +49,13 @@ export const upsertStaffUser = async ({ firebaseUid, email, name, phone, request
   user.email = email || user.email;
   user.phone = normalizePhone(phone) || user.phone;
   user.name = name || user.name;
-  if (user.role !== USER_ROLES.ADMIN) {
+  
+  // If the user was a CLIENT or their status is REJECTED, and they request a staff role, reset to PENDING
+  if (user.role === USER_ROLES.CLIENT || user.status === USER_STATUS.REJECTED) {
     user.role = requestedRole || user.role;
+    user.status = USER_STATUS.PENDING;
   }
+  
   await user.save();
   return user;
 };
