@@ -3,7 +3,7 @@ import { USER_ROLES } from '../helpers/constants.js';
 
 export const createOrder = async (req, res) => {
   try {
-    if (!req.dbUser) {
+    if (!req.user) {
       return res.status(403).json({ message: 'Client user must exist in MongoDB before placing an order' });
     }
 
@@ -15,7 +15,7 @@ export const createOrder = async (req, res) => {
     }
 
     const order = await createOrderRecord({
-      user: req.dbUser,
+      user: req.user,
       customer,
       items
     });
@@ -31,7 +31,7 @@ export const createOrder = async (req, res) => {
 
 export const getOrders = async (req, res) => {
   try {
-    const orders = await getOrdersByRole(req.dbUser);
+    const orders = await getOrdersByRole(req.user);
     return res.status(200).json(orders);
   } catch (error) {
     return res.status(500).json({ message: 'Error fetching orders', error: error.message });
@@ -43,7 +43,7 @@ export const updateOrderStatus = async (req, res) => {
     const order = await updateOrderStatusRecord({
       orderId: req.params.orderId,
       nextStatus: req.body.status,
-      actor: req.dbUser
+      actor: req.user
     });
 
     if (!order) {

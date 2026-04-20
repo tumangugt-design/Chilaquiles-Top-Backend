@@ -48,7 +48,7 @@ export const staffLogin = async (req, res) => {
 
 export const getSession = async (req, res) => {
   return res.status(200).json({
-    authenticated: Boolean(req.dbUser),
-    user: req.dbUser || null
+    authenticated: Boolean(req.user),
+    user: req.user || null
   });
 };
