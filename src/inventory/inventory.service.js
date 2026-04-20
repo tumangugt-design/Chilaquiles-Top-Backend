@@ -109,14 +109,14 @@ export const seedInventory = async () => {
     if (!existing) {
       await Inventory.create({
         ...ing,
-        stock: 100,
-        minimumStock: 10
+        stock: 50,
+        minimumStock: 5
       });
-      console.log(`Inventory seeded: ${ing.name}`);
-    } else if (existing.stock < 1) {
-      existing.stock = 100;
+      console.log(`Inventory seeded: ${ing.name} (50 units)`);
+    } else if (existing.stock < 10) {
+      existing.stock = 50;
       await existing.save();
-      console.log(`Inventory replenished: ${ing.name}`);
+      console.log(`Inventory replenished: ${ing.name} (Reset to 50 units)`);
     }
   }
 };
