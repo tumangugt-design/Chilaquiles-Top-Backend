@@ -88,3 +88,35 @@ export const discountInventoryForOrder = async (items = []) => {
 
   return consumption;
 };
+export const seedInventory = async () => {
+  const ingredients = [
+    { name: 'salsa roja', unit: 'kg' },
+    { name: 'salsa verde', unit: 'kg' },
+    { name: 'carne', unit: 'kg' },
+    { name: 'pollo', unit: 'kg' },
+    { name: 'chorizo', unit: 'kg' },
+    { name: 'aguacate', unit: 'kg' },
+    { name: 'cebolla caramelizada', unit: 'kg' },
+    { name: 'queso extra', unit: 'kg' },
+    { name: 'cebolla', unit: 'kg' },
+    { name: 'cilantro', unit: 'kg' },
+    { name: 'crema', unit: 'kg' },
+    { name: 'totopos', unit: 'kg' }
+  ];
+
+  for (const ing of ingredients) {
+    const existing = await Inventory.findOne({ name: ing.name });
+    if (!existing) {
+      await Inventory.create({
+        ...ing,
+        stock: 100,
+        minimumStock: 10
+      });
+      console.log(`Inventory seeded: ${ing.name}`);
+    } else if (existing.stock < 1) {
+      existing.stock = 100;
+      await existing.save();
+      console.log(`Inventory replenished: ${ing.name}`);
+    }
+  }
+};
