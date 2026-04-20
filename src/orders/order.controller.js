@@ -31,7 +31,8 @@ export const createOrder = async (req, res) => {
 
 export const getOrders = async (req, res) => {
   try {
-    const orders = await getOrdersByRole(req.user);
+    const { status } = req.query;
+    const orders = await getOrdersByRole(req.user, status);
     return res.status(200).json(orders);
   } catch (error) {
     return res.status(500).json({ message: 'Error fetching orders', error: error.message });

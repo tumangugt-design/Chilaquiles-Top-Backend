@@ -34,27 +34,41 @@ export const createOrderRecord = async ({ user, customer, items }) => {
   return order;
 };
 
-export const getOrdersByRole = async (user) => {
+export const getOrdersByRole = async (user, statusFilter = null) => {
   const query = {};
 
   if (user.role === USER_ROLES.CLIENT) {
     query.userId = user._id;
   } else if (user.role === USER_ROLES.CHEF) {
-    // Show new orders (unassigned) OR orders already taken by this chef
-    query.$or = [
-      { status: ORDER_STATUS.RECIBIDO, chefId: { $exists: false } },
-      { status: ORDER_STATUS.RECIBIDO, chefId: null },
-      { chefId: user._id, status: { $in: [ORDER_STATUS.EN_PROCESO, ORDER_STATUS.LISTO_PARA_DESPACHO] } }
-    ];
+    if (statusFilter === 'finished') {
+      // History for this specific chef: Orders they finished
+      query.chefId = user._id;
+      query.status = { $in: [ORDER_STATUS.LISTO_PARA_DESPACHO, ORDER_STATUS.EN_CAMINO, ORDER_STATUS.ENTREGADO] };
+    } else {
+      // Active orders for cocina
+      query.$or = [
+        { status: ORDER_STATUS.RECIBIDO, chefId: { $exists: false } },
+        { status: ORDER_STATUS.RECIBIDO, chefId: null },
+        { chefId: user._id, status: { $in: [ORDER_STATUS.EN_PROCESO] } }
+      ];
+    }
   } else if (user.role === USER_ROLES.REPARTIDOR) {
-    // Show orders ready to ship (unassigned) OR orders already taken by this courier
-    query.$or = [
-      { status: ORDER_STATUS.LISTO_PARA_DESPACHO, repartidorId: { $exists: false } },
-      { status: ORDER_STATUS.LISTO_PARA_DESPACHO, repartidorId: null },
-      { repartidorId: user._id, status: { $in: [ORDER_STATUS.EN_CAMINO, ORDER_STATUS.ENTREGADO] } }
-    ];
+    if (statusFilter === 'delivered') {
+      // History for this specific courier
+      query.repartidorId = user._id;
+      query.status = ORDER_STATUS.ENTREGADO;
+    } else {
+      // Active orders for delivery
+      query.$or = [
+        { status: ORDER_STATUS.LISTO_PARA_DESPACHO, repartidorId: { $exists: false } },
+        { status: ORDER_STATUS.LISTO_PARA_DESPACHO, repartidorId: null },
+        { repartidorId: user._id, status: { $in: [ORDER_STATUS.EN_CAMINO] } }
+      ];
+    }
   } else if (user.role === USER_ROLES.ADMIN) {
-    // Admin sees everything
+    if (statusFilter && statusFilter !== 'all') {
+      query.status = statusFilter;
+    }
   }
 
   return Order.find(query).sort({ updatedAt: -1 });

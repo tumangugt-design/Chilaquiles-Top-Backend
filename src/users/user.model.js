@@ -37,7 +37,8 @@ const userSchema = new mongoose.Schema({
     type: String,
     enum: Object.values(USER_STATUS),
     default: USER_STATUS.PENDING
-  }
+  },
+  photoUrl: String
 }, { timestamps: true });
 
 export default mongoose.model('User', userSchema);

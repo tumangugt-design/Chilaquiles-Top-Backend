@@ -91,3 +91,15 @@ export const seedAdminUser = async () => {
     status: USER_STATUS.APPROVED
   });
 };
+
+export const updateUserProfile = async (userId, { name, phone, photoUrl }) => {
+  const user = await User.findById(userId);
+  if (!user) return null;
+  
+  if (name) user.name = name;
+  if (phone) user.phone = phone;
+  if (photoUrl) user.photoUrl = photoUrl;
+  
+  await user.save();
+  return user;
+};
