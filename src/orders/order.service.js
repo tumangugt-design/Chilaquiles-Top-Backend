@@ -37,11 +37,27 @@ export const createOrderRecord = async ({ user, customer, items }) => {
 export const getOrdersByRole = async (user) => {
   const query = {};
 
-  if (user.role === USER_ROLES.CLIENT) query.userId = user._id;
-  if (user.role === USER_ROLES.CHEF) query.status = { $in: [ORDER_STATUS.RECIBIDO, ORDER_STATUS.EN_PROCESO, ORDER_STATUS.LISTO_PARA_DESPACHO] };
-  if (user.role === USER_ROLES.REPARTIDOR) query.status = { $in: [ORDER_STATUS.LISTO_PARA_DESPACHO, ORDER_STATUS.EN_CAMINO] };
+  if (user.role === USER_ROLES.CLIENT) {
+    query.userId = user._id;
+  } else if (user.role === USER_ROLES.CHEF) {
+    // Show new orders (unassigned) OR orders already taken by this chef
+    query.$or = [
+      { status: ORDER_STATUS.RECIBIDO, chefId: { $exists: false } },
+      { status: ORDER_STATUS.RECIBIDO, chefId: null },
+      { chefId: user._id, status: { $in: [ORDER_STATUS.EN_PROCESO, ORDER_STATUS.LISTO_PARA_DESPACHO] } }
+    ];
+  } else if (user.role === USER_ROLES.REPARTIDOR) {
+    // Show orders ready to ship (unassigned) OR orders already taken by this courier
+    query.$or = [
+      { status: ORDER_STATUS.LISTO_PARA_DESPACHO, repartidorId: { $exists: false } },
+      { status: ORDER_STATUS.LISTO_PARA_DESPACHO, repartidorId: null },
+      { repartidorId: user._id, status: { $in: [ORDER_STATUS.EN_CAMINO, ORDER_STATUS.ENTREGADO] } }
+    ];
+  } else if (user.role === USER_ROLES.ADMIN) {
+    // Admin sees everything
+  }
 
-  return Order.find(query).sort({ createdAt: -1 });
+  return Order.find(query).sort({ updatedAt: -1 });
 };
 
 export const validateStatusTransition = ({ currentStatus, nextStatus, role }) => {
@@ -55,6 +71,25 @@ export const updateOrderStatusRecord = async ({ orderId, nextStatus, actor }) =>
   const order = await Order.findById(orderId);
   if (!order) return null;
 
+  // Auto-assignment logic
+  if (actor.role === USER_ROLES.CHEF) {
+    if (order.chefId && order.chefId.toString() !== actor._id.toString()) {
+      const error = new Error('Esta orden ya fue tomada por otro Chef');
+      error.statusCode = 409;
+      throw error;
+    }
+    if (!order.chefId) order.chefId = actor._id;
+  }
+
+  if (actor.role === USER_ROLES.REPARTIDOR) {
+    if (order.repartidorId && order.repartidorId.toString() !== actor._id.toString()) {
+      const error = new Error('Esta orden ya fue tomada por otro Repartidor');
+      error.statusCode = 409;
+      throw error;
+    }
+    if (!order.repartidorId) order.repartidorId = actor._id;
+  }
+
   const isValidTransition = validateStatusTransition({
     currentStatus: order.status,
     nextStatus,
@@ -62,7 +97,7 @@ export const updateOrderStatusRecord = async ({ orderId, nextStatus, actor }) =>
   });
 
   if (!isValidTransition) {
-    const error = new Error('Invalid status transition for this role');
+    const error = new Error('Transición de estado no permitida para este rol');
     error.statusCode = 403;
     throw error;
   }

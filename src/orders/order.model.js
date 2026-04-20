@@ -45,6 +45,14 @@ const orderSchema = new mongoose.Schema({
     type: String,
     enum: Object.values(ORDER_STATUS),
     default: ORDER_STATUS.RECIBIDO
+  },
+  chefId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User'
+  },
+  repartidorId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User'
   }
 }, { timestamps: true });
 
