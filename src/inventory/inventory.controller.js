@@ -45,3 +45,28 @@ export const previewRecipeConsumption = async (req, res) => {
     return res.status(500).json({ message: 'Error generating recipe preview', error: error.message });
   }
 };
+
+export const deleteInventoryItem = async (req, res) => {
+  try {
+    const { name } = req.params;
+    await Inventory.findOneAndDelete({ name: name.toLowerCase() });
+    return res.status(200).json({ message: 'Item deleted from inventory' });
+  } catch (error) {
+    return res.status(500).json({ message: 'Error deleting item', error: error.message });
+  }
+};
+
+export const adjustInventoryStock = async (req, res) => {
+  try {
+    const { name } = req.params;
+    const { amount } = req.body;
+    const item = await Inventory.findOneAndUpdate(
+      { name: name.toLowerCase() },
+      { $inc: { stock: amount } },
+      { new: true }
+    );
+    return res.status(200).json({ message: 'Stock adjusted', item });
+  } catch (error) {
+    return res.status(500).json({ message: 'Error adjusting stock', error: error.message });
+  }
+};
