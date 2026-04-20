@@ -14,14 +14,19 @@ export const publishOrderRealtimeEvent = async (order) => {
     createdAt: orderObj.createdAt
   };
 
-  const firebaseRealtimeDb = getFirebaseRealtimeDb();
-  const firebaseFirestore = getFirebaseFirestore();
+  try {
+    const firebaseRealtimeDb = getFirebaseRealtimeDb();
+    const firebaseFirestore = getFirebaseFirestore();
 
-  if (firebaseRealtimeDb) {
-    await firebaseRealtimeDb.ref(`orders/${payload.id}`).set(payload);
-  }
+    if (firebaseRealtimeDb) {
+      await firebaseRealtimeDb.ref(`orders/${payload.id}`).set(payload);
+    }
 
-  if (firebaseFirestore) {
-    await firebaseFirestore.collection('ordersRealtime').doc(payload.id).set(payload, { merge: true });
+    if (firebaseFirestore) {
+      await firebaseFirestore.collection('ordersRealtime').doc(payload.id).set(payload, { merge: true });
+    }
+  } catch (error) {
+    console.error('Error publishing realtime event (non-critical):', error.message);
+    // We don't rethrow because order creation should succeed even if realtime update fails
   }
 };
