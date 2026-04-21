@@ -63,7 +63,7 @@ export const getOrderWorkflowHelp = async (req, res) => {
       'Cliente OTP invisible -> /api/auth/client',
       'Crear pedido -> /api/orders',
       'Chef ve y actualiza: recibido -> en_proceso -> listo_para_despacho',
-      'Repartidor ve y actualiza: en_camino -> entregado'
+      'Repartidor ve y actualiza: listo_para_despacho -> recolectado -> en_camino -> entregado'
     ],
     roles: Object.values(USER_ROLES)
   });
