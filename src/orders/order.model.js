@@ -25,9 +25,11 @@ const orderSchema = new mongoose.Schema({
     ref: 'User',
     required: true
   },
+  orderNumber: { type: String, required: true, unique: true },
   name: { type: String, required: true },
   phone: { type: String, required: true },
   address: { type: String, required: true },
+  accessCode: { type: String },
   location: locationSchema,
   navigationLinks: {
     googleMaps: String,
