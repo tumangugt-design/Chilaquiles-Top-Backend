@@ -20,10 +20,11 @@ const generateOrderNumber = async () => {
   const datePrefix = `${day}${month}`
 
   const lastOrder = await Order.findOne({
-    orderNumber: new RegExp(`^${datePrefix}\d+$`)
+    orderNumber: { $regex: `^${datePrefix}\\d+$` }
   }).sort({ orderNumber: -1 })
 
   let nextSequence = 1
+
   if (lastOrder?.orderNumber) {
     const lastSequence = Number(String(lastOrder.orderNumber).slice(4))
     if (!Number.isNaN(lastSequence)) {
