@@ -1,7 +1,7 @@
 import Order from './order.model.js'
 import { buildMapsLink, calculateOrderTotal, normalizePhone } from '../helpers/order.helper.js'
 import { ORDER_STATUS, USER_ROLES, CHEF_ALLOWED_TRANSITIONS, DELIVERY_ALLOWED_TRANSITIONS } from '../helpers/constants.js'
-import { discountInventoryForOrder } from '../inventory/inventory.service.js'
+import { discountInventoryForOrder, validateInventoryAvailability } from '../inventory/inventory.service.js'
 import { publishOrderRealtimeEvent } from '../realtime/realtime.service.js'
 
 const buildNavigationLinks = (location) => {
@@ -39,23 +39,42 @@ export const createOrderRecord = async ({ user, customer, items }) => {
   const navigationLinks = buildNavigationLinks(customer.location)
   const orderNumber = await generateOrderNumber()
 
-  const order = await Order.create({
-    userId: user._id,
-    orderNumber,
-    name: customer.name,
-    phone: normalizePhone(customer.phone || user.phone),
-    address: customer.address,
-    accessCode: customer.accessCode || '',
-    location: customer.location,
-    navigationLinks,
-    items,
-    total,
-    status: ORDER_STATUS.RECIBIDO
-  })
+  const availability = await validateInventoryAvailability(items)
 
-  await discountInventoryForOrder(items, order._id, user)
-  await publishOrderRealtimeEvent(order)
-  return order
+  if (!availability.ok) {
+    const error = new Error('Inventory shortage detected')
+    error.statusCode = 409
+    error.details = availability.shortages
+    throw error
+  }
+
+  let order = null
+
+  try {
+    order = await Order.create({
+      userId: user._id,
+      orderNumber,
+      name: customer.name,
+      phone: normalizePhone(customer.phone || user.phone),
+      address: customer.address,
+      accessCode: customer.accessCode || '',
+      location: customer.location,
+      navigationLinks,
+      items,
+      total,
+      status: ORDER_STATUS.RECIBIDO
+    })
+
+    await discountInventoryForOrder(items, order._id, user)
+    await publishOrderRealtimeEvent(order)
+
+    return order
+  } catch (error) {
+    if (order?._id) {
+      await Order.findByIdAndDelete(order._id)
+    }
+    throw error
+  }
 }
 
 export const getOrdersByRole = async (user, statusFilter = null) => {
