@@ -1,4 +1,5 @@
-import { listPendingStaffUsers, updateStaffApproval } from './user.service.js';
+
+import { listPendingStaffUsers, listUsersByRole, updateStaffApproval } from './user.service.js';
 
 export const getPendingStaff = async (req, res) => {
   try {
@@ -6,6 +7,15 @@ export const getPendingStaff = async (req, res) => {
     return res.status(200).json(users);
   } catch (error) {
     return res.status(500).json({ message: 'Error fetching pending staff users', error: error.message });
+  }
+};
+
+export const getUsersByRole = async (req, res) => {
+  try {
+    const users = await listUsersByRole(req.params.role);
+    return res.status(200).json(users);
+  } catch (error) {
+    return res.status(500).json({ message: 'Error fetching users by role', error: error.message });
   }
 };
 

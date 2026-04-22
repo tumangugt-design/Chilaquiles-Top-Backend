@@ -1,4 +1,5 @@
-import { createOrderRecord, getOrdersByRole, updateOrderStatusRecord } from './order.service.js';
+
+import { createOrderRecord, getOrdersByRole, getOrderHistoryForAdmin, updateOrderStatusRecord } from './order.service.js';
 import { USER_ROLES } from '../helpers/constants.js';
 
 export const createOrder = async (req, res) => {
@@ -36,6 +37,19 @@ export const getOrders = async (req, res) => {
     return res.status(200).json(orders);
   } catch (error) {
     return res.status(500).json({ message: 'Error fetching orders', error: error.message });
+  }
+};
+
+export const getOrderHistory = async (req, res) => {
+  try {
+    const orders = await getOrderHistoryForAdmin({
+      type: req.query.type,
+      userId: req.query.userId
+    });
+
+    return res.status(200).json(orders);
+  } catch (error) {
+    return res.status(500).json({ message: 'Error fetching order history', error: error.message });
   }
 };
 

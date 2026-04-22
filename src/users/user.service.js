@@ -1,3 +1,4 @@
+
 import User from './user.model.js';
 import { USER_ROLES, USER_STATUS } from '../helpers/constants.js';
 import { normalizePhone } from '../helpers/order.helper.js';
@@ -49,13 +50,12 @@ export const upsertStaffUser = async ({ firebaseUid, email, name, phone, request
   user.email = email || user.email;
   user.phone = normalizePhone(phone) || user.phone;
   user.name = name || user.name;
-  
-  // If the user was a CLIENT or their status is REJECTED, and they request a staff role, reset to PENDING
+
   if (user.role === USER_ROLES.CLIENT || user.status === USER_STATUS.REJECTED) {
     user.role = requestedRole || user.role;
     user.status = USER_STATUS.PENDING;
   }
-  
+
   await user.save();
   return user;
 };
@@ -65,13 +65,29 @@ export const listPendingStaffUsers = async () => User.find({
   status: USER_STATUS.PENDING
 }).sort({ createdAt: -1 });
 
+export const listUsersByRole = async (role) => {
+  const allowedRoles = [USER_ROLES.CLIENT, USER_ROLES.CHEF, USER_ROLES.REPARTIDOR];
+  if (!allowedRoles.includes(role)) {
+    return [];
+  }
+
+  const query = { role };
+  if (role !== USER_ROLES.CLIENT) {
+    query.status = USER_STATUS.APPROVED;
+  }
+
+  return User.find(query).sort({ createdAt: -1 });
+};
+
 export const updateStaffApproval = async ({ userId, status, role }) => {
   const user = await User.findById(userId);
   if (!user) return null;
+
   user.status = status || user.status;
   if (role && [USER_ROLES.REPARTIDOR, USER_ROLES.CHEF].includes(role)) {
     user.role = role;
   }
+
   await user.save();
   return user;
 };
@@ -95,11 +111,11 @@ export const seedAdminUser = async () => {
 export const updateUserProfile = async (userId, { name, phone, photoUrl }) => {
   const user = await User.findById(userId);
   if (!user) return null;
-  
+
   if (name) user.name = name;
   if (phone) user.phone = phone;
   if (photoUrl) user.photoUrl = photoUrl;
-  
+
   await user.save();
   return user;
 };
