@@ -201,15 +201,15 @@ export const seedInventory = async () => {
       await Inventory.create({
         name: ingredient.name,
         unit: ingredient.unit,
-        stock: 100000000000000000000000000000,
+        stock: 1000000,
         minimumStock: 5
       })
-      console.log(`Inventory seeded: ${ingredient.name} (100000000000000000000000000000 ${ingredient.unit})`)
+      console.log(`Inventory seeded: ${ingredient.name} (1000000 ${ingredient.unit})`)
     } else if (existing.stock < 10) {
-      existing.stock = 100000000000000000000000000000
+      existing.stock = 1000000
       existing.unit = ingredient.unit
       await existing.save()
-      console.log(`Inventory replenished: ${ingredient.name} (Reset to 100000000000000000000000000000 ${ingredient.unit})`)
+      console.log(`Inventory replenished: ${ingredient.name} (Reset to 1000000 ${ingredient.unit})`)
     }
   }
 }
