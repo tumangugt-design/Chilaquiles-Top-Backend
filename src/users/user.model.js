@@ -8,12 +8,6 @@ const locationSchema = new mongoose.Schema({
 }, { _id: false })
 
 const userSchema = new mongoose.Schema({
-  firebaseUid: {
-    type: String,
-    unique: true,
-    sparse: true,
-    index: true,
-  },
   authProvider: {
     type: String,
     enum: ['LOCAL', 'COGNITO'],
