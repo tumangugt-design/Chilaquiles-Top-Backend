@@ -1,11 +1,13 @@
-import { Router } from 'express';
-import { clientLogin, staffLogin, getSession } from './auth.controller.js';
-import { verifyFirebaseToken } from '../middlewares/auth.middleware.js';
 
-const router = Router();
+import { Router } from 'express'
+import { clientSync, staffLogin, registerStaff, getSession } from './auth.controller.js'
+import { verifyAuthToken } from '../middlewares/auth.middleware.js'
 
-router.post('/client', verifyFirebaseToken, clientLogin);
-router.post('/staff', verifyFirebaseToken, staffLogin);
-router.get('/session', verifyFirebaseToken, getSession);
+const router = Router()
 
-export default router;
+router.post('/client/sync', verifyAuthToken, clientSync)
+router.post('/staff/login', staffLogin)
+router.post('/staff/register', registerStaff)
+router.get('/session', verifyAuthToken, getSession)
+
+export default router

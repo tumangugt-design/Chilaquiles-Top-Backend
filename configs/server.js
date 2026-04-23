@@ -3,7 +3,6 @@ import cors from 'cors';
 import helmet from 'helmet';
 import morgan from 'morgan';
 import { dbConnection } from './mongo.js';
-import { initFirebaseAdmin } from './firebase.js';
 import { seedAdminUser } from '../src/users/user.service.js';
 import { seedInventory } from '../src/inventory/inventory.service.js';
 import authRoutes from '../src/auth/auth.routes.js';
@@ -32,7 +31,6 @@ const routes = (app) => {
 
 const connectDependencies = async () => {
   await dbConnection();
-  initFirebaseAdmin();
   await seedAdminUser();
   await seedInventory();
 };

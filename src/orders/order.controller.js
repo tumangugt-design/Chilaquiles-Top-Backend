@@ -4,12 +4,25 @@ import { USER_ROLES } from '../helpers/constants.js';
 
 export const createOrder = async (req, res) => {
   try {
-    if (!req.user) {
-      return res.status(403).json({ message: 'Client user must exist in MongoDB before placing an order' });
-    }
 
     const items = Array.isArray(req.body.items) ? req.body.items : [];
     const customer = req.body.customer;
+
+    if (!req.user && req.cognitoUser) {
+      const { upsertCognitoClientUser } = await import('../users/user.service.js');
+      req.user = await upsertCognitoClientUser({
+        providerUid: req.cognitoUser.sub,
+        phone: req.cognitoUser.phone || customer?.phone,
+        email: req.cognitoUser.email,
+        name: customer?.name,
+        address: customer?.address,
+        location: customer?.location,
+      });
+    }
+
+    if (!req.user) {
+      return res.status(403).json({ message: 'Client user must exist in MongoDB before placing an order' });
+    }
 
     if (!customer?.name || !customer?.phone || !customer?.address || items.length === 0) {
       return res.status(400).json({ message: 'Customer data and at least one item are required' });
@@ -74,7 +87,7 @@ export const updateOrderStatus = async (req, res) => {
 export const getOrderWorkflowHelp = async (req, res) => {
   return res.status(200).json({
     flow: [
-      'Cliente OTP invisible -> /api/auth/client',
+      'Cliente Cognito (teléfono + contraseña + SMS) -> /api/auth/client/sync',
       'Crear pedido -> /api/orders',
       'Chef ve y actualiza: recibido -> en_proceso -> listo_para_despacho',
       'Repartidor ve y actualiza: listo_para_despacho -> recolectado -> en_camino -> entregado'
