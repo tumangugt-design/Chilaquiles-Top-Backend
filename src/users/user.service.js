@@ -1,22 +1,22 @@
-
 import User from './user.model.js'
 import { USER_ROLES, USER_STATUS } from '../helpers/constants.js'
 import { normalizePhone } from '../helpers/order.helper.js'
 import { hashPassword, verifyPassword } from '../helpers/password.helper.js'
 
-export const findUserByProviderUid = async (providerUid) => User.findOne({ providerUid })
 export const findUserByUsername = async (username) => User.findOne({ username: String(username || '').toLowerCase().trim() })
 
-export const upsertCognitoClientUser = async ({ providerUid, phone, email, name, address, location }) => {
-  const normalizedPhone = phone ? normalizePhone(phone) : ''
-  let user = await findUserByProviderUid(providerUid)
+export const upsertGuestClientUser = async ({ phone, name, address, location }) => {
+  const normalizedPhone = normalizePhone(phone)
+  let user = null
+
+  if (normalizedPhone) {
+    user = await User.findOne({ authProvider: 'GUEST', role: USER_ROLES.CLIENT, phone: normalizedPhone })
+  }
 
   if (!user) {
     user = await User.create({
-      authProvider: 'COGNITO',
-      providerUid,
+      authProvider: 'GUEST',
       phone: normalizedPhone,
-      email,
       name,
       address,
       location,
@@ -27,7 +27,6 @@ export const upsertCognitoClientUser = async ({ providerUid, phone, email, name,
   }
 
   user.phone = normalizedPhone || user.phone
-  user.email = email || user.email
   user.name = name || user.name
   user.address = address || user.address
   user.location = location || user.location
@@ -44,7 +43,7 @@ export const createPendingLocalStaffUser = async ({ name, phone, username, passw
   }
 
   if (![USER_ROLES.CHEF, USER_ROLES.REPARTIDOR].includes(requestedRole)) {
-    throw new Error('Rol de staff no válido')
+    throw new Error('Rol no válido')
   }
 
   const existingUser = await findUserByUsername(normalizedUsername)

@@ -1,4 +1,3 @@
-
 import mongoose from 'mongoose'
 import { USER_ROLES, USER_STATUS } from '../helpers/constants.js'
 
@@ -10,7 +9,7 @@ const locationSchema = new mongoose.Schema({
 const userSchema = new mongoose.Schema({
   authProvider: {
     type: String,
-    enum: ['LOCAL', 'COGNITO'],
+    enum: ['LOCAL', 'GUEST'],
     default: 'LOCAL',
   },
   providerUid: {

@@ -1,17 +1,16 @@
+import { Router } from 'express'
+import { createOrder, getOrders, getOrderHistory, updateOrderStatus, getOrderWorkflowHelp } from './order.controller.js'
+import { verifyAuthToken } from '../middlewares/auth.middleware.js'
+import { requireApprovedStatus, requireRole } from '../middlewares/role.middleware.js'
+import { USER_ROLES } from '../helpers/constants.js'
 
-import { Router } from 'express';
-import { createOrder, getOrders, getOrderHistory, updateOrderStatus, getOrderWorkflowHelp } from './order.controller.js';
-import { verifyAuthToken } from '../middlewares/auth.middleware.js';
-import { requireApprovedStatus, requireRole } from '../middlewares/role.middleware.js';
-import { USER_ROLES } from '../helpers/constants.js';
+const router = Router()
 
-const router = Router();
+router.get('/workflow', getOrderWorkflowHelp)
+router.post('/', createOrder)
+router.use(verifyAuthToken, requireApprovedStatus)
+router.get('/history', requireRole([USER_ROLES.ADMIN]), getOrderHistory)
+router.get('/', requireRole([USER_ROLES.ADMIN, USER_ROLES.CHEF, USER_ROLES.REPARTIDOR]), getOrders)
+router.patch('/:orderId/status', requireRole([USER_ROLES.ADMIN, USER_ROLES.CHEF, USER_ROLES.REPARTIDOR]), updateOrderStatus)
 
-router.get('/workflow', getOrderWorkflowHelp);
-router.use(verifyAuthToken, requireApprovedStatus);
-router.post('/', requireRole([USER_ROLES.CLIENT]), createOrder);
-router.get('/history', requireRole([USER_ROLES.ADMIN]), getOrderHistory);
-router.get('/', requireRole([USER_ROLES.CLIENT, USER_ROLES.ADMIN, USER_ROLES.CHEF, USER_ROLES.REPARTIDOR]), getOrders);
-router.patch('/:orderId/status', requireRole([USER_ROLES.ADMIN, USER_ROLES.CHEF, USER_ROLES.REPARTIDOR]), updateOrderStatus);
-
-export default router;
+export default router
