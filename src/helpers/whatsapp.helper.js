@@ -26,7 +26,7 @@ export const sendWhatsAppOTP = async (phone, code) => {
         template: {
             name: templateName,
             language: {
-                code: 'es'
+                code: 'en_US'
             },
             components: [
                 {
