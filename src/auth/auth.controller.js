@@ -67,11 +67,16 @@ export const sendOTPController = async (req, res) => {
 
     const result = await generateAndSendOTP(phone)
     if (!result.success) {
-      return res.status(500).json({ message: 'No se pudo enviar el código por WhatsApp' })
+      console.error(`OTP Error for ${phone}:`, result.error)
+      return res.status(500).json({ 
+        message: 'No se pudo enviar el código por WhatsApp',
+        error: result.error 
+      })
     }
 
     return res.status(200).json({ message: 'Código enviado' })
   } catch (error) {
+    console.error('sendOTPController error:', error)
     return res.status(500).json({ message: error.message })
   }
 }

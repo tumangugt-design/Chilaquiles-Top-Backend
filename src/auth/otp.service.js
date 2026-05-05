@@ -13,12 +13,13 @@ export const generateAndSendOTP = async (phone) => {
     await newOtp.save();
 
     // Send via WhatsApp
-    const sent = await sendWhatsAppOTP(phone, code);
+    const result = await sendWhatsAppOTP(phone, code);
     
-    // For development, if sending fails or we want to allow 123456 as backup (optional)
-    // but the user wants to remove 123456.
-    
-    return { success: sent, code: process.env.NODE_ENV === 'development' ? code : null };
+    return { 
+        success: result.success, 
+        error: result.error,
+        code: process.env.NODE_ENV === 'development' ? code : null 
+    };
 };
 
 export const verifyOTP = async (phone, code) => {

@@ -6,15 +6,22 @@ export const sendWhatsAppOTP = async (phone, code) => {
 
     if (!token || !phoneNumberId) {
         console.error('WhatsApp credentials missing in .env');
-        return false;
+        return { success: false, error: 'Configuración de WhatsApp incompleta' };
+    }
+
+    // Normalize phone number (E.164 without +)
+    let cleanPhone = phone.replace(/\D/g, ''); // Remove non-digits
+    
+    // If it's a Guatemala number without country code (8 digits)
+    if (cleanPhone.length === 8) {
+        cleanPhone = '502' + cleanPhone;
     }
 
     const url = `https://graph.facebook.com/v21.0/${phoneNumberId}/messages`;
 
-    // Standard WhatsApp Authentication Template payload
     const payload = {
         messaging_product: 'whatsapp',
-        to: phone,
+        to: cleanPhone,
         type: 'template',
         template: {
             name: templateName,
@@ -59,13 +66,17 @@ export const sendWhatsAppOTP = async (phone, code) => {
         const data = await response.json();
 
         if (!response.ok) {
-            console.error('WhatsApp API Error:', data);
-            return false;
+            console.error('WhatsApp API Error:', JSON.stringify(data, null, 2));
+            return { 
+                success: false, 
+                error: data.error?.message || 'Error en la API de WhatsApp',
+                details: data
+            };
         }
 
-        return true;
+        return { success: true };
     } catch (error) {
         console.error('WhatsApp sending failed:', error);
-        return false;
+        return { success: false, error: error.message };
     }
 };
