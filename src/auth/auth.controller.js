@@ -57,3 +57,38 @@ export const getSession = async (req, res) => {
     user: req.user || null,
   })
 }
+
+import { generateAndSendOTP, verifyOTP } from './otp.service.js'
+
+export const sendOTPController = async (req, res) => {
+  try {
+    const { phone } = req.body
+    if (!phone) return res.status(400).json({ message: 'Teléfono requerido' })
+
+    const result = await generateAndSendOTP(phone)
+    if (!result.success) {
+      return res.status(500).json({ message: 'No se pudo enviar el código por WhatsApp' })
+    }
+
+    return res.status(200).json({ message: 'Código enviado' })
+  } catch (error) {
+    return res.status(500).json({ message: error.message })
+  }
+}
+
+export const verifyOTPController = async (req, res) => {
+  try {
+    const { phone, code } = req.body
+    if (!phone || !code) return res.status(400).json({ message: 'Teléfono y código requeridos' })
+
+    const isValid = await verifyOTP(phone, code)
+    if (!isValid) {
+      return res.status(400).json({ message: 'Código inválido o expirado' })
+    }
+
+    return res.status(200).json({ message: 'Verificado correctamente' })
+  } catch (error) {
+    return res.status(500).json({ message: error.message })
+  }
+}
+
