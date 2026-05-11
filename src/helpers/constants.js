@@ -86,7 +86,9 @@ export const INVENTORY_CATALOG = [
   { name: 'chorizo', label: 'Chorizo', unit: 'g', category: 'Proteínas', usedPerPlate: 60 },
   { name: 'aguacate', label: 'Aguacate', unit: 'und', category: 'Complementos', usedPerPlate: 0.5 },
   { name: 'cebolla caramelizada', label: 'Cebolla caramelizada', unit: 'g', category: 'Complementos', usedPerPlate: 20 },
-  { name: 'queso extra', label: 'Queso extra', unit: 'g', category: 'Complementos', usedPerPlate: 30 }
+  { name: 'queso extra', label: 'Queso extra', unit: 'g', category: 'Complementos', usedPerPlate: 30 },
+  { name: 'plato para salsa', label: 'Plato para salsa', unit: 'und', category: 'Empaque', usedPerPlate: 1 },
+  { name: 'tapadera para salsa', label: 'Tapadera para salsa', unit: 'und', category: 'Empaque', usedPerPlate: 1 }
 ]
 
 export const INVENTORY_CATALOG_MAP = Object.fromEntries(INVENTORY_CATALOG.map((item) => [item.name, item]))

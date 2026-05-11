@@ -36,13 +36,13 @@ export const upsertGuestClientUser = async ({ phone, name, address, location }) 
   return user
 }
 
-export const createPendingLocalStaffUser = async ({ name, phone, username, password, requestedRole }) => {
+export const createLocalStaffUser = async ({ name, phone, username, password, requestedRole }) => {
   const normalizedUsername = String(username || '').toLowerCase().trim()
   if (!normalizedUsername || !password) {
     throw new Error('Usuario y contraseña son obligatorios')
   }
 
-  if (![USER_ROLES.CHEF, USER_ROLES.REPARTIDOR].includes(requestedRole)) {
+  if (![USER_ROLES.ADMIN, USER_ROLES.CHEF, USER_ROLES.REPARTIDOR].includes(requestedRole)) {
     throw new Error('Rol no válido')
   }
 
@@ -58,7 +58,7 @@ export const createPendingLocalStaffUser = async ({ name, phone, username, passw
     phone: normalizePhone(phone),
     name,
     role: requestedRole,
-    status: USER_STATUS.PENDING,
+    status: USER_STATUS.APPROVED,
   })
 }
 
@@ -79,12 +79,6 @@ export const authenticateLocalStaffUser = async ({ username, password, requested
   return user
 }
 
-export const listPendingStaffUsers = async () => User.find({
-  authProvider: 'LOCAL',
-  role: { $in: [USER_ROLES.REPARTIDOR, USER_ROLES.CHEF] },
-  status: USER_STATUS.PENDING,
-}).sort({ createdAt: -1 })
-
 export const listUsersByRole = async (role) => {
   const allowedRoles = [USER_ROLES.CLIENT, USER_ROLES.CHEF, USER_ROLES.REPARTIDOR]
   if (!allowedRoles.includes(role)) return []
@@ -92,17 +86,6 @@ export const listUsersByRole = async (role) => {
   const query = { role }
   if (role !== USER_ROLES.CLIENT) query.status = USER_STATUS.APPROVED
   return User.find(query).sort({ createdAt: -1 })
-}
-
-export const updateStaffApproval = async ({ userId, status, role }) => {
-  const user = await User.findById(userId)
-  if (!user) return null
-  user.status = status || user.status
-  if (role && [USER_ROLES.REPARTIDOR, USER_ROLES.CHEF].includes(role)) {
-    user.role = role
-  }
-  await user.save()
-  return user
 }
 
 export const seedAdminUser = async () => {
@@ -143,3 +126,21 @@ export const updateUserProfile = async (userId, { name, phone, photoUrl }) => {
   await user.save()
   return user
 }
+
+export const deleteUser = async (userId) => {
+  return User.findByIdAndDelete(userId)
+}
+
+export const updateStaffUser = async (userId, { name, phone, role, password }) => {
+  const user = await User.findById(userId)
+  if (!user) throw new Error('Usuario no encontrado')
+
+  if (name) user.name = name
+  if (phone) user.phone = normalizePhone(phone)
+  if (role) user.role = role
+  if (password) user.passwordHash = hashPassword(password)
+
+  await user.save()
+  return user
+}
+

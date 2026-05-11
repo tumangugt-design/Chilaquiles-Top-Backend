@@ -1,6 +1,7 @@
 import { USER_ROLES } from '../helpers/constants.js'
 import { signLocalToken } from '../helpers/token.helper.js'
-import { authenticateLocalStaffUser, createPendingLocalStaffUser } from '../users/user.service.js'
+import { authenticateLocalStaffUser, createLocalStaffUser } from '../users/user.service.js'
+import { generateAndSendOTP, verifyOTP } from './otp.service.js'
 
 const JWT_SECRET = process.env.APP_JWT_SECRET || 'change-me-please'
 
@@ -28,28 +29,6 @@ export const staffLogin = async (req, res) => {
   }
 }
 
-export const registerStaff = async (req, res) => {
-  try {
-    const requestedRole = [USER_ROLES.CHEF, USER_ROLES.REPARTIDOR].includes(req.body.role)
-      ? req.body.role
-      : USER_ROLES.REPARTIDOR
-
-    const user = await createPendingLocalStaffUser({
-      name: req.body.name,
-      phone: req.body.phone,
-      username: req.body.username,
-      password: req.body.password,
-      requestedRole,
-    })
-
-    return res.status(201).json({
-      message: 'Solicitud enviada',
-      user,
-    })
-  } catch (error) {
-    return res.status(400).json({ message: error.message || 'No se pudo crear la solicitud' })
-  }
-}
 
 export const getSession = async (req, res) => {
   return res.status(200).json({
@@ -57,8 +36,6 @@ export const getSession = async (req, res) => {
     user: req.user || null,
   })
 }
-
-import { generateAndSendOTP, verifyOTP } from './otp.service.js'
 
 export const sendOTPController = async (req, res) => {
   try {

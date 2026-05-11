@@ -1,6 +1,6 @@
 import Inventory from './inventory.model.js'
 import InventoryLog from './inventoryLog.model.js'
-import { DEFAULT_RECIPE_CONSUMPTION, PACKAGING_CONSUMPTION, INVENTORY_CATALOG } from '../helpers/constants.js'
+import { DEFAULT_RECIPE_CONSUMPTION, PACKAGING_CONSUMPTION, INVENTORY_CATALOG, INVENTORY_CATALOG_MAP } from '../helpers/constants.js'
 
 const round = (value) => Math.round(value * 1000) / 1000
 const normalizeName = (value = '') => value.trim().toLowerCase()
@@ -13,11 +13,17 @@ const getConsumptionForItem = (item) => {
 
   if (item.sauce === 'ROJA') {
     consumption['salsa roja'] = DEFAULT_RECIPE_CONSUMPTION['salsa roja']
+    consumption['plato para salsa'] = 1
+    consumption['tapadera para salsa'] = 1
   } else if (item.sauce === 'VERDE') {
     consumption['salsa verde'] = DEFAULT_RECIPE_CONSUMPTION['salsa verde']
+    consumption['plato para salsa'] = 1
+    consumption['tapadera para salsa'] = 1
   } else if (item.sauce === 'DIVORCIADOS') {
     consumption['salsa roja'] = DEFAULT_RECIPE_CONSUMPTION['salsa roja'] / 2
     consumption['salsa verde'] = DEFAULT_RECIPE_CONSUMPTION['salsa verde'] / 2
+    consumption['plato para salsa'] = 2
+    consumption['tapadera para salsa'] = 2
   }
 
   if (item.protein === 'STEAK') consumption['steak'] = DEFAULT_RECIPE_CONSUMPTION['steak']
@@ -62,6 +68,10 @@ export const validateInventoryAvailability = async (items = []) => {
     const current = currentByName.get(normalizeName(name))
     if (!current) {
       shortages.push({ ingredient: name, required, available: 0, reason: 'Ingredient not registered in inventory' })
+      return
+    }
+    if (current.isActive === false) {
+      shortages.push({ ingredient: name, required, available: 0, reason: 'Producto desactivado' })
       return
     }
     if (current.stock < required) {
@@ -133,35 +143,43 @@ const getMaxSaucePlates = (rojaStock, verdeStock) => {
 
 export const getAvailablePlatesCount = async () => {
   const inventory = await Inventory.find({})
-  const stockMap = new Map(inventory.map((item) => [item.name, Number(item.stock || 0)]))
+  
+  const getRawStock = (name) => {
+    const item = inventory.find(i => i.name === name)
+    if (!item) return 0
+    if (item.isActive === false) return 0 // If inactive, stock is effectively 0
+    return Number(item.stock || 0)
+  }
 
   const mandatoryNames = [
     'plato rectangular',
     'tenedor',
     'servilleta',
-    'sticker',
     'totopos',
-    'queso'
+    'queso',
+    'plato para salsa',
+    'tapadera para salsa'
   ]
 
   let mandatoryLimit = Infinity
   mandatoryNames.forEach((name) => {
-    const required = PACKAGING_CONSUMPTION[name] || DEFAULT_RECIPE_CONSUMPTION[name]
-    const stock = stockMap.get(name) || 0
+    const required = PACKAGING_CONSUMPTION[name] || DEFAULT_RECIPE_CONSUMPTION[name] || INVENTORY_CATALOG_MAP[name]?.usedPerPlate || 1
+    const stock = getRawStock(name)
     const possible = Math.floor(stock / required)
     if (possible < mandatoryLimit) mandatoryLimit = possible
   })
 
-  const sauceLimit = getMaxSaucePlates(stockMap.get('salsa roja'), stockMap.get('salsa verde'))
+  const rojaStock = getRawStock('salsa roja')
+  const verdeStock = getRawStock('salsa verde')
+  const sauceLimit = getMaxSaucePlates(rojaStock, verdeStock)
 
   const proteinNames = ['steak', 'pollo', 'chorizo']
-  const proteinLimit = proteinNames.reduce((sum, name) => sum + Math.floor((stockMap.get(name) || 0) / DEFAULT_RECIPE_CONSUMPTION[name]), 0)
+  const proteinLimit = proteinNames.reduce((sum, name) => sum + Math.floor(getRawStock(name) / DEFAULT_RECIPE_CONSUMPTION[name]), 0)
 
   const complementNames = ['aguacate', 'cebolla caramelizada', 'queso extra']
-  const complementLimit = complementNames.reduce((sum, name) => sum + Math.floor((stockMap.get(name) || 0) / DEFAULT_RECIPE_CONSUMPTION[name]), 0)
+  const complementLimit = complementNames.reduce((sum, name) => sum + Math.floor(getRawStock(name) / DEFAULT_RECIPE_CONSUMPTION[name]), 0)
 
-  const limits = [mandatoryLimit, sauceLimit, proteinLimit, complementLimit].filter((value) => Number.isFinite(value))
-  if (limits.length === 0) return 0
+  const limits = [mandatoryLimit, sauceLimit, proteinLimit, complementLimit]
   return Math.max(0, Math.min(...limits))
 }
 
@@ -194,22 +212,26 @@ export const manualStockAdjustment = async ({ name, amount, type, actor, reason 
   return { ...previousItem.toObject(), stock: newStock }
 }
 
+export const toggleInventoryItem = async (id, isActive) => {
+  const item = await Inventory.findByIdAndUpdate(id, { isActive }, { new: true })
+  if (!item) throw new Error('Item not found')
+  return item
+}
+
 export const seedInventory = async () => {
   for (const ingredient of INVENTORY_CATALOG) {
-    const existing = await Inventory.findOne({ name: ingredient.name })
+    const normalizedName = normalizeName(ingredient.name)
+    const existing = await Inventory.findOne({ name: normalizedName })
+    
     if (!existing) {
       await Inventory.create({
-        name: ingredient.name,
+        name: normalizedName,
         unit: ingredient.unit,
-        stock: 1000000,
-        minimumStock: 5
+        stock: 0,
+        minimumStock: 5,
+        isActive: true
       })
-      console.log(`Inventory seeded: ${ingredient.name} (1000000 ${ingredient.unit})`)
-    } else if (existing.stock < 10) {
-      existing.stock = 1000000
-      existing.unit = ingredient.unit
-      await existing.save()
-      console.log(`Inventory replenished: ${ingredient.name} (Reset to 1000000 ${ingredient.unit})`)
+      console.log(`Inventory seeded: ${normalizedName} (0 ${ingredient.unit})`)
     }
   }
 }

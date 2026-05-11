@@ -55,7 +55,8 @@ const orderSchema = new mongoose.Schema({
   repartidorId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User'
-  }
+  },
+  hiddenForAdmin: { type: Boolean, default: false }
 }, { timestamps: true });
 
 export default mongoose.model('Order', orderSchema);

@@ -1,4 +1,4 @@
-import { createOrderRecord, getOrdersByRole, getOrderHistoryForAdmin, updateOrderStatusRecord } from './order.service.js'
+import { createOrderRecord, getOrdersByRole, getOrderHistoryForAdmin, updateOrderStatusRecord, hideDeliveredOrdersRecord } from './order.service.js'
 
 export const createOrder = async (req, res) => {
   try {
@@ -7,6 +7,23 @@ export const createOrder = async (req, res) => {
 
     if (!customer?.name || !customer?.phone || !customer?.address || items.length === 0) {
       return res.status(400).json({ message: 'Nombre, teléfono, dirección e items son obligatorios' })
+    }
+
+    // Bypass OTP only for ADMIN role (Internal Orders)
+    const isAdmin = req.user && req.user.role === 'ADMIN'
+
+    if (!isAdmin) {
+      const { verifyOTP } = await import('../auth/otp.service.js')
+      const otpCode = req.body.otpCode
+      
+      if (!otpCode) {
+        return res.status(400).json({ message: 'Código de verificación (OTP) requerido para clientes' })
+      }
+
+      const isValid = await verifyOTP(customer.phone, otpCode)
+      if (!isValid) {
+        return res.status(400).json({ message: 'Código de verificación inválido o expirado' })
+      }
     }
 
     const { upsertGuestClientUser } = await import('../users/user.service.js')
@@ -77,4 +94,13 @@ export const getOrderWorkflowHelp = async (req, res) => {
   return res.status(200).json({
     flow: ['Pedido', 'Cocina', 'Despacho', 'Entrega'],
   })
+}
+
+export const clearDeliveredOrders = async (req, res) => {
+  try {
+    const result = await hideDeliveredOrdersRecord()
+    return res.status(200).json({ message: 'Pedidos entregados archivados de la vista', result })
+  } catch (error) {
+    return res.status(500).json({ message: 'No se pudieron limpiar los pedidos', error: error.message })
+  }
 }

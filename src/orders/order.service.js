@@ -115,6 +115,7 @@ export const getOrdersByRole = async (user, statusFilter = null) => {
     if (statusFilter && statusFilter !== 'all') {
       query.status = statusFilter;
     }
+    query.hiddenForAdmin = { $ne: true };
   }
 
   return Order.find(query)
@@ -189,4 +190,11 @@ export const updateOrderStatusRecord = async ({ orderId, nextStatus, actor }) =>
   await order.save();
   await publishOrderRealtimeEvent(order);
   return order;
+};
+
+export const hideDeliveredOrdersRecord = async () => {
+  return Order.updateMany(
+    { status: ORDER_STATUS.ENTREGADO, hiddenForAdmin: { $ne: true } },
+    { $set: { hiddenForAdmin: true } }
+  );
 };

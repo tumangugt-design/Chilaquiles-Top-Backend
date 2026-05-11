@@ -12,6 +12,19 @@ export const getAvailablePlates = async (req, res) => {
   }
 }
 
+
+export const getPublicInventoryOptions = async (req, res) => {
+  try {
+    const items = await Inventory.find({}, 'name stock isActive').sort({ name: 1 })
+    const activeNames = items
+      .filter((item) => item.isActive !== false && Number(item.stock || 0) > 0)
+      .map((item) => item.name)
+    return res.status(200).json({ activeNames, items })
+  } catch (error) {
+    return res.status(500).json({ message: 'Error fetching public inventory options', error: error.message })
+  }
+}
+
 export const getInventoryItems = async (req, res) => {
   try {
     const items = await Inventory.find().sort({ name: 1 })
@@ -117,5 +130,36 @@ export const getInventoryLogs = async (req, res) => {
     return res.status(200).json(logs)
   } catch (error) {
     return res.status(500).json({ message: 'Error fetching inventory logs', error: error.message })
+  }
+}
+
+export const toggleInventoryItemStatus = async (req, res) => {
+  try {
+    const { name } = req.params;
+    const { isActive } = req.body;
+    
+    const item = await Inventory.findOneAndUpdate(
+      { name: name.toLowerCase() },
+      { isActive: !!isActive },
+      { new: true }
+    );
+    
+    if (!item) {
+      return res.status(404).json({ message: 'Item not found' });
+    }
+    
+    return res.status(200).json({ message: 'Item status updated', item });
+  } catch (error) {
+    return res.status(500).json({ message: 'Error updating item status', error: error.message });
+  }
+}
+
+export const syncInventory = async (req, res) => {
+  try {
+    const { seedInventory } = await import('./inventory.service.js');
+    await seedInventory();
+    return res.status(200).json({ message: 'Inventario sincronizado exitosamente' });
+  } catch (error) {
+    return res.status(500).json({ message: 'Error sincronizando inventario', error: error.message });
   }
 }
