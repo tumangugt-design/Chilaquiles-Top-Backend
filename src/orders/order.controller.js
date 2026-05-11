@@ -1,4 +1,6 @@
 import { createOrderRecord, getOrdersByRole, getOrderHistoryForAdmin, updateOrderStatusRecord, hideDeliveredOrdersRecord } from './order.service.js'
+import { isOperatingNow } from '../settings/settings.service.js'
+import { USER_ROLES } from '../helpers/constants.js'
 
 export const createOrder = async (req, res) => {
   try {
@@ -11,6 +13,12 @@ export const createOrder = async (req, res) => {
 
     // El OTP se valida antes de llegar a este punto en el flujo público.
     // En administración se crea el pedido interno con sesión ADMIN y sin OTP.
+    if (req.user?.role !== USER_ROLES.ADMIN) {
+      const openNow = await isOperatingNow()
+      if (!openNow) {
+        return res.status(403).json({ message: 'Estamos cerrados por el momento. Vuelve más tarde.' })
+      }
+    }
 
     const { upsertGuestClientUser } = await import('../users/user.service.js')
     const user = await upsertGuestClientUser({

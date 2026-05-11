@@ -5,10 +5,12 @@ import morgan from 'morgan';
 import { dbConnection } from './mongo.js';
 import { seedAdminUser } from '../src/users/user.service.js';
 import { seedInventory } from '../src/inventory/inventory.service.js';
+import { seedSettings } from '../src/settings/settings.service.js';
 import authRoutes from '../src/auth/auth.routes.js';
 import userRoutes from '../src/users/user.routes.js';
 import orderRoutes from '../src/orders/order.routes.js';
 import inventoryRoutes from '../src/inventory/inventory.routes.js';
+import settingsRoutes from '../src/settings/settings.routes.js';
 
 const middlewares = (app) => {
   app.use(cors());
@@ -27,12 +29,14 @@ const routes = (app) => {
   app.use('/api/users', userRoutes);
   app.use('/api/orders', orderRoutes);
   app.use('/api/inventory', inventoryRoutes);
+  app.use('/api/settings', settingsRoutes);
 };
 
 const connectDependencies = async () => {
   await dbConnection();
   await seedAdminUser();
   await seedInventory();
+  await seedSettings();
 };
 
 export const initServer = async () => {
