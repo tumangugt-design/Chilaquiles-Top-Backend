@@ -63,7 +63,20 @@ export const createLocalStaffUser = async ({ name, phone, username, password, re
 }
 
 export const authenticateLocalStaffUser = async ({ username, password, requestedRole }) => {
-  const user = await findUserByUsername(username)
+  const normalizedIdentifier = String(username || '').toLowerCase().trim()
+  
+  let query = { username: normalizedIdentifier }
+  if (requestedRole === USER_ROLES.ADMIN) {
+    query = {
+      $or: [
+        { username: normalizedIdentifier },
+        { email: normalizedIdentifier }
+      ]
+    }
+  }
+
+  const user = await User.findOne(query)
+
   if (!user || user.authProvider !== 'LOCAL') {
     throw new Error('Credenciales inválidas')
   }
