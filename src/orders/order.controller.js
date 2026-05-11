@@ -9,22 +9,8 @@ export const createOrder = async (req, res) => {
       return res.status(400).json({ message: 'Nombre, teléfono, dirección e items son obligatorios' })
     }
 
-    // Bypass OTP only for ADMIN role (Internal Orders)
-    const isAdmin = req.user && req.user.role === 'ADMIN'
-
-    if (!isAdmin) {
-      const { verifyOTP } = await import('../auth/otp.service.js')
-      const otpCode = req.body.otpCode
-      
-      if (!otpCode) {
-        return res.status(400).json({ message: 'Código de verificación (OTP) requerido para clientes' })
-      }
-
-      const isValid = await verifyOTP(customer.phone, otpCode)
-      if (!isValid) {
-        return res.status(400).json({ message: 'Código de verificación inválido o expirado' })
-      }
-    }
+    // El OTP se valida antes de llegar a este punto en el flujo público.
+    // En administración se crea el pedido interno con sesión ADMIN y sin OTP.
 
     const { upsertGuestClientUser } = await import('../users/user.service.js')
     const user = await upsertGuestClientUser({
