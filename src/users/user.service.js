@@ -67,10 +67,12 @@ export const authenticateLocalStaffUser = async ({ username, password, requested
   
   let query = { username: normalizedIdentifier }
   if (requestedRole === USER_ROLES.ADMIN) {
+    const escapedIdentifier = normalizedIdentifier.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    const regexIdentifier = new RegExp(`^${escapedIdentifier}$`, 'i')
     query = {
       $or: [
-        { username: normalizedIdentifier },
-        { email: normalizedIdentifier }
+        { username: regexIdentifier },
+        { email: regexIdentifier }
       ]
     }
   }
