@@ -4,9 +4,12 @@ import BotMemory from './botMemory.model.js';
 import { getOperatingHoursSetting } from '../settings/settings.service.js';
 import { getAICompletion, prepareBotContext } from './ai.service.js';
 import { sendWhatsAppMessage } from './whatsapp.service.js';
+import { normalizePhone } from '../helpers/order.helper.js';
 
-export const processIncomingMessage = async (phone, messageText) => {
+export const processIncomingMessage = async (rawPhone, messageText) => {
   try {
+    const phone = normalizePhone(rawPhone);
+
     // 1. Identify or Create User
     let user = await User.findOne({ phone: phone });
     
@@ -36,23 +39,24 @@ export const processIncomingMessage = async (phone, messageText) => {
     ];
 
     // 5. Get AI Response
-    const aiResponse = await getAICompletion(messages);
+    let aiResponse = await getAICompletion(messages);
 
-    // 6. Update User Name if AI detected it (Optional but smart)
-    // For now, let's just wait for the user to explicitly say "Me llamo X" 
-    // or let the AI handle the flow.
+    // 6. Extraction of Name if provided by AI
+    const nameMatch = aiResponse.match(/\[SET_NAME:\s*(.+?)\]/);
+    if (nameMatch) {
+      const extractedName = nameMatch[1].trim();
+      await updateUserName(phone, extractedName);
+      // Clean the response from the tag
+      aiResponse = aiResponse.replace(/\[SET_NAME:\s*.+?\]/, '').trim();
+      console.log(`Nombre actualizado para ${phone}: ${extractedName}`);
+    }
 
     // 7. Save to Memory
     memory.lastMessages.push({ role: 'user', content: messageText });
     memory.lastMessages.push({ role: 'assistant', content: aiResponse });
     await memory.save();
-
-    // 8. If the user mentioned their name and we don't have it, we could try to extract it.
-    // However, the simplest is to let the bot ask and the user reply.
-    // If we want to be more proactive, we can add logic to update the user model.
-    // Let's check if the user exists. If not, we'll create a "Guest" user when we have the name.
     
-    // 9. Send WhatsApp Message
+    // 8. Send WhatsApp Message
     await sendWhatsAppMessage(phone, aiResponse);
 
     return { success: true };
