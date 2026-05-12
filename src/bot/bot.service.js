@@ -1,6 +1,7 @@
 import User from '../users/user.model.js';
 import Order from '../orders/order.model.js';
 import BotMemory from './botMemory.model.js';
+import { getOperatingHoursSetting } from '../settings/settings.service.js';
 import { getAICompletion, prepareBotContext } from './ai.service.js';
 import { sendWhatsAppMessage } from './whatsapp.service.js';
 
@@ -21,8 +22,11 @@ export const processIncomingMessage = async (phone, messageText) => {
       memory = new BotMemory({ phone: phone, lastMessages: [] });
     }
 
-    // 4. Prepare AI Context
-    const systemPrompt = prepareBotContext(user?.name, orderHistory);
+    // 4. Get Operating Hours
+    const operatingHours = await getOperatingHoursSetting();
+
+    // 5. Prepare AI Context
+    const systemPrompt = prepareBotContext(user?.name, orderHistory, operatingHours);
     
     // Build message thread for AI
     const messages = [

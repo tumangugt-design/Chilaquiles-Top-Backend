@@ -33,54 +33,47 @@ export const getAICompletion = async (messages) => {
   }
 };
 
-export const prepareBotContext = (customerName, orderHistory) => {
-  const menuInfo = INVENTORY_CATALOG.filter(item =>
+export const prepareBotContext = (customerName, orderHistory, operatingHours) => {
+  const menuInfo = INVENTORY_CATALOG.filter(item => 
     ['Salsas', 'Proteínas', 'Complementos'].includes(item.category)
-  ).map(item => `- ${item.label} (${item.category})`).join('\n');
+  ).map(item => `- ${item.label}`).join('\n');
 
-  const pricingInfo = `Precios:
-- 1 plato: Q${ORDER_PRICING[1]}
-- 2 platos: Q${ORDER_PRICING[2]}
-- 3 platos (Combo Especial): Q${ORDER_PRICING[3]}`;
+  const pricingInfo = `Precios: 1 plato Q${ORDER_PRICING[1]}, 2 platos Q${ORDER_PRICING[2]}, 3 platos Q${ORDER_PRICING[3]}.`;
 
-  let historyContext = 'Este cliente no tiene pedidos previos.';
+  const hoursInfo = operatingHours 
+    ? `Horario hoy: ${operatingHours.openTime} a ${operatingHours.closeTime}. (Estado actual: ${operatingHours.isOpen ? 'Abierto' : 'Cerrado'})`
+    : 'Horario: No disponible actualmente.';
+
+  let historyContext = '';
   if (orderHistory && orderHistory.length > 0) {
-    historyContext = 'Historial de pedidos del cliente:\n' + orderHistory.map(order => {
+    historyContext = 'Historial del cliente:\n' + orderHistory.map(order => {
       const items = order.items.map(i => `${i.sauce} con ${i.protein}`).join(', ');
-      return `- Pedido ${order.orderNumber}: ${items} (Total: Q${order.total})`;
+      return `- Pedido ${order.orderNumber}: ${items}`;
     }).join('\n');
   }
 
-  const systemPrompt = `Eres el asistente virtual de "Chilaquiles TOP", un restaurante de chilaquiles premium en Villa Nueva, Guatemala.
-Tu objetivo es ser amable, eficiente y ayudar a los clientes con sus dudas o pedidos.
+  const systemPrompt = `Eres el asistente de "Chilaquiles TOP" en Villa Nueva, Guatemala. 
 
-Información del negocio:
-- Nombre: Chilaquiles TOP.
-- Ubicación: zona 6 ,Villa Nueva, Guatemala.
-- Especialidad: Chilaquiles personalizables con ingredientes frescos.
-- URL para pedir: https://pedidos.chilaquilestop.com/clientes
-- horario de atención: verficiar en la base de datos diariamente ya que puede variar
+REGLAS CRÍTICAS:
+- SÓLO TENEMOS DELIVERY (Servicio a domicilio). NO RECIBIMOS CLIENTES EN EL LOCAL.
+- Si alguien dice que quiere ir al local, recuérdale amablemente que por ahora solo enviamos a domicilio.
+- Sé MUY DIRECTO y breve. No uses más de 2 párrafos cortos por respuesta.
+- Si preguntan por ubicación: Zona 6 de Villa Nueva (Sólo para envíos).
 
-Menú disponible:
-${menuInfo}
-
+Info de apoyo:
+${hoursInfo}
 ${pricingInfo}
 
-Datos del cliente actual:
-- Nombre: ${customerName || 'Desconocido (Pregúntale su nombre si no lo sabes)'}
+Menú:
+${menuInfo}
+
+Cliente: ${customerName || 'Nuevo'}
 ${historyContext}
 
-Reglas de comportamiento:
-1. Si no sabes el nombre del cliente, pregúntaselo amablemente al inicio de la conversación.
-2. Si el cliente ya es conocido, salúdalo por su nombre.
-3. Siempre invita al cliente a realizar su pedido en la web: https://pedidos.chilaquilestop.com/clientes
-4. Si tiene historial de pedidos, recomiéndale algo basado en lo que ha pedido antes o sugiérele probar algo nuevo (ej: si siempre pide Pollo, sugiere Steak).
-5. Mantén un tono entusiasta y servicial.
-6. Responde dudas básicas sobre precios, ubicación y menú.
-7. No inventes información que no esté aquí.
-8. Si el cliente quiere pedir, guíalo paso a paso hacia la web de pedidos.
-
-Responde de forma concisa y amigable.`;
+Instrucciones:
+1. Si no tienes su nombre, pregúntalo brevemente.
+2. Siempre guía a pedir en: https://pedidos.chilaquilestop.com/clientes
+3. Sé buena onda pero ve al grano.`;
 
   return systemPrompt;
 };
