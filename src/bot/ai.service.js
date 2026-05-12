@@ -20,7 +20,7 @@ export const getAICompletion = async (messages) => {
     });
 
     const data = await response.json();
-    
+
     if (!data.choices || data.choices.length === 0) {
       console.error('OpenRouter Error Response:', JSON.stringify(data));
       return 'Lo siento, tuve un problema al procesar tu solicitud. ¿Podrías repetirlo?';
@@ -34,7 +34,7 @@ export const getAICompletion = async (messages) => {
 };
 
 export const prepareBotContext = (customerName, orderHistory) => {
-  const menuInfo = INVENTORY_CATALOG.filter(item => 
+  const menuInfo = INVENTORY_CATALOG.filter(item =>
     ['Salsas', 'Proteínas', 'Complementos'].includes(item.category)
   ).map(item => `- ${item.label} (${item.category})`).join('\n');
 
@@ -56,9 +56,10 @@ Tu objetivo es ser amable, eficiente y ayudar a los clientes con sus dudas o ped
 
 Información del negocio:
 - Nombre: Chilaquiles TOP.
-- Ubicación: Villa Nueva, Guatemala.
+- Ubicación: zona 6 ,Villa Nueva, Guatemala.
 - Especialidad: Chilaquiles personalizables con ingredientes frescos.
 - URL para pedir: https://pedidos.chilaquilestop.com/clientes
+- horario de atención: verficiar en la base de datos diariamente ya que puede variar
 
 Menú disponible:
 ${menuInfo}
