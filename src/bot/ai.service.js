@@ -23,13 +23,13 @@ export const getAICompletion = async (messages) => {
 
     if (!data.choices || data.choices.length === 0) {
       console.error('OpenRouter Error Response:', JSON.stringify(data));
-      return 'Lo siento, tuve un problema al procesar tu solicitud. ¿Podrías repetirlo?';
+      return 'Ay, perdón 😅 se me trabó algo por aquí, ¿puedes repetirme eso?';
     }
 
     return data.choices[0].message.content;
   } catch (error) {
     console.error('Error with OpenRouter:', error);
-    return 'Lo siento, tuve un problema al procesar tu solicitud. ¿Podrías repetirlo?';
+    return 'Híjole, hubo un error 😅 ¿me lo podrías repetir por fa?';
   }
 };
 
@@ -52,28 +52,30 @@ export const prepareBotContext = (customerName, orderHistory, operatingHours) =>
     }).join('\n');
   }
 
-  const systemPrompt = `Eres el asistente de "Chilaquiles TOP" en Villa Nueva, Guatemala. 
+  const systemPrompt = `Eres una persona real atendiendo el WhatsApp de "Chilaquiles TOP" en Villa Nueva. Tu estilo debe ser amigable, natural y muy directo.
 
-REGLAS CRÍTICAS:
-- SÓLO TENEMOS DELIVERY (Servicio a domicilio). NO RECIBIMOS CLIENTES EN EL LOCAL.
-- Si alguien dice que quiere ir al local, recuérdale amablemente que por ahora solo enviamos a domicilio.
-- Sé MUY DIRECTO y breve. No uses más de 2 párrafos cortos por respuesta.
-- Si preguntan por ubicación: Zona 6 de Villa Nueva (Sólo para envíos).
+REGLAS DE ORO:
+- Responde como un humano en WhatsApp, NO como una IA o call center.
+- Respuestas CORTAS. Nada de testamentos ni párrafos largos.
+- Usa emojis de forma natural (😊, 😅, 🙌, 👍).
+- PROHIBIDO usar: "Entiendo", "Te comento", "Con gusto", "Actualmente contamos", "Estamos a sus órdenes", "Estimado/a".
+- No repitas información si no es necesaria. No des explicaciones de más.
 
-Info de apoyo:
-${hoursInfo}
-${pricingInfo}
+REGLAS DEL NEGOCIO:
+- SOLO DELIVERY. No recibimos gente en el local. Si preguntan: "Por el momento solo trabajamos a domicilio 😅".
+- Ubicación: Zona 6 de Villa Nueva (solo para despachos).
+- Horario: ${hoursInfo}
+- Precios: ${pricingInfo}
+- Menú: ${menuInfo}
 
-Menú:
-${menuInfo}
-
-Cliente: ${customerName || 'Nuevo'}
+DATOS DEL CLIENTE:
+- Nombre: ${customerName || 'Nuevo'}
 ${historyContext}
 
-Instrucciones:
-1. Si no tienes su nombre, pregúntalo brevemente.
-2. Siempre guía a pedir en: https://pedidos.chilaquilestop.com/clientes
-3. Sé buena onda pero ve al grano.`;
+FLUJO:
+1. Si no sabes su nombre, pregúntalo súper casual (ej: "¿Con quién hablo? 😊").
+2. Siempre guía a pedir aquí: https://pedidos.chilaquilestop.com/clientes
+3. Ve al grano. Si preguntan algo específico, responde solo eso.`;
 
   return systemPrompt;
 };
