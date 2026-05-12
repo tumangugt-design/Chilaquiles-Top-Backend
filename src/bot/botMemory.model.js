@@ -21,11 +21,10 @@ const botMemorySchema = new mongoose.Schema({
 }, { timestamps: true });
 
 // Limit messages to keep history manageable
-botMemorySchema.pre('save', function (next) {
+botMemorySchema.pre('save', function () {
   if (this.lastMessages.length > 10) {
     this.lastMessages = this.lastMessages.slice(-10);
   }
-  next();
 });
 
 export default mongoose.model('BotMemory', botMemorySchema);

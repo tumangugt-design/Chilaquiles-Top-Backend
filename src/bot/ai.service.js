@@ -2,7 +2,7 @@ import { INVENTORY_CATALOG, ORDER_PRICING } from '../helpers/constants.js';
 
 export const getAICompletion = async (messages) => {
   const apiKey = process.env.OPEN_ROUTER_APIKEY;
-  const model = process.env.OPEN_ROUTER_MODEL;
+  const model = process.env.OPEN_ROUTER_MODEL || 'google/gemini-2.0-flash-001';
 
   try {
     const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
@@ -20,6 +20,12 @@ export const getAICompletion = async (messages) => {
     });
 
     const data = await response.json();
+    
+    if (!data.choices || data.choices.length === 0) {
+      console.error('OpenRouter Error Response:', JSON.stringify(data));
+      return 'Lo siento, tuve un problema al procesar tu solicitud. ¿Podrías repetirlo?';
+    }
+
     return data.choices[0].message.content;
   } catch (error) {
     console.error('Error with OpenRouter:', error);
