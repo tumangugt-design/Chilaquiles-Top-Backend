@@ -12,6 +12,7 @@ import orderRoutes from '../src/orders/order.routes.js';
 import inventoryRoutes from '../src/inventory/inventory.routes.js';
 import settingsRoutes from '../src/settings/settings.routes.js';
 import botRoutes from '../src/bot/bot.routes.js';
+import financeRoutes from '../src/finances/finances.routes.js';
 
 const middlewares = (app) => {
   app.use(cors());
@@ -32,6 +33,7 @@ const routes = (app) => {
   app.use('/api/inventory', inventoryRoutes);
   app.use('/api/settings', settingsRoutes);
   app.use('/api/bot', botRoutes);
+  app.use('/api/finances', financeRoutes);
 };
 
 const connectDependencies = async () => {

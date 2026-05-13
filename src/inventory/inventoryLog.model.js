@@ -37,6 +37,10 @@ const inventoryLogSchema = new mongoose.Schema({
     required: true
   },
   userName: String,
+  price: {
+    type: Number,
+    default: 0
+  },
   reason: {
     type: String,
     trim: true

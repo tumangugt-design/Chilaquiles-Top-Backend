@@ -28,6 +28,15 @@ const inventoryItemSchema = new mongoose.Schema({
     type: Boolean,
     default: true
   },
+  category: {
+    type: String,
+    trim: true,
+    default: 'Otros'
+  },
+  lastPrice: {
+    type: Number,
+    default: 0
+  },
   notes: String
 }, { timestamps: true });
 

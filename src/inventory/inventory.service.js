@@ -183,11 +183,17 @@ export const getAvailablePlatesCount = async () => {
   return Math.max(0, Math.min(...limits))
 }
 
-export const manualStockAdjustment = async ({ name, amount, type, actor, reason }) => {
+export const manualStockAdjustment = async ({ name, amount, type, price, actor, reason }) => {
   const normalized = normalizeName(name)
+  const updateQuery = { $inc: { stock: amount } }
+  
+  if (price !== undefined && price !== null) {
+    updateQuery.$set = { lastPrice: Number(price) }
+  }
+
   const previousItem = await Inventory.findOneAndUpdate(
     { name: normalized },
-    { $inc: { stock: amount } },
+    updateQuery,
     { new: false }
   )
 
@@ -202,6 +208,7 @@ export const manualStockAdjustment = async ({ name, amount, type, actor, reason 
     ingredientName: previousItem.name,
     type: type || (amount > 0 ? 'IN' : 'ADJUSTMENT'),
     amount: Math.abs(amount),
+    price: price || 0,
     previousStock: previousItem.stock,
     newStock,
     userId: actor?._id,
@@ -209,7 +216,7 @@ export const manualStockAdjustment = async ({ name, amount, type, actor, reason 
     reason: reason || 'Ajuste manual'
   })
 
-  return { ...previousItem.toObject(), stock: newStock }
+  return { ...previousItem.toObject(), stock: newStock, lastPrice: price || previousItem.lastPrice }
 }
 
 export const toggleInventoryItem = async (id, isActive) => {
@@ -227,11 +234,15 @@ export const seedInventory = async () => {
       await Inventory.create({
         name: normalizedName,
         unit: ingredient.unit,
+        category: ingredient.category || 'Otros',
         stock: 0,
         minimumStock: 5,
         isActive: true
       })
       console.log(`Inventory seeded: ${normalizedName} (0 ${ingredient.unit})`)
+    } else if (!existing.category) {
+      existing.category = ingredient.category || 'Otros'
+      await existing.save()
     }
   }
 }

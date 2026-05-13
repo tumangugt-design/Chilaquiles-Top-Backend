@@ -62,6 +62,7 @@ export const saveInventoryItem = async (req, res) => {
       name,
       amount,
       type: 'IN',
+      price: Number(req.body.price || 0),
       actor: req.user,
       reason: 'Entrada de inventario'
     })
@@ -105,6 +106,7 @@ export const adjustInventoryStock = async (req, res) => {
       name,
       amount: Number(amount),
       type,
+      price: Number(req.body.price || 0),
       actor: req.user,
       reason
     })
