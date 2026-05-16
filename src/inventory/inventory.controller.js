@@ -66,7 +66,7 @@ export const saveInventoryItem = async (req, res) => {
       return res.status(400).json({ message: 'El costo total debe ser un número válido mayor o igual a cero.' })
     }
 
-    const unitPrice = hasPrice && amount > 0 ? Math.round((totalPrice / amount) * 1000000) / 1000000 : undefined
+    const fixedPrice = hasPrice ? Math.round(totalPrice * 100) / 100 : undefined
 
     let inventoryItem = await Inventory.findOne({ name })
     if (!inventoryItem) {
@@ -84,15 +84,15 @@ export const saveInventoryItem = async (req, res) => {
       name,
       amount,
       type: 'IN',
-      price: unitPrice,
+      price: fixedPrice,
       actor: req.user,
-      reason: `Entrada de inventario: ${rawAmount} ${inputUnit} → ${amount} ${catalogItem.unit}${hasPrice ? ` | Costo total Q${totalPrice}` : ''}`
+      reason: `Entrada de inventario: ${rawAmount} ${inputUnit} → ${amount} ${catalogItem.unit}${hasPrice ? ` | Precio fijo Q${fixedPrice}` : ''}`
     })
 
     return res.status(200).json({
       message: 'Entrada de inventario registrada',
       item,
-      conversion: { inputAmount: rawAmount, inputUnit, storedAmount: amount, storedUnit: catalogItem.unit, unitPrice }
+      conversion: { inputAmount: rawAmount, inputUnit, storedAmount: amount, storedUnit: catalogItem.unit, fixedPrice }
     })
   } catch (error) {
     return res.status(error.statusCode || 500).json({ message: error.message || 'Error saving inventory item', error: error.message })

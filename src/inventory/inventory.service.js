@@ -246,11 +246,11 @@ export const manualStockAdjustment = async ({ name, amount, type, price, actor, 
   const normalized = normalizeName(name)
   const numericAmount = Number(amount)
   const updateQuery = { $inc: { stock: numericAmount } }
-  const hasUnitPrice = price !== undefined && price !== null && price !== ''
-  const unitPrice = hasUnitPrice ? round(Number(price)) : undefined
+  const hasFixedPrice = price !== undefined && price !== null && price !== ''
+  const fixedPrice = hasFixedPrice ? round(Number(price)) : undefined
   
-  if (hasUnitPrice) {
-    updateQuery.$set = { lastPrice: unitPrice }
+  if (hasFixedPrice) {
+    updateQuery.$set = { lastPrice: fixedPrice }
   }
 
   const previousItem = await Inventory.findOneAndUpdate(
@@ -270,7 +270,7 @@ export const manualStockAdjustment = async ({ name, amount, type, price, actor, 
     ingredientName: previousItem.name,
     type: type || (numericAmount > 0 ? 'IN' : 'ADJUSTMENT'),
     amount: Math.abs(numericAmount),
-    price: hasUnitPrice ? unitPrice : Number(previousItem.lastPrice || 0),
+    price: hasFixedPrice ? fixedPrice : 0,
     previousStock: previousItem.stock,
     newStock,
     userId: actor?._id,
@@ -278,7 +278,7 @@ export const manualStockAdjustment = async ({ name, amount, type, price, actor, 
     reason: reason || 'Ajuste manual'
   })
 
-  return { ...previousItem.toObject(), stock: newStock, lastPrice: hasUnitPrice ? unitPrice : previousItem.lastPrice }
+  return { ...previousItem.toObject(), stock: newStock, lastPrice: hasFixedPrice ? fixedPrice : previousItem.lastPrice }
 }
 
 export const toggleInventoryItem = async (id, isActive) => {

@@ -9,12 +9,12 @@ const getPeriodStats = async (start, end) => {
   })
   const revenue = orders.reduce((sum, order) => sum + (order.total || 0), 0)
 
-  // Costs: Sum of inventory logs with type 'IN' in period
+  // Costs: sum fixed entry prices registered in inventory inputs.
   const logs = await InventoryLog.find({
     type: 'IN',
     createdAt: { $gte: start, $lte: end }
   })
-  const costs = logs.reduce((sum, log) => sum + ((log.price || 0) * (log.amount || 0)), 0)
+  const costs = logs.reduce((sum, log) => sum + Number(log.price || 0), 0)
 
   return {
     revenue,
