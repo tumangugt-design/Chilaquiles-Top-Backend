@@ -240,9 +240,22 @@ export const seedInventory = async () => {
         isActive: true
       })
       console.log(`Inventory seeded: ${normalizedName} (0 ${ingredient.unit})`)
-    } else if (!existing.category) {
-      existing.category = ingredient.category || 'Otros'
-      await existing.save()
+    } else {
+      let shouldSave = false
+
+      if (!existing.category) {
+        existing.category = ingredient.category || 'Otros'
+        shouldSave = true
+      }
+
+      if (ingredient.category === 'Empaque' && existing.isActive === false) {
+        existing.isActive = true
+        shouldSave = true
+      }
+
+      if (shouldSave) {
+        await existing.save()
+      }
     }
   }
 }

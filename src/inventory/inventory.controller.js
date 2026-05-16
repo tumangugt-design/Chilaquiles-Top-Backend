@@ -1,7 +1,13 @@
 import Inventory from './inventory.model.js'
 import InventoryLog from './inventoryLog.model.js'
 import { getAggregatedConsumption, validateInventoryAvailability, manualStockAdjustment, getAvailablePlatesCount } from './inventory.service.js'
-import { INVENTORY_CATALOG_MAP } from '../helpers/constants.js'
+import { INVENTORY_CATALOG, INVENTORY_CATALOG_MAP } from '../helpers/constants.js'
+
+const PROTECTED_PACKAGING_NAMES = INVENTORY_CATALOG
+  .filter((item) => item.category === 'Empaque')
+  .map((item) => item.name)
+
+const isProtectedPackaging = (name = '') => PROTECTED_PACKAGING_NAMES.includes(String(name).trim().toLowerCase())
 
 export const getAvailablePlates = async (req, res) => {
   try {
@@ -27,6 +33,11 @@ export const getPublicInventoryOptions = async (req, res) => {
 
 export const getInventoryItems = async (req, res) => {
   try {
+    await Inventory.updateMany(
+      { name: { $in: PROTECTED_PACKAGING_NAMES }, isActive: false },
+      { $set: { isActive: true } }
+    )
+
     const items = await Inventory.find().sort({ name: 1 })
     return res.status(200).json(items)
   } catch (error) {
@@ -139,9 +150,23 @@ export const toggleInventoryItemStatus = async (req, res) => {
   try {
     const { name } = req.params;
     const { isActive } = req.body;
+    const normalizedName = String(name || '').trim().toLowerCase();
+
+    if (isProtectedPackaging(normalizedName) && isActive === false) {
+      const item = await Inventory.findOneAndUpdate(
+        { name: normalizedName },
+        { isActive: true },
+        { new: true }
+      );
+
+      return res.status(400).json({
+        message: 'Los productos de empaque son obligatorios y no se pueden desactivar.',
+        item
+      });
+    }
     
     const item = await Inventory.findOneAndUpdate(
-      { name: name.toLowerCase() },
+      { name: normalizedName },
       { isActive: !!isActive },
       { new: true }
     );
