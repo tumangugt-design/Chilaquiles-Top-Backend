@@ -1,20 +1,92 @@
 import User from './user.model.js'
+import Order from '../orders/order.model.js'
 import { USER_ROLES, USER_STATUS } from '../helpers/constants.js'
 import { normalizePhone } from '../helpers/order.helper.js'
 import { hashPassword, verifyPassword } from '../helpers/password.helper.js'
 
 export const findUserByUsername = async (username) => User.findOne({ username: String(username || '').toLowerCase().trim() })
 
-export const upsertGuestClientUser = async ({ phone, name, address, location }) => {
+const buildPhoneMatchQuery = (phone) => {
   const normalizedPhone = normalizePhone(phone)
-  let user = null
+  const digits = String(phone || '').replace(/\D/g, '')
+  const localDigits = digits.startsWith('502') ? digits.slice(3) : digits
+  const escapedLocalDigits = localDigits.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 
-  if (normalizedPhone) {
-    user = await User.findOne({ authProvider: 'GUEST', role: USER_ROLES.CLIENT, phone: normalizedPhone })
+  const possiblePhones = new Set([
+    normalizedPhone,
+    digits,
+    localDigits,
+    digits ? `+${digits}` : '',
+    localDigits ? `+502${localDigits}` : '',
+    localDigits ? `502${localDigits}` : '',
+  ].filter(Boolean))
+
+  const phoneConditions = Array.from(possiblePhones).map((value) => ({ phone: value }))
+  if (localDigits) {
+    phoneConditions.push({ phone: new RegExp(`${escapedLocalDigits}$`) })
   }
 
-  if (!user) {
-    user = await User.create({
+  return { normalizedPhone, phoneConditions }
+}
+
+const consolidateClientUsersByPhone = async ({ users, normalizedPhone, name, address, location }) => {
+  const sortedUsers = [...users].sort((a, b) => new Date(a.createdAt || 0) - new Date(b.createdAt || 0))
+  const primaryUser = sortedUsers[0]
+  const duplicateUsers = sortedUsers.slice(1)
+
+  primaryUser.authProvider = 'GUEST'
+  primaryUser.phone = normalizedPhone || primaryUser.phone
+  primaryUser.name = name || primaryUser.name
+  primaryUser.address = address || primaryUser.address
+  primaryUser.location = location || primaryUser.location
+  primaryUser.role = USER_ROLES.CLIENT
+  primaryUser.status = USER_STATUS.APPROVED
+  await primaryUser.save()
+
+  if (duplicateUsers.length > 0) {
+    const duplicateIds = duplicateUsers.map((duplicate) => duplicate._id)
+    await Order.updateMany(
+      { userId: { $in: duplicateIds } },
+      { $set: { userId: primaryUser._id } }
+    )
+    await User.deleteMany({ _id: { $in: duplicateIds }, role: USER_ROLES.CLIENT })
+  }
+
+  return primaryUser
+}
+
+export const upsertGuestClientUser = async ({ phone, name, address, location }) => {
+  const { normalizedPhone, phoneConditions } = buildPhoneMatchQuery(phone)
+
+  if (!normalizedPhone) {
+    return User.create({
+      authProvider: 'GUEST',
+      phone: '',
+      name,
+      address,
+      location,
+      role: USER_ROLES.CLIENT,
+      status: USER_STATUS.APPROVED,
+    })
+  }
+
+  const existingUsers = await User.find({
+    role: USER_ROLES.CLIENT,
+    $or: phoneConditions,
+  }).sort({ createdAt: 1 })
+
+  if (existingUsers.length > 0) {
+    return consolidateClientUsersByPhone({
+      users: existingUsers,
+      normalizedPhone,
+      name,
+      address,
+      location,
+    })
+  }
+
+  try {
+    return await User.create({
       authProvider: 'GUEST',
       phone: normalizedPhone,
       name,
@@ -23,17 +95,26 @@ export const upsertGuestClientUser = async ({ phone, name, address, location }) 
       role: USER_ROLES.CLIENT,
       status: USER_STATUS.APPROVED,
     })
-    return user
-  }
+  } catch (error) {
+    // Si dos pedidos del mismo teléfono entran casi al mismo tiempo, reintentamos
+    // buscando el cliente ya creado para evitar duplicados visibles.
+    const concurrentUsers = await User.find({
+      role: USER_ROLES.CLIENT,
+      $or: phoneConditions,
+    }).sort({ createdAt: 1 })
 
-  user.phone = normalizedPhone || user.phone
-  user.name = name || user.name
-  user.address = address || user.address
-  user.location = location || user.location
-  user.role = USER_ROLES.CLIENT
-  user.status = USER_STATUS.APPROVED
-  await user.save()
-  return user
+    if (concurrentUsers.length > 0) {
+      return consolidateClientUsersByPhone({
+        users: concurrentUsers,
+        normalizedPhone,
+        name,
+        address,
+        location,
+      })
+    }
+
+    throw error
+  }
 }
 
 export const createLocalStaffUser = async ({ name, phone, username, password, requestedRole }) => {
