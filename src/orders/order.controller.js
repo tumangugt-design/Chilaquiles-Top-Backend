@@ -4,10 +4,27 @@ import { USER_ROLES } from '../helpers/constants.js'
 
 
 const ZONA_6_VILLA_NUEVA_BOUNDS = {
-  minLat: 14.52590,
-  maxLat: 14.55356,
-  minLng: -90.59499,
-  maxLng: -90.56193,
+  // Cobertura real de Zona 6 de Villa Nueva con margen para imprecisión de GPS móvil.
+  minLat: 14.50000,
+  maxLat: 14.56500,
+  minLng: -90.62000,
+  maxLng: -90.53500,
+}
+
+const ZONA_6_VILLA_NUEVA_CENTER = { lat: 14.53280, lng: -90.58420 }
+const ZONA_6_VILLA_NUEVA_RADIUS_KM = 5.2
+
+const getDistanceKm = (pointA, pointB) => {
+  const earthRadiusKm = 6371
+  const toRad = (value) => (value * Math.PI) / 180
+  const dLat = toRad(pointB.lat - pointA.lat)
+  const dLng = toRad(pointB.lng - pointA.lng)
+  const lat1 = toRad(pointA.lat)
+  const lat2 = toRad(pointB.lat)
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLng / 2) ** 2
+  return earthRadiusKm * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
 }
 
 const isInsideZona6VillaNueva = (location) => {
@@ -16,12 +33,16 @@ const isInsideZona6VillaNueva = (location) => {
 
   if (Number.isNaN(lat) || Number.isNaN(lng)) return false
 
-  return (
+  const insideBounds =
     lat >= ZONA_6_VILLA_NUEVA_BOUNDS.minLat &&
     lat <= ZONA_6_VILLA_NUEVA_BOUNDS.maxLat &&
     lng >= ZONA_6_VILLA_NUEVA_BOUNDS.minLng &&
     lng <= ZONA_6_VILLA_NUEVA_BOUNDS.maxLng
-  )
+
+  const insideRadius =
+    getDistanceKm({ lat, lng }, ZONA_6_VILLA_NUEVA_CENTER) <= ZONA_6_VILLA_NUEVA_RADIUS_KM
+
+  return insideBounds && insideRadius
 }
 
 export const createOrder = async (req, res) => {
