@@ -146,6 +146,45 @@ export const getInventoryLogs = async (req, res) => {
   }
 }
 
+
+export const updateInventoryItemPrice = async (req, res) => {
+  try {
+    const normalizedName = String(req.params.name || '').trim().toLowerCase()
+    const price = Number(req.body.price)
+    const catalogItem = INVENTORY_CATALOG_MAP[normalizedName]
+
+    if (!catalogItem) {
+      return res.status(400).json({ message: 'Producto no permitido en inventario.' })
+    }
+
+    if (Number.isNaN(price) || price < 0) {
+      return res.status(400).json({ message: 'El precio debe ser un número válido mayor o igual a cero.' })
+    }
+
+    const item = await Inventory.findOneAndUpdate(
+      { name: normalizedName },
+      {
+        $set: {
+          unit: catalogItem.unit,
+          category: catalogItem.category || 'Otros',
+          lastPrice: price,
+          ...(catalogItem.category === 'Empaque' ? { isActive: true } : {})
+        },
+        $setOnInsert: {
+          name: normalizedName,
+          stock: 0,
+          minimumStock: 5
+        }
+      },
+      { new: true, upsert: true, setDefaultsOnInsert: true }
+    )
+
+    return res.status(200).json({ message: 'Precio actualizado correctamente', item })
+  } catch (error) {
+    return res.status(500).json({ message: 'Error updating item price', error: error.message })
+  }
+}
+
 export const toggleInventoryItemStatus = async (req, res) => {
   try {
     const { name } = req.params;
