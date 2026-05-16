@@ -2,6 +2,28 @@ import { createOrderRecord, getOrdersByRole, getOrderHistoryForAdmin, updateOrde
 import { isOperatingNow } from '../settings/settings.service.js'
 import { USER_ROLES } from '../helpers/constants.js'
 
+
+const ZONA_6_VILLA_NUEVA_BOUNDS = {
+  minLat: 14.52590,
+  maxLat: 14.55356,
+  minLng: -90.59499,
+  maxLng: -90.56193,
+}
+
+const isInsideZona6VillaNueva = (location) => {
+  const lat = Number(location?.lat)
+  const lng = Number(location?.lng)
+
+  if (Number.isNaN(lat) || Number.isNaN(lng)) return false
+
+  return (
+    lat >= ZONA_6_VILLA_NUEVA_BOUNDS.minLat &&
+    lat <= ZONA_6_VILLA_NUEVA_BOUNDS.maxLat &&
+    lng >= ZONA_6_VILLA_NUEVA_BOUNDS.minLng &&
+    lng <= ZONA_6_VILLA_NUEVA_BOUNDS.maxLng
+  )
+}
+
 export const createOrder = async (req, res) => {
   try {
     const items = Array.isArray(req.body.items) ? req.body.items : []
@@ -17,6 +39,10 @@ export const createOrder = async (req, res) => {
       const openNow = await isOperatingNow()
       if (!openNow) {
         return res.status(403).json({ message: 'Estamos cerrados por el momento. Vuelve más tarde.' })
+      }
+
+      if (!isInsideZona6VillaNueva(customer.location)) {
+        return res.status(403).json({ message: 'Cobertura fuera de rango. Solo atendemos Zona 6 de Villa Nueva.' })
       }
     }
 
