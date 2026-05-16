@@ -5,6 +5,65 @@ import { DEFAULT_RECIPE_CONSUMPTION, PACKAGING_CONSUMPTION, INVENTORY_CATALOG, I
 const round = (value) => Math.round(value * 1000) / 1000
 const normalizeName = (value = '') => value.trim().toLowerCase()
 
+const normalizeUnit = (value = '') => String(value || '').trim().toLowerCase()
+
+const UNIT_ALIASES = {
+  g: 'g',
+  gramo: 'g',
+  gramos: 'g',
+  gram: 'g',
+  grams: 'g',
+  lb: 'lb',
+  lbs: 'lb',
+  libra: 'lb',
+  libras: 'lb',
+  oz: 'oz',
+  onza: 'oz',
+  onzas: 'oz',
+  ml: 'ml',
+  mililitro: 'ml',
+  mililitros: 'ml',
+  l: 'l',
+  lt: 'l',
+  lts: 'l',
+  ltr: 'l',
+  ltrs: 'l',
+  litro: 'l',
+  litros: 'l',
+  und: 'und',
+  unidad: 'und',
+  unidades: 'und',
+  unit: 'und',
+  units: 'und'
+}
+
+export const convertAmountToCatalogUnit = (amount, inputUnit, catalogUnit) => {
+  const numericAmount = Number(amount)
+  if (Number.isNaN(numericAmount) || numericAmount <= 0) {
+    const error = new Error('La cantidad debe ser mayor que cero.')
+    error.statusCode = 400
+    throw error
+  }
+
+  const targetUnit = normalizeUnit(catalogUnit)
+  const sourceUnit = UNIT_ALIASES[normalizeUnit(inputUnit || catalogUnit)] || normalizeUnit(inputUnit || catalogUnit)
+
+  const conversions = {
+    g: { g: 1, lb: 453.59237, oz: 28.349523125 },
+    ml: { ml: 1, l: 1000, oz: 29.5735295625 },
+    und: { und: 1 }
+  }
+
+  const conversionFactor = conversions[targetUnit]?.[sourceUnit]
+  if (!conversionFactor) {
+    const error = new Error(`La unidad ${inputUnit || catalogUnit} no es compatible con productos medidos en ${catalogUnit}.`)
+    error.statusCode = 400
+    throw error
+  }
+
+  return round(numericAmount * conversionFactor)
+}
+
 const getConsumptionForItem = (item) => {
   const consumption = {
     totopos: DEFAULT_RECIPE_CONSUMPTION['totopos'],
@@ -185,10 +244,13 @@ export const getAvailablePlatesCount = async () => {
 
 export const manualStockAdjustment = async ({ name, amount, type, price, actor, reason }) => {
   const normalized = normalizeName(name)
-  const updateQuery = { $inc: { stock: amount } }
+  const numericAmount = Number(amount)
+  const updateQuery = { $inc: { stock: numericAmount } }
+  const hasUnitPrice = price !== undefined && price !== null && price !== ''
+  const unitPrice = hasUnitPrice ? round(Number(price)) : undefined
   
-  if (price !== undefined && price !== null) {
-    updateQuery.$set = { lastPrice: Number(price) }
+  if (hasUnitPrice) {
+    updateQuery.$set = { lastPrice: unitPrice }
   }
 
   const previousItem = await Inventory.findOneAndUpdate(
@@ -201,14 +263,14 @@ export const manualStockAdjustment = async ({ name, amount, type, price, actor, 
     throw new Error('Ingredient not found')
   }
 
-  const newStock = round(previousItem.stock + amount)
+  const newStock = round(Number(previousItem.stock || 0) + numericAmount)
 
   await InventoryLog.create({
     ingredient: previousItem._id,
     ingredientName: previousItem.name,
-    type: type || (amount > 0 ? 'IN' : 'ADJUSTMENT'),
-    amount: Math.abs(amount),
-    price: price || 0,
+    type: type || (numericAmount > 0 ? 'IN' : 'ADJUSTMENT'),
+    amount: Math.abs(numericAmount),
+    price: hasUnitPrice ? unitPrice : Number(previousItem.lastPrice || 0),
     previousStock: previousItem.stock,
     newStock,
     userId: actor?._id,
@@ -216,7 +278,7 @@ export const manualStockAdjustment = async ({ name, amount, type, price, actor, 
     reason: reason || 'Ajuste manual'
   })
 
-  return { ...previousItem.toObject(), stock: newStock, lastPrice: price || previousItem.lastPrice }
+  return { ...previousItem.toObject(), stock: newStock, lastPrice: hasUnitPrice ? unitPrice : previousItem.lastPrice }
 }
 
 export const toggleInventoryItem = async (id, isActive) => {

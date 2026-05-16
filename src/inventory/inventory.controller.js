@@ -1,6 +1,6 @@
 import Inventory from './inventory.model.js'
 import InventoryLog from './inventoryLog.model.js'
-import { getAggregatedConsumption, validateInventoryAvailability, manualStockAdjustment, getAvailablePlatesCount } from './inventory.service.js'
+import { getAggregatedConsumption, validateInventoryAvailability, manualStockAdjustment, getAvailablePlatesCount, convertAmountToCatalogUnit } from './inventory.service.js'
 import { INVENTORY_CATALOG, INVENTORY_CATALOG_MAP } from '../helpers/constants.js'
 
 const PROTECTED_PACKAGING_NAMES = INVENTORY_CATALOG
@@ -48,24 +48,35 @@ export const getInventoryItems = async (req, res) => {
 export const saveInventoryItem = async (req, res) => {
   try {
     const name = String(req.body.name || '').trim().toLowerCase()
-    const amount = Number(req.body.amount ?? req.body.stock ?? 0)
+    const rawAmount = Number(req.body.amount ?? req.body.stock ?? 0)
     const catalogItem = INVENTORY_CATALOG_MAP[name]
 
     if (!catalogItem) {
       return res.status(400).json({ message: 'Producto no permitido en inventario.' })
     }
 
-    if (!amount || amount <= 0) {
-      return res.status(400).json({ message: 'La cantidad debe ser mayor que cero.' })
+    const inputUnit = catalogItem.category === 'Empaque' ? 'und' : (req.body.inputUnit || req.body.unit || catalogItem.unit)
+    const amount = convertAmountToCatalogUnit(rawAmount, inputUnit, catalogItem.unit)
+
+    const rawPrice = req.body.totalPrice ?? req.body.price
+    const hasPrice = rawPrice !== undefined && rawPrice !== null && rawPrice !== ''
+    const totalPrice = hasPrice ? Number(rawPrice) : undefined
+
+    if (hasPrice && (Number.isNaN(totalPrice) || totalPrice < 0)) {
+      return res.status(400).json({ message: 'El costo total debe ser un número válido mayor o igual a cero.' })
     }
+
+    const unitPrice = hasPrice && amount > 0 ? Math.round((totalPrice / amount) * 1000000) / 1000000 : undefined
 
     let inventoryItem = await Inventory.findOne({ name })
     if (!inventoryItem) {
       inventoryItem = await Inventory.create({
         name,
         unit: catalogItem.unit,
+        category: catalogItem.category || 'Otros',
         stock: 0,
-        minimumStock: 5
+        minimumStock: 5,
+        isActive: true
       })
     }
 
@@ -73,14 +84,18 @@ export const saveInventoryItem = async (req, res) => {
       name,
       amount,
       type: 'IN',
-      price: Number(req.body.price || 0),
+      price: unitPrice,
       actor: req.user,
-      reason: 'Entrada de inventario'
+      reason: `Entrada de inventario: ${rawAmount} ${inputUnit} → ${amount} ${catalogItem.unit}${hasPrice ? ` | Costo total Q${totalPrice}` : ''}`
     })
 
-    return res.status(200).json({ message: 'Entrada de inventario registrada', item })
+    return res.status(200).json({
+      message: 'Entrada de inventario registrada',
+      item,
+      conversion: { inputAmount: rawAmount, inputUnit, storedAmount: amount, storedUnit: catalogItem.unit, unitPrice }
+    })
   } catch (error) {
-    return res.status(500).json({ message: 'Error saving inventory item', error: error.message })
+    return res.status(error.statusCode || 500).json({ message: error.message || 'Error saving inventory item', error: error.message })
   }
 }
 
@@ -150,16 +165,19 @@ export const getInventoryLogs = async (req, res) => {
 export const updateInventoryItemStock = async (req, res) => {
   try {
     const normalizedName = String(req.params.name || '').trim().toLowerCase()
-    const stock = Number(req.body.stock)
+    const rawStock = Number(req.body.stock)
     const catalogItem = INVENTORY_CATALOG_MAP[normalizedName]
 
     if (!catalogItem) {
       return res.status(400).json({ message: 'Producto no permitido en inventario.' })
     }
 
-    if (Number.isNaN(stock) || stock < 0) {
+    if (Number.isNaN(rawStock) || rawStock < 0) {
       return res.status(400).json({ message: 'El stock debe ser un número válido mayor o igual a cero.' })
     }
+
+    const inputUnit = catalogItem.category === 'Empaque' ? 'und' : (req.body.inputUnit || req.body.unit || catalogItem.unit)
+    const nextStock = convertAmountToCatalogUnit(rawStock, inputUnit, catalogItem.unit)
 
     let item = await Inventory.findOne({ name: normalizedName })
     if (!item) {
@@ -174,7 +192,6 @@ export const updateInventoryItemStock = async (req, res) => {
     }
 
     const previousStock = Number(item.stock || 0)
-    const nextStock = Math.round(stock * 1000) / 1000
 
     item.unit = catalogItem.unit
     item.category = catalogItem.category || item.category || 'Otros'
@@ -192,13 +209,17 @@ export const updateInventoryItemStock = async (req, res) => {
         newStock: nextStock,
         userId: req.user?._id,
         userName: req.user?.name,
-        reason: req.body.reason || 'Edición directa de stock'
+        reason: req.body.reason || `Edición directa de stock: ${rawStock} ${inputUnit} → ${nextStock} ${catalogItem.unit}`
       })
     }
 
-    return res.status(200).json({ message: 'Stock actualizado correctamente', item })
+    return res.status(200).json({
+      message: 'Stock actualizado correctamente',
+      item,
+      conversion: { inputAmount: rawStock, inputUnit, storedAmount: nextStock, storedUnit: catalogItem.unit }
+    })
   } catch (error) {
-    return res.status(500).json({ message: 'Error updating item stock', error: error.message })
+    return res.status(error.statusCode || 500).json({ message: error.message || 'Error updating item stock', error: error.message })
   }
 }
 
