@@ -37,7 +37,7 @@ export const createOrder = async (req, res) => {
     // En administración se crea el pedido interno con sesión ADMIN y sin OTP.
     if (req.user?.role !== USER_ROLES.ADMIN) {
       const openNow = await isOperatingNow()
-      if (!openNow) {
+      if (!openNow?.isCurrentlyOpen) {
         return res.status(403).json({ message: 'Estamos cerrados por el momento. Vuelve más tarde.' })
       }
 

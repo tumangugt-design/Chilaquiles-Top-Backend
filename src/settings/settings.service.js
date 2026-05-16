@@ -20,28 +20,69 @@ export const DEFAULT_OPERATING_HOURS = {
 
 const OPERATING_HOURS_KEY = 'operating-hours'
 
+const DAY_KEYS = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday']
+
 const sanitizeTime = (value = '') => {
   const text = String(value || '').trim()
   return /^\d{2}:\d{2}$/.test(text) ? text : ''
 }
 
+const normalizeDaySchedule = (value = {}, fallback = {}) => ({
+  isOpen: value?.isOpen === undefined ? Boolean(fallback?.isOpen) : Boolean(value.isOpen),
+  openTime: sanitizeTime(value?.openTime) || sanitizeTime(fallback?.openTime) || '08:00',
+  closeTime: sanitizeTime(value?.closeTime) || sanitizeTime(fallback?.closeTime) || '17:00',
+  ...(value?.note ? { note: String(value.note) } : {}),
+})
+
+const normalizeWeekly = (weekly = {}) => {
+  return DAY_KEYS.reduce((acc, dayKey, index) => {
+    const current = weekly?.[dayKey] || weekly?.[String(index)] || weekly?.[index]
+    const fallback = DEFAULT_OPERATING_HOURS.weekly[index] || { isOpen: true, openTime: '08:00', closeTime: '17:00' }
+    acc[dayKey] = normalizeDaySchedule(current, fallback)
+    return acc
+  }, {})
+}
+
+const normalizeOperatingHours = (value = {}) => {
+  const merged = { ...DEFAULT_OPERATING_HOURS, ...(value || {}) }
+
+  return {
+    ...merged,
+    weekly: normalizeWeekly(merged.weekly),
+    specialDates: merged.specialDates || {},
+    dateRanges: Array.isArray(merged.dateRanges) ? merged.dateRanges : [],
+    isOpen: merged.isOpen === undefined ? true : Boolean(merged.isOpen),
+    openTime: sanitizeTime(merged.openTime) || '08:00',
+    closeTime: sanitizeTime(merged.closeTime) || '17:00',
+  }
+}
+
 export const getOperatingHoursSetting = async () => {
   const existing = await Setting.findOne({ key: OPERATING_HOURS_KEY })
   if (!existing) {
-    const created = await Setting.create({ key: OPERATING_HOURS_KEY, value: DEFAULT_OPERATING_HOURS })
+    const created = await Setting.create({ key: OPERATING_HOURS_KEY, value: normalizeOperatingHours(DEFAULT_OPERATING_HOURS) })
     return created.value
   }
-  // Merge with defaults to ensure all fields exist
-  return { ...DEFAULT_OPERATING_HOURS, ...(existing.value || {}) }
+
+  const normalized = normalizeOperatingHours(existing.value || {})
+
+  // Si existía el formato viejo con llaves 0-6, se migra sin afectar lo demás.
+  if (JSON.stringify(existing.value || {}) !== JSON.stringify(normalized)) {
+    existing.value = normalized
+    await existing.save()
+  }
+
+  return normalized
 }
 
 export const updateOperatingHoursSetting = async (payload = {}) => {
+  const normalized = normalizeOperatingHours(payload)
   const updated = await Setting.findOneAndUpdate(
     { key: OPERATING_HOURS_KEY },
-    { $set: { value: payload } },
+    { $set: { value: normalized } },
     { new: true, upsert: true }
   )
-  return updated.value
+  return normalizeOperatingHours(updated.value)
 }
 
 const toMinutes = (value = '') => {
@@ -89,8 +130,9 @@ export const isOperatingNow = async () => {
   }
 
   // 3. Check weekly schedule
-  if (!schedule && settings.weekly && settings.weekly[dayOfWeek]) {
-    schedule = settings.weekly[dayOfWeek]
+  if (!schedule && settings.weekly) {
+    const dayKey = DAY_KEYS[dayOfWeek]
+    schedule = settings.weekly[dayKey] || settings.weekly[String(dayOfWeek)] || settings.weekly[dayOfWeek]
   }
 
   // 4. Fallback to legacy
