@@ -4,11 +4,12 @@ import BotMemory from './botMemory.model.js';
 import { getOperatingHoursSetting } from '../settings/settings.service.js';
 import { getAICompletion, prepareBotContext } from './ai.service.js';
 import { sendWhatsAppMessage } from './whatsapp.service.js';
+import { sendInstagramMessage } from './instagram.service.js';
 import { normalizePhone } from '../helpers/order.helper.js';
 
-export const processIncomingMessage = async (rawPhone, messageText) => {
+export const processIncomingMessage = async (rawPhone, messageText, platform = 'whatsapp') => {
   try {
-    const phone = normalizePhone(rawPhone);
+    const phone = platform === 'whatsapp' ? normalizePhone(rawPhone) : rawPhone;
 
     // 1. Identify or Create User
     let user = await User.findOne({ phone: phone });
@@ -56,8 +57,12 @@ export const processIncomingMessage = async (rawPhone, messageText) => {
     memory.lastMessages.push({ role: 'assistant', content: aiResponse });
     await memory.save();
     
-    // 8. Send WhatsApp Message
-    await sendWhatsAppMessage(phone, aiResponse);
+    // 8. Send Message
+    if (platform === 'instagram') {
+      await sendInstagramMessage(phone, aiResponse);
+    } else {
+      await sendWhatsAppMessage(phone, aiResponse);
+    }
 
     return { success: true };
   } catch (error) {

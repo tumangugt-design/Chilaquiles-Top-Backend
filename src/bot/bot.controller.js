@@ -6,7 +6,7 @@ export const verifyWebhook = (req, res) => {
   const challenge = req.query['hub.challenge'];
 
   if (mode && token) {
-    if (mode === 'subscribe' && token === process.env.WHATSAPP_VERIFY_TOKEN) {
+    if (mode === 'subscribe' && (token === process.env.WHATSAPP_VERIFY_TOKEN || token === process.env.IG_VERIFY_TOKEN)) {
       console.log('Webhook verified');
       res.status(200).send(challenge);
     } else {
@@ -31,7 +31,23 @@ export const handleIncomingMessage = async (req, res) => {
         const text = message.text ? message.text.body : '';
 
         if (text) {
-          await processIncomingMessage(from, text);
+          await processIncomingMessage(from, text, 'whatsapp');
+        }
+      }
+      res.status(200).send('EVENT_RECEIVED');
+    } else if (body.object === 'instagram') {
+      if (
+        body.entry &&
+        body.entry[0].messaging &&
+        body.entry[0].messaging[0] &&
+        body.entry[0].messaging[0].message
+      ) {
+        const message = body.entry[0].messaging[0].message;
+        const from = body.entry[0].messaging[0].sender.id;
+        const text = message.text || '';
+
+        if (text) {
+          await processIncomingMessage(from, text, 'instagram');
         }
       }
       res.status(200).send('EVENT_RECEIVED');
