@@ -147,6 +147,62 @@ export const getInventoryLogs = async (req, res) => {
 }
 
 
+export const updateInventoryItemStock = async (req, res) => {
+  try {
+    const normalizedName = String(req.params.name || '').trim().toLowerCase()
+    const stock = Number(req.body.stock)
+    const catalogItem = INVENTORY_CATALOG_MAP[normalizedName]
+
+    if (!catalogItem) {
+      return res.status(400).json({ message: 'Producto no permitido en inventario.' })
+    }
+
+    if (Number.isNaN(stock) || stock < 0) {
+      return res.status(400).json({ message: 'El stock debe ser un número válido mayor o igual a cero.' })
+    }
+
+    let item = await Inventory.findOne({ name: normalizedName })
+    if (!item) {
+      item = await Inventory.create({
+        name: normalizedName,
+        unit: catalogItem.unit,
+        category: catalogItem.category || 'Otros',
+        stock: 0,
+        minimumStock: 5,
+        isActive: true
+      })
+    }
+
+    const previousStock = Number(item.stock || 0)
+    const nextStock = Math.round(stock * 1000) / 1000
+
+    item.unit = catalogItem.unit
+    item.category = catalogItem.category || item.category || 'Otros'
+    item.stock = nextStock
+    if (catalogItem.category === 'Empaque') item.isActive = true
+    await item.save()
+
+    if (previousStock !== nextStock) {
+      await InventoryLog.create({
+        ingredient: item._id,
+        ingredientName: item.name,
+        type: 'ADJUSTMENT',
+        amount: Math.abs(nextStock - previousStock),
+        previousStock,
+        newStock: nextStock,
+        userId: req.user?._id,
+        userName: req.user?.name,
+        reason: req.body.reason || 'Edición directa de stock'
+      })
+    }
+
+    return res.status(200).json({ message: 'Stock actualizado correctamente', item })
+  } catch (error) {
+    return res.status(500).json({ message: 'Error updating item stock', error: error.message })
+  }
+}
+
+
 export const updateInventoryItemPrice = async (req, res) => {
   try {
     const normalizedName = String(req.params.name || '').trim().toLowerCase()
