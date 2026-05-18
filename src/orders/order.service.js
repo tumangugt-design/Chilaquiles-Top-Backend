@@ -5,6 +5,7 @@ import { ORDER_STATUS, USER_ROLES, CHEF_ALLOWED_TRANSITIONS, DELIVERY_ALLOWED_TR
 import { discountInventoryForOrder, validateInventoryAvailability } from '../inventory/inventory.service.js';
 import { publishOrderRealtimeEvent } from '../realtime/realtime.service.js';
 import { getGuatemalaOrderDatePrefix } from '../helpers/timezone.helper.js';
+import { notifyAdminNewOrder } from '../helpers/email.helper.js';
 
 const buildNavigationLinks = (location) => {
   if (!location || typeof location.lat !== 'number' || typeof location.lng !== 'number') {
@@ -80,6 +81,9 @@ export const createOrderRecord = async ({ user, customer, items }) => {
 
     await discountInventoryForOrder(items, order._id, user);
     await publishOrderRealtimeEvent(order);
+    notifyAdminNewOrder(order).catch((emailError) => {
+      console.error('No se pudo enviar correo de nuevo pedido:', emailError.message);
+    });
 
     return order;
   } catch (error) {
