@@ -40,7 +40,11 @@ export const handleWhatsAppWebhook = async (req, res) => {
 
         if (text) {
           console.log(`[WhatsApp Webhook Recv] Processing message from ${from}: "${text}"`);
-          await processIncomingMessage(from, text, 'whatsapp');
+          try {
+            await processIncomingMessage(from, text, 'whatsapp');
+          } catch (err) {
+            console.error('[WhatsApp Webhook Recv] Error during processing, but returning 200 to prevent Meta retries:', err);
+          }
         } else {
           console.log('[WhatsApp Webhook Recv] Message body is empty or non-text type event');
         }
@@ -53,8 +57,8 @@ export const handleWhatsAppWebhook = async (req, res) => {
       res.sendStatus(404);
     }
   } catch (error) {
-    console.error('[WhatsApp Webhook Recv] Error handling WhatsApp webhook:', error);
-    res.status(500).send('Internal Server Error');
+    console.error('[WhatsApp Webhook Recv] Error handling WhatsApp webhook wrapper:', error);
+    res.status(200).send('EVENT_RECEIVED'); // Return 200 even on general error to stop Meta retries
   }
 };
 
@@ -98,7 +102,11 @@ export const handleInstagramWebhook = async (req, res) => {
 
         if (text) {
           console.log(`[Instagram Webhook Recv] Processing message from ${from}: "${text}"`);
-          await processIncomingMessage(from, text, 'instagram');
+          try {
+            await processIncomingMessage(from, text, 'instagram');
+          } catch (err) {
+            console.error('[Instagram Webhook Recv] Error during processing, but returning 200 to prevent Meta retries:', err);
+          }
         } else {
           console.log('[Instagram Webhook Recv] Message body is empty or non-text type event');
         }
@@ -111,8 +119,8 @@ export const handleInstagramWebhook = async (req, res) => {
       res.sendStatus(404);
     }
   } catch (error) {
-    console.error('[Instagram Webhook Recv] Error handling Instagram webhook:', error);
-    res.status(500).send('Internal Server Error');
+    console.error('[Instagram Webhook Recv] Error handling Instagram webhook wrapper:', error);
+    res.status(200).send('EVENT_RECEIVED'); // Return 200 even on general error to stop Meta retries
   }
 };
 
@@ -154,7 +162,11 @@ export const handleIncomingMessage = async (req, res) => {
         const text = message.text ? message.text.body : '';
 
         if (text) {
-          await processIncomingMessage(from, text, 'whatsapp');
+          try {
+            await processIncomingMessage(from, text, 'whatsapp');
+          } catch (err) {
+            console.error('[Legacy Webhook Recv] WhatsApp processing error:', err);
+          }
         }
       }
       res.status(200).send('EVENT_RECEIVED');
@@ -170,7 +182,11 @@ export const handleIncomingMessage = async (req, res) => {
         const text = message.text || '';
 
         if (text) {
-          await processIncomingMessage(from, text, 'instagram');
+          try {
+            await processIncomingMessage(from, text, 'instagram');
+          } catch (err) {
+            console.error('[Legacy Webhook Recv] Instagram processing error:', err);
+          }
         }
       }
       res.status(200).send('EVENT_RECEIVED');
@@ -178,7 +194,7 @@ export const handleIncomingMessage = async (req, res) => {
       res.sendStatus(404);
     }
   } catch (error) {
-    console.error('[Legacy Webhook Recv] Error handling webhook:', error);
-    res.status(500).send('Internal Server Error');
+    console.error('[Legacy Webhook Recv] Error handling webhook wrapper:', error);
+    res.status(200).send('EVENT_RECEIVED'); // Return 200 even on general error to stop Meta retries
   }
 };

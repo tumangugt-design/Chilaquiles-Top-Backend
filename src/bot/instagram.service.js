@@ -1,38 +1,44 @@
 import dotenv from 'dotenv';
 dotenv.config();
 
-export const sendInstagramMessage = async (to, text) => {
-  const igAccountId = process.env.IG_ACCOUNT_ID;
+export const sendInstagramMessage = async (recipientId, text) => {
   const token = process.env.IG_ACCESS_TOKEN;
-  
-  // Use 'me' if igAccountId is not set, which is the standard Meta endpoint
-  const targetId = igAccountId || 'me';
-  const url = `https://graph.facebook.com/v17.0/${targetId}/messages`;
 
-  console.log(`[Instagram Send] Target URL: ${url}`);
-  console.log(`[Instagram Send] Recipient ID: ${to}`);
+  if (!token) {
+    throw new Error('IG_ACCESS_TOKEN is not configured');
+  }
+
+  const url = 'https://graph.instagram.com/v25.0/me/messages';
+
+  console.log('[Instagram Send] Target URL:', url);
+  console.log('[Instagram Send] Recipient ID:', recipientId);
+  console.log('[Instagram Send] Token configured:', Boolean(token));
 
   try {
     const response = await fetch(url, {
       method: 'POST',
       headers: {
+        'Authorization': `Bearer ${token}`,
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`
       },
       body: JSON.stringify({
-        recipient: { id: to },
-        message: { text: text }
-      })
+        recipient: {
+          id: recipientId,
+        },
+        message: {
+          text,
+        },
+      }),
     });
 
     const data = await response.json();
-    
+
     if (!response.ok) {
       console.error('[Instagram Send] Meta API Error Response:', JSON.stringify(data, null, 2));
-      throw new Error(`Meta API returned status ${response.status}: ${data.error?.message || 'Unknown error'}`);
+      throw new Error(`Meta API returned status ${response.status}: ${data?.error?.message || 'Unknown error'}`);
     }
 
-    console.log('[Instagram Send] Message sent successfully:', JSON.stringify(data));
+    console.log('[Instagram Send] Message sent successfully:', JSON.stringify(data, null, 2));
     return data;
   } catch (error) {
     console.error('[Instagram Send] Exception while sending message:', error);
