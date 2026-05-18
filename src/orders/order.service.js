@@ -48,7 +48,14 @@ export const createOrderRecord = async ({ user, customer, items }) => {
   const availability = await validateInventoryAvailability(items);
 
   if (!availability.ok) {
-    const error = new Error('Inventory shortage detected');
+    const firstShortage = availability.shortages?.[0];
+    const itemName = firstShortage?.ingredient ? String(firstShortage.ingredient).toUpperCase() : 'algún producto';
+    const available = Number(firstShortage?.available || 0);
+    const required = Number(firstShortage?.required || 0);
+    const message = firstShortage
+      ? `Stock insuficiente para ${itemName}. Disponible: ${available}. Requerido: ${required}.`
+      : 'Stock insuficiente para completar el pedido.';
+    const error = new Error(message);
     error.statusCode = 409;
     error.details = availability.shortages;
     throw error;
