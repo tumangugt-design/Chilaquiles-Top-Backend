@@ -1,10 +1,11 @@
 import Order from '../orders/order.model.js'
 import InventoryLog from '../inventory/inventoryLog.model.js'
+import { getGuatemalaDayRange, getGuatemalaMonthRange, getGuatemalaWeekRange, GUATEMALA_TIMEZONE } from '../helpers/timezone.helper.js'
 
 const getPeriodStats = async (start, end) => {
   // Revenue: Sum of all orders in period
   const orders = await Order.find({
-    createdAt: { $gte: start, $lte: end },
+    createdAt: { $gte: start, $lt: end },
     status: { $ne: 'cancelado' }
   })
   const revenue = orders.reduce((sum, order) => sum + (order.total || 0), 0)
@@ -12,7 +13,7 @@ const getPeriodStats = async (start, end) => {
   // Costs: sum fixed entry prices registered in inventory inputs.
   const logs = await InventoryLog.find({
     type: 'IN',
-    createdAt: { $gte: start, $lte: end }
+    createdAt: { $gte: start, $lt: end }
   })
   const costs = logs.reduce((sum, log) => sum + Number(log.price || 0), 0)
 
@@ -26,31 +27,18 @@ const getPeriodStats = async (start, end) => {
 
 export const getFinancialSummary = async () => {
   const now = new Date()
-  
-  // Daily
-  const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate())
-  const endOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999)
-  
-  // Weekly (Monday to Sunday)
-  const day = now.getDay()
-  const diff = now.getDate() - day + (day === 0 ? -6 : 1)
-  const startOfWeek = new Date(now.setDate(diff))
-  startOfWeek.setHours(0, 0, 0, 0)
-  const endOfWeek = new Date(startOfWeek)
-  endOfWeek.setDate(endOfWeek.getDate() + 6)
-  endOfWeek.setHours(23, 59, 59, 999)
-  
-  // Monthly
-  const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1)
-  const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999)
+  const dayRange = getGuatemalaDayRange(now)
+  const weekRange = getGuatemalaWeekRange(now)
+  const monthRange = getGuatemalaMonthRange(now)
 
   const [daily, weekly, monthly] = await Promise.all([
-    getPeriodStats(startOfDay, endOfDay),
-    getPeriodStats(startOfWeek, endOfWeek),
-    getPeriodStats(startOfMonth, endOfMonth)
+    getPeriodStats(dayRange.start, dayRange.end),
+    getPeriodStats(weekRange.start, weekRange.end),
+    getPeriodStats(monthRange.start, monthRange.end)
   ])
 
   return {
+    timezone: GUATEMALA_TIMEZONE,
     daily,
     weekly,
     monthly

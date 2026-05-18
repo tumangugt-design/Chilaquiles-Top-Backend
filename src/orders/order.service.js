@@ -4,6 +4,7 @@ import { buildMapsLink, calculateOrderTotal, normalizePhone } from '../helpers/o
 import { ORDER_STATUS, USER_ROLES, CHEF_ALLOWED_TRANSITIONS, DELIVERY_ALLOWED_TRANSITIONS } from '../helpers/constants.js';
 import { discountInventoryForOrder, validateInventoryAvailability } from '../inventory/inventory.service.js';
 import { publishOrderRealtimeEvent } from '../realtime/realtime.service.js';
+import { getGuatemalaOrderDatePrefix } from '../helpers/timezone.helper.js';
 
 const buildNavigationLinks = (location) => {
   if (!location || typeof location.lat !== 'number' || typeof location.lng !== 'number') {
@@ -15,10 +16,7 @@ const buildNavigationLinks = (location) => {
 };
 
 const generateOrderNumber = async () => {
-  const now = new Date();
-  const day = String(now.getDate()).padStart(2, '0');
-  const month = String(now.getMonth() + 1).padStart(2, '0');
-  const datePrefix = `${day}${month}`;
+  const datePrefix = getGuatemalaOrderDatePrefix();
 
   const lastOrder = await Order.findOne({
     orderNumber: { $regex: `^${datePrefix}\\d+$` }
@@ -35,6 +33,7 @@ const generateOrderNumber = async () => {
 
   return `${datePrefix}${String(nextSequence).padStart(2, '0')}`;
 };
+
 
 const baseHistoryQuery = () => Order.find()
   .populate('userId', 'name phone email address photoUrl role status')

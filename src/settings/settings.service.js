@@ -1,4 +1,5 @@
 import Setting from './settings.model.js'
+import { getGuatemalaParts } from '../helpers/timezone.helper.js'
 
 export const DEFAULT_OPERATING_HOURS = {
   weekly: {
@@ -92,21 +93,10 @@ const toMinutes = (value = '') => {
 }
 
 const getGuatemalaDateTime = () => {
-  const now = new Date()
-  const guatemalaString = now.toLocaleString('en-US', { timeZone: 'America/Guatemala' })
-  const gtDate = new Date(guatemalaString)
-  
-  const year = gtDate.getFullYear()
-  const month = String(gtDate.getMonth() + 1).padStart(2, '0')
-  const day = String(gtDate.getDate()).padStart(2, '0')
-  const dateString = `${year}-${month}-${day}`
-  
-  const hour = gtDate.getHours()
-  const minute = gtDate.getMinutes()
-  const totalMinutes = hour * 60 + minute
-  const dayOfWeek = gtDate.getDay()
+  const gt = getGuatemalaParts()
+  const totalMinutes = gt.hour * 60 + gt.minute
 
-  return { dateString, totalMinutes, dayOfWeek }
+  return { dateString: gt.dateString, totalMinutes, dayOfWeek: gt.dayOfWeek }
 }
 
 export const isOperatingNow = async () => {
