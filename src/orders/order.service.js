@@ -4,6 +4,7 @@ import { buildMapsLink, calculateOrderTotal, normalizePhone } from '../helpers/o
 import { ORDER_STATUS, USER_ROLES, CHEF_ALLOWED_TRANSITIONS, DELIVERY_ALLOWED_TRANSITIONS } from '../helpers/constants.js';
 import { discountInventoryForOrder, validateInventoryAvailability } from '../inventory/inventory.service.js';
 import { publishOrderRealtimeEvent } from '../realtime/realtime.service.js';
+import { getGuatemalaOrderDatePrefix } from '../helpers/timezone.helper.js';
 
 const buildNavigationLinks = (location) => {
   if (!location || typeof location.lat !== 'number' || typeof location.lng !== 'number') {
@@ -15,10 +16,7 @@ const buildNavigationLinks = (location) => {
 };
 
 const generateOrderNumber = async () => {
-  const now = new Date();
-  const day = String(now.getDate()).padStart(2, '0');
-  const month = String(now.getMonth() + 1).padStart(2, '0');
-  const datePrefix = `${day}${month}`;
+  const datePrefix = getGuatemalaOrderDatePrefix();
 
   const lastOrder = await Order.findOne({
     orderNumber: { $regex: `^${datePrefix}\\d+$` }
@@ -36,6 +34,7 @@ const generateOrderNumber = async () => {
   return `${datePrefix}${String(nextSequence).padStart(2, '0')}`;
 };
 
+
 const baseHistoryQuery = () => Order.find()
   .populate('userId', 'name phone email address photoUrl role status')
   .populate('chefId', 'name phone email photoUrl role status')
@@ -49,7 +48,14 @@ export const createOrderRecord = async ({ user, customer, items }) => {
   const availability = await validateInventoryAvailability(items);
 
   if (!availability.ok) {
-    const error = new Error('Inventory shortage detected');
+    const firstShortage = availability.shortages?.[0];
+    const itemName = firstShortage?.ingredient ? String(firstShortage.ingredient).toUpperCase() : 'algún producto';
+    const available = Number(firstShortage?.available || 0);
+    const required = Number(firstShortage?.required || 0);
+    const message = firstShortage
+      ? `Stock insuficiente para ${itemName}. Disponible: ${available}. Requerido: ${required}.`
+      : 'Stock insuficiente para completar el pedido.';
+    const error = new Error(message);
     error.statusCode = 409;
     error.details = availability.shortages;
     throw error;

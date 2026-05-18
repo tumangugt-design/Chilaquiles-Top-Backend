@@ -19,13 +19,40 @@ export const getAvailablePlates = async (req, res) => {
 }
 
 
+const getRequiredStockForPublicOption = (item) => {
+  const catalogItem = INVENTORY_CATALOG_MAP[item.name]
+  return Number(catalogItem?.usedPerPlate || 1)
+}
+
 export const getPublicInventoryOptions = async (req, res) => {
   try {
-    const items = await Inventory.find({}, 'name stock isActive').sort({ name: 1 })
-    const activeNames = items
-      .filter((item) => item.isActive !== false && Number(item.stock || 0) > 0)
+    const items = await Inventory.find({}, 'name stock unit category isActive').sort({ name: 1 })
+
+    const publicItems = items.map((item) => {
+      const required = getRequiredStockForPublicOption(item)
+      const stock = Number(item.stock || 0)
+      const isActive = item.isActive !== false
+      const hasEnoughStock = stock >= required
+      const availabilityStatus = !isActive ? 'inactive' : hasEnoughStock ? 'available' : 'insufficient'
+
+      return {
+        _id: item._id,
+        name: item.name,
+        stock,
+        unit: item.unit,
+        category: item.category,
+        isActive,
+        required,
+        available: isActive && hasEnoughStock,
+        availabilityStatus
+      }
+    })
+
+    const activeNames = publicItems
+      .filter((item) => item.available)
       .map((item) => item.name)
-    return res.status(200).json({ activeNames, items })
+
+    return res.status(200).json({ activeNames, items: publicItems })
   } catch (error) {
     return res.status(500).json({ message: 'Error fetching public inventory options', error: error.message })
   }

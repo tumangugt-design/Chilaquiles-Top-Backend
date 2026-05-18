@@ -126,7 +126,7 @@ export const validateInventoryAvailability = async (items = []) => {
   Object.entries(aggregated).forEach(([name, required]) => {
     const current = currentByName.get(normalizeName(name))
     if (!current) {
-      shortages.push({ ingredient: name, required, available: 0, reason: 'Ingredient not registered in inventory' })
+      shortages.push({ ingredient: name, required, available: 0, reason: 'Producto no registrado en inventario' })
       return
     }
     if (current.isActive === false) {
@@ -134,7 +134,7 @@ export const validateInventoryAvailability = async (items = []) => {
       return
     }
     if (current.stock < required) {
-      shortages.push({ ingredient: name, required, available: current.stock, reason: 'Insufficient stock' })
+      shortages.push({ ingredient: name, required, available: current.stock, reason: 'Stock insuficiente' })
     }
   })
 
