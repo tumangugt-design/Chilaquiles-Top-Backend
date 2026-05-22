@@ -1,7 +1,7 @@
 import User from '../users/user.model.js';
 import Order from '../orders/order.model.js';
 import BotMemory from './botMemory.model.js';
-import { getOperatingHoursSetting } from '../settings/settings.service.js';
+import { isOperatingNow } from '../settings/settings.service.js';
 import { getAICompletion, prepareBotContext } from './ai.service.js';
 import { sendWhatsAppMessage } from './whatsapp.service.js';
 import { sendInstagramMessage } from './instagram.service.js';
@@ -27,7 +27,7 @@ export const processIncomingMessage = async (rawPhone, messageText, platform = '
     }
 
     // 4. Get Operating Hours
-    const operatingHours = await getOperatingHoursSetting();
+    const operatingHours = await isOperatingNow();
 
     // 5. Prepare AI Context
     const systemPrompt = prepareBotContext(user?.name, orderHistory, operatingHours);

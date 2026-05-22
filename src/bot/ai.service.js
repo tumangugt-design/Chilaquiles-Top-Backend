@@ -41,7 +41,9 @@ export const prepareBotContext = (customerName, orderHistory, operatingHours) =>
   const pricingInfo = `Precios: 1 plato Q${ORDER_PRICING[1]}, 2 platos Q${ORDER_PRICING[2]}, 3 platos Q${ORDER_PRICING[3]}.`;
 
   const hoursInfo = operatingHours 
-    ? `Horario hoy: ${operatingHours.openTime} a ${operatingHours.closeTime}. (Estado actual: ${operatingHours.isOpen ? 'Abierto' : 'Cerrado'})`
+    ? (operatingHours.isOpen 
+        ? `Horario hoy: ${operatingHours.openTime} a ${operatingHours.closeTime}. (Estado actual: ${operatingHours.isCurrentlyOpen ? 'Abierto' : 'Cerrado'})`
+        : `Horario hoy: Cerrado todo el día. (Estado actual: Cerrado)`)
     : 'Horario: No disponible actualmente.';
 
   let historyContext = '';
