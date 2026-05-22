@@ -187,13 +187,15 @@ export const discountInventoryForOrder = async (items = [], orderId, actor) => {
 const getMaxSaucePlates = (rojaStock, verdeStock) => {
   const roja = Number(rojaStock || 0)
   const verde = Number(verdeStock || 0)
+  const fullPortion = DEFAULT_RECIPE_CONSUMPTION['salsa roja']
+  const halfPortion = fullPortion / 2
   let maxPlates = 0
-  const maxDivorciados = Math.min(Math.floor(roja / 118), Math.floor(verde / 118))
+  const maxDivorciados = Math.min(Math.floor(roja / halfPortion), Math.floor(verde / halfPortion))
 
   for (let divorciados = 0; divorciados <= maxDivorciados; divorciados += 1) {
-    const remainingRoja = roja - divorciados * 118
-    const remainingVerde = verde - divorciados * 118
-    const total = divorciados + Math.floor(remainingRoja / 236) + Math.floor(remainingVerde / 236)
+    const remainingRoja = roja - divorciados * halfPortion
+    const remainingVerde = verde - divorciados * halfPortion
+    const total = divorciados + Math.floor(remainingRoja / fullPortion) + Math.floor(remainingVerde / fullPortion)
     if (total > maxPlates) maxPlates = total
   }
 

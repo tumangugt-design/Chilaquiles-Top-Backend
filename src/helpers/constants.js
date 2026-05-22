@@ -46,14 +46,18 @@ export const ORDER_PRICING = {
   3: 120
 }
 
+const OZ_TO_ML = 29.5735295625
+export const SAUCE_FULL_PORTION_ML = Math.round(8 * OZ_TO_ML * 1000) / 1000
+export const SAUCE_HALF_PORTION_ML = Math.round(4 * OZ_TO_ML * 1000) / 1000
+
 export const DEFAULT_RECIPE_CONSUMPTION = {
   'totopos': 80,
   'queso': 60,
   'crema': 25,
   'cebolla': 15,
   'cilantro': 10,
-  'salsa roja': 236,
-  'salsa verde': 236,
+  'salsa roja': SAUCE_FULL_PORTION_ML,
+  'salsa verde': SAUCE_FULL_PORTION_ML,
   'steak': 60,
   'pollo': 60,
   'chorizo': 60,
@@ -79,8 +83,8 @@ export const INVENTORY_CATALOG = [
   { name: 'crema', label: 'Crema', unit: 'ml', category: 'Base', usedPerPlate: 25 },
   { name: 'cebolla', label: 'Cebolla', unit: 'g', category: 'Base', usedPerPlate: 15 },
   { name: 'cilantro', label: 'Cilantro', unit: 'g', category: 'Base', usedPerPlate: 10 },
-  { name: 'salsa roja', label: 'Salsa Roja', unit: 'ml', category: 'Salsas', usedPerPlate: 236 },
-  { name: 'salsa verde', label: 'Salsa Verde', unit: 'ml', category: 'Salsas', usedPerPlate: 236 },
+  { name: 'salsa roja', label: 'Salsa Roja', unit: 'ml', category: 'Salsas', usedPerPlate: SAUCE_FULL_PORTION_ML, displayUsedPerPlate: 8, displayUnit: 'oz' },
+  { name: 'salsa verde', label: 'Salsa Verde', unit: 'ml', category: 'Salsas', usedPerPlate: SAUCE_FULL_PORTION_ML, displayUsedPerPlate: 8, displayUnit: 'oz' },
   { name: 'steak', label: 'Steak', unit: 'g', category: 'Proteínas', usedPerPlate: 60 },
   { name: 'pollo', label: 'Pollo', unit: 'g', category: 'Proteínas', usedPerPlate: 60 },
   { name: 'chorizo', label: 'Chorizo', unit: 'g', category: 'Proteínas', usedPerPlate: 60 },
