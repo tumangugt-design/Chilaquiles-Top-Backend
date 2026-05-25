@@ -13,7 +13,7 @@ const fetchContextData = async (text) => {
 
   try {
     // 1. Obtener TODOS los pedidos pendientes
-    const pendingOrders = await Order.find({ status: { $ne: 'ENTREGADO' } })
+    const pendingOrders = await Order.find({ status: { $ne: 'entregado' } })
       .select('orderNumber status total name items createdAt');
     
     dataContext += `[PEDIDOS PENDIENTES (Total: ${pendingOrders.length})]\n`;
@@ -33,7 +33,7 @@ const fetchContextData = async (text) => {
     // 3. Obtener resumen de ventas del día
     const today = new Date();
     today.setHours(0, 0, 0, 0);
-    const recentOrders = await Order.find({ createdAt: { $gte: today }, status: 'ENTREGADO' });
+    const recentOrders = await Order.find({ createdAt: { $gte: today }, status: 'entregado' });
     const totalSales = recentOrders.reduce((sum, o) => sum + (o.total || 0), 0);
     
     dataContext += `[VENTAS Y ENTREGAS DE HOY]\n`;
