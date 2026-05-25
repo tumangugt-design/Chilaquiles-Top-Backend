@@ -1,4 +1,4 @@
-import fetch from 'node-fetch'; // Usando fetch nativo de Node.js (18+) o el provisto por la versión
+
 
 export const getAdminAICompletion = async (messages) => {
   const apiKey = process.env.OPEN_ROUTER_APIKEY;
