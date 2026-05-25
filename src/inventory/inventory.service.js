@@ -72,17 +72,17 @@ const getConsumptionForItem = (item) => {
 
   if (item.sauce === 'ROJA') {
     consumption['salsa roja'] = DEFAULT_RECIPE_CONSUMPTION['salsa roja']
-    consumption['plato para salsa'] = 1
-    consumption['tapadera para salsa'] = 1
+    consumption['plato de 8 onz'] = 1
+    consumption['tapadera de 8 onz'] = 1
   } else if (item.sauce === 'VERDE') {
     consumption['salsa verde'] = DEFAULT_RECIPE_CONSUMPTION['salsa verde']
-    consumption['plato para salsa'] = 1
-    consumption['tapadera para salsa'] = 1
+    consumption['plato de 8 onz'] = 1
+    consumption['tapadera de 8 onz'] = 1
   } else if (item.sauce === 'DIVORCIADOS') {
     consumption['salsa roja'] = DEFAULT_RECIPE_CONSUMPTION['salsa roja'] / 2
     consumption['salsa verde'] = DEFAULT_RECIPE_CONSUMPTION['salsa verde'] / 2
-    consumption['plato para salsa'] = 2
-    consumption['tapadera para salsa'] = 2
+    consumption['plato de 4 onz'] = 2
+    consumption['tapadera de 4 onz'] = 2
   }
 
   if (item.protein === 'STEAK') consumption['steak'] = DEFAULT_RECIPE_CONSUMPTION['steak']
@@ -218,8 +218,8 @@ export const getAvailablePlatesCount = async () => {
     'servilleta',
     'totopos',
     'queso',
-    'plato para salsa',
-    'tapadera para salsa'
+    'plato de 8 onz',
+    'tapadera de 8 onz'
   ]
 
   let mandatoryLimit = Infinity

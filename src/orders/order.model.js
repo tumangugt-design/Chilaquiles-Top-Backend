@@ -42,6 +42,12 @@ const orderSchema = new mongoose.Schema({
       message: 'Order must include at least one item'
     }
   },
+  sauceTemperature: {
+    type: String,
+    enum: ['FRIO', 'CALIENTE'],
+    required: true,
+    default: 'CALIENTE' // Fallback for safety, though frontend will always send it now
+  },
   total: { type: Number, required: true },
   status: {
     type: String,

@@ -47,8 +47,8 @@ export const ORDER_PRICING = {
 }
 
 const OZ_TO_ML = 29.5735295625
-export const SAUCE_FULL_PORTION_ML = Math.round(8 * OZ_TO_ML * 1000) / 1000
-export const SAUCE_HALF_PORTION_ML = Math.round(4 * OZ_TO_ML * 1000) / 1000
+export const SAUCE_FULL_PORTION_ML = 200
+export const SAUCE_HALF_PORTION_ML = 100
 
 export const DEFAULT_RECIPE_CONSUMPTION = {
   'totopos': 80,
@@ -62,7 +62,7 @@ export const DEFAULT_RECIPE_CONSUMPTION = {
   'pollo': 60,
   'chorizo': 60,
   'aguacate': 0.5,
-  'cebolla caramelizada': 20,
+  'cebolla caramelizada': 30,
   'queso extra': 30,
 }
 
@@ -83,16 +83,18 @@ export const INVENTORY_CATALOG = [
   { name: 'crema', label: 'Crema', unit: 'ml', category: 'Base', usedPerPlate: 25 },
   { name: 'cebolla', label: 'Cebolla', unit: 'g', category: 'Base', usedPerPlate: 15 },
   { name: 'cilantro', label: 'Cilantro', unit: 'g', category: 'Base', usedPerPlate: 10 },
-  { name: 'salsa roja', label: 'Salsa Roja', unit: 'ml', category: 'Salsas', usedPerPlate: SAUCE_FULL_PORTION_ML, displayUsedPerPlate: 8, displayUnit: 'oz' },
-  { name: 'salsa verde', label: 'Salsa Verde', unit: 'ml', category: 'Salsas', usedPerPlate: SAUCE_FULL_PORTION_ML, displayUsedPerPlate: 8, displayUnit: 'oz' },
+  { name: 'salsa roja', label: 'Salsa Roja', unit: 'ml', category: 'Salsas', usedPerPlate: SAUCE_FULL_PORTION_ML, displayUsedPerPlate: 200, displayUnit: 'ml' },
+  { name: 'salsa verde', label: 'Salsa Verde', unit: 'ml', category: 'Salsas', usedPerPlate: SAUCE_FULL_PORTION_ML, displayUsedPerPlate: 200, displayUnit: 'ml' },
   { name: 'steak', label: 'Steak', unit: 'g', category: 'Proteínas', usedPerPlate: 60 },
   { name: 'pollo', label: 'Pollo', unit: 'g', category: 'Proteínas', usedPerPlate: 60 },
   { name: 'chorizo', label: 'Chorizo', unit: 'g', category: 'Proteínas', usedPerPlate: 60 },
   { name: 'aguacate', label: 'Aguacate', unit: 'und', category: 'Complementos', usedPerPlate: 0.5 },
-  { name: 'cebolla caramelizada', label: 'Cebolla caramelizada', unit: 'g', category: 'Complementos', usedPerPlate: 20 },
+  { name: 'cebolla caramelizada', label: 'Cebolla caramelizada', unit: 'g', category: 'Complementos', usedPerPlate: 30 },
   { name: 'queso extra', label: 'Queso extra', unit: 'g', category: 'Complementos', usedPerPlate: 30 },
-  { name: 'plato para salsa', label: 'Plato para salsa', unit: 'und', category: 'Empaque', usedPerPlate: 1 },
-  { name: 'tapadera para salsa', label: 'Tapadera para salsa', unit: 'und', category: 'Empaque', usedPerPlate: 1 }
+  { name: 'plato de 8 onz', label: 'Plato de 8 onz', unit: 'und', category: 'Empaque', usedPerPlate: 1 },
+  { name: 'tapadera de 8 onz', label: 'Tapadera de 8 onz', unit: 'und', category: 'Empaque', usedPerPlate: 1 },
+  { name: 'plato de 4 onz', label: 'Plato de 4 onz', unit: 'und', category: 'Empaque', usedPerPlate: 1 },
+  { name: 'tapadera de 4 onz', label: 'Tapadera de 4 onz', unit: 'und', category: 'Empaque', usedPerPlate: 1 }
 ]
 
 export const INVENTORY_CATALOG_MAP = Object.fromEntries(INVENTORY_CATALOG.map((item) => [item.name, item]))
