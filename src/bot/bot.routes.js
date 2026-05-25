@@ -7,8 +7,18 @@ import {
   verifyInstagramWebhook,
   handleInstagramWebhook
 } from './bot.controller.js';
+import { getTelegramBotInstance } from '../bots/telegram/telegram.bot.js';
 
 const router = Router();
+
+// Telegram Webhook
+router.post('/telegram-webhook', (req, res) => {
+  const bot = getTelegramBotInstance();
+  if (bot) {
+    bot.processUpdate(req.body);
+  }
+  res.sendStatus(200);
+});
 
 // ==========================================
 // DEDICATED ENDPOINTS (NEW)

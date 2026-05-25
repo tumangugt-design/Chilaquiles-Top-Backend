@@ -1,68 +1,57 @@
 import Order from '../../orders/order.model.js';
 import Inventory from '../../inventory/inventory.model.js';
+import { isOperatingNow } from '../../settings/settings.service.js';
 import { getAdminAICompletion, prepareAdminBotContext } from './telegram.ai.js';
 
 /**
- * Función sencilla para pre-procesar la consulta y extraer datos del backend relevantes
+ * Obtiene el estado actual de la base de datos para pasárselo al LLM en cada consulta.
+ * Como el LLM (Gemini) tiene ventana de contexto grande y esto es de uso administrativo,
+ * es mejor pasarle toda la información relevante activa.
  */
 const fetchContextData = async (text) => {
-  const query = text.toLowerCase();
   let dataContext = '';
 
   try {
-    // 1. Pedidos
-    if (query.includes('pedido') || query.includes('orden')) {
-      // Buscar el número de pedido si lo proveen (ej: 123)
-      const orderMatch = query.match(/\d+/);
-      if (orderMatch) {
-        const orderNumberRegex = new RegExp(orderMatch[0], 'i');
-        const orders = await Order.find({ orderNumber: orderNumberRegex }).limit(5);
-        if (orders.length > 0) {
-          dataContext += `[DATOS DE PEDIDO ESPECÍFICO]\n`;
-          orders.forEach(o => {
-            dataContext += `- Pedido ${o.orderNumber}: Estado=${o.status}, Total=Q${o.total}, Cliente=${o.name}\n`;
-          });
-        } else {
-          dataContext += `[DATOS DE PEDIDO ESPECÍFICO]: No se encontró el pedido con número similar a ${orderMatch[0]}.\n`;
-        }
-      } else {
-        // Pedidos pendientes
-        const pendingOrders = await Order.find({ status: { $ne: 'ENTREGADO' } }).select('orderNumber status total name');
-        dataContext += `[PEDIDOS PENDIENTES]\nTotal de pedidos pendientes: ${pendingOrders.length}\n`;
-        pendingOrders.forEach(o => {
-          dataContext += `- Pedido ${o.orderNumber}: Estado=${o.status}, Total=Q${o.total}, Cliente=${o.name}\n`;
-        });
-      }
-    }
+    // 1. Obtener TODOS los pedidos pendientes
+    const pendingOrders = await Order.find({ status: { $ne: 'ENTREGADO' } })
+      .select('orderNumber status total name items createdAt');
+    
+    dataContext += `[PEDIDOS PENDIENTES (Total: ${pendingOrders.length})]\n`;
+    pendingOrders.forEach(o => {
+      dataContext += `- Pedido ${o.orderNumber}: Estado=${o.status}, Total=Q${o.total}, Cliente=${o.name}\n`;
+    });
+    dataContext += '\n';
 
-    // 2. Inventario y Stock
-    if (query.includes('stock') || query.includes('inventario') || query.includes('producto') || query.includes('hay de')) {
-      const allItems = await Inventory.find({ isActive: true });
-      dataContext += `[INVENTARIO ACTUAL]\n`;
-      
-      // Si pregunta por un producto en específico, el LLM buscará en esta lista
-      allItems.forEach(item => {
-        dataContext += `- ${item.name}: ${item.stock} ${item.unit} (Categoría: ${item.category})\n`;
-      });
-    }
+    // 2. Obtener TODO el inventario activo
+    const allItems = await Inventory.find({ isActive: true });
+    dataContext += `[INVENTARIO Y STOCK ACTUAL]\n`;
+    allItems.forEach(item => {
+      dataContext += `- ${item.name}: ${item.stock} ${item.unit} (Mínimo: ${item.minimumStock})\n`;
+    });
+    dataContext += '\n';
 
-    // 3. Ventas de la semana/hoy (Básico)
-    if (query.includes('venta') || query.includes('ganancia') || query.includes('ingreso')) {
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      const recentOrders = await Order.find({ createdAt: { $gte: today }, status: 'ENTREGADO' });
-      const totalSales = recentOrders.reduce((sum, o) => sum + (o.total || 0), 0);
-      dataContext += `[VENTAS DE HOY]\nPedidos entregados hoy: ${recentOrders.length}\nTotal de ingresos hoy: Q${totalSales}\n`;
-    }
-
-    // Fallback: si no detectamos ninguna palabra clave clara, no enviamos contexto
-    if (!dataContext) {
-      dataContext = '';
+    // 3. Obtener resumen de ventas del día
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const recentOrders = await Order.find({ createdAt: { $gte: today }, status: 'ENTREGADO' });
+    const totalSales = recentOrders.reduce((sum, o) => sum + (o.total || 0), 0);
+    
+    dataContext += `[VENTAS Y ENTREGAS DE HOY]\n`;
+    dataContext += `- Pedidos completados/entregados hoy: ${recentOrders.length}\n`;
+    dataContext += `- Ingresos totales hoy: Q${totalSales}\n`;
+    // 4. Obtener horario y estado de apertura actual
+    const operatingHours = await isOperatingNow();
+    dataContext += `[HORARIO Y ESTADO DEL RESTAURANTE]\n`;
+    if (operatingHours.isOpen) {
+      dataContext += `- Estado Actual: ${operatingHours.isCurrentlyOpen ? 'ABIERTO' : 'CERRADO'}\n`;
+      dataContext += `- Horario de hoy: ${operatingHours.openTime} a ${operatingHours.closeTime}\n`;
+    } else {
+      dataContext += `- Estado Actual: CERRADO todo el día.\n`;
     }
 
   } catch (err) {
     console.error('Error fetching context data for Telegram Bot:', err);
-    dataContext = 'Hubo un error obteniendo los datos de la base de datos.';
+    dataContext = 'Hubo un error obteniendo los datos de la base de datos. Pide al admin que revise los logs.';
   }
 
   return dataContext;

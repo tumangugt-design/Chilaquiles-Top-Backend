@@ -5,16 +5,23 @@ import FormData from 'form-data';
 
 /**
  * Descarga y transcribe una nota de voz de Telegram.
- * Requiere OPENAI_API_KEY en el archivo .env.
+ * Soporta OPENAI_API_KEY o GROQ_API_KEY (Groq ofrece Whisper gratuito).
  * @param {object} bot - Instancia del bot de Telegram
  * @param {string} fileId - El ID del archivo de audio de Telegram
  * @returns {Promise<string>} - El texto transcrito
  */
 export const processVoiceNote = async (bot, fileId) => {
-  const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey) {
-    throw new Error('No se encontró OPENAI_API_KEY. Configura esta variable para transcribir audios.');
+  const openAiKey = process.env.OPENAI_API_KEY;
+  const groqKey = process.env.GROQ_API_KEY;
+
+  if (!openAiKey && !groqKey) {
+    throw new Error('No se encontró OPENAI_API_KEY ni GROQ_API_KEY. Para procesar notas de voz, crea una llave gratuita en console.groq.com y agrégala al .env como GROQ_API_KEY.');
   }
+
+  const apiKey = groqKey || openAiKey;
+  const apiUrl = groqKey 
+    ? 'https://api.groq.com/openai/v1/audio/transcriptions'
+    : 'https://api.openai.com/v1/audio/transcriptions';
 
   let localFilePath = null;
 
@@ -46,23 +53,23 @@ export const processVoiceNote = async (bot, fileId) => {
       writer.on('error', reject);
     });
 
-    // 3. Enviar a OpenAI (Whisper) para transcripción
+    // 3. Enviar a Groq u OpenAI para transcripción (ambos usan el formato Whisper de OpenAI)
     const formData = new FormData();
     formData.append('file', fs.createReadStream(localFilePath));
-    formData.append('model', 'whisper-1');
+    formData.append('model', groqKey ? 'whisper-large-v3' : 'whisper-1'); // Groq usa whisper-large-v3
 
-    const openAiResponse = await axios.post('https://api.openai.com/v1/audio/transcriptions', formData, {
+    const aiResponse = await axios.post(apiUrl, formData, {
       headers: {
         ...formData.getHeaders(),
         Authorization: `Bearer ${apiKey}`,
       },
     });
 
-    return openAiResponse.data.text;
+    return aiResponse.data.text;
 
   } catch (error) {
     console.error('Error procesando nota de voz:', error.response?.data || error.message);
-    throw new Error('Hubo un problema procesando la nota de voz.');
+    throw new Error('Hubo un problema procesando la nota de voz. Verifica tu llave (Groq/OpenAI).');
   } finally {
     // 4. Limpiar el archivo temporal
     if (localFilePath && fs.existsSync(localFilePath)) {

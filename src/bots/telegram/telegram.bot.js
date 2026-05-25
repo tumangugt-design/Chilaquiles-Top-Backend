@@ -11,11 +11,18 @@ export const initTelegramBot = () => {
     return;
   }
 
-  // Inicializar bot en modo polling
-  const bot = new TelegramBot(token, { polling: true });
+  // Inicializar bot SIN polling
+  const bot = new TelegramBot(token, { polling: false });
   botInstance = bot;
 
-  console.log('[Telegram Bot] Bot initialized successfully.');
+  // Registrar el Webhook en Telegram para evitar que el contenedor de Cloud Run se congele
+  // Usa la URL de Cloud Run que vimos en tus logs
+  const appUrl = process.env.APP_URL || 'https://chilaquiles-top-989051656049.us-central1.run.app';
+  bot.setWebHook(`${appUrl}/api/bot/telegram-webhook`)
+    .then(() => console.log(`[Telegram Bot] Webhook set to: ${appUrl}/api/bot/telegram-webhook`))
+    .catch(err => console.error('[Telegram Bot] Error setting webhook:', err));
+
+  console.log('[Telegram Bot] Bot initialized in Webhook mode.');
 
   // Helper de validación de admin (Temporalmente desactivado a petición del usuario)
   const isAuthorized = (msg) => {
@@ -80,10 +87,10 @@ export const initTelegramBot = () => {
     }
   });
 
-  // Manejo de errores generales de polling
-  bot.on('polling_error', (error) => {
-    console.error('[Telegram Bot] Polling Error:', error.code, error.message);
-  });
+  // Webhook listener - Este método será llamado por Express
+  bot.processUpdateWebhook = (update) => {
+    bot.processUpdate(update);
+  };
 };
 
 export const getTelegramBotInstance = () => botInstance;
