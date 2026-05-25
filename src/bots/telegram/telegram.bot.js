@@ -64,17 +64,12 @@ export const initTelegramBot = () => {
 
     try {
       await bot.sendChatAction(chatId, 'typing');
-      await bot.sendMessage(chatId, 'Transcribiendo audio... ⏳');
 
       console.log(`[Telegram Bot] Recibida nota de voz. Procesando...`);
       const transcribedText = await processVoiceNote(bot, fileId);
       
       console.log(`[Telegram Bot] Audio transcrito: "${transcribedText}"`);
       
-      // Mostrar al usuario lo que se entendió
-      await bot.sendMessage(chatId, `_Entendí:_ "${transcribedText}"\nBuscando información...`, { parse_mode: 'Markdown' });
-      await bot.sendChatAction(chatId, 'typing');
-
       // Procesar el texto transcrito de la misma forma que un texto normal
       const response = await processAdminMessage(transcribedText);
       await bot.sendMessage(chatId, response, { parse_mode: 'Markdown' });

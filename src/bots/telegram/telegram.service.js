@@ -55,11 +55,9 @@ const fetchContextData = async (text) => {
       dataContext += `[VENTAS DE HOY]\nPedidos entregados hoy: ${recentOrders.length}\nTotal de ingresos hoy: Q${totalSales}\n`;
     }
 
-    // Fallback: si no detectamos ninguna palabra clave clara, dar un resumen general
+    // Fallback: si no detectamos ninguna palabra clave clara, no enviamos contexto
     if (!dataContext) {
-      const pendingCount = await Order.countDocuments({ status: { $ne: 'ENTREGADO' } });
-      const lowStockCount = await Inventory.countDocuments({ $expr: { $lte: ['$stock', '$minimumStock'] }, isActive: true });
-      dataContext = `[RESUMEN GENERAL]\nPedidos pendientes totales: ${pendingCount}\nProductos con stock bajo o agotado: ${lowStockCount}\n`;
+      dataContext = '';
     }
 
   } catch (err) {
