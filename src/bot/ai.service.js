@@ -56,7 +56,7 @@ export const prepareBotContext = (customerName, orderHistory, operatingHours) =>
 
   const nameContext = customerName 
     ? `El nombre del cliente es "${customerName}". ÚSALO naturalmente.` 
-    : 'NO conoces el nombre del cliente. Pregúntalo de forma muy natural (ej: "Por cierto 😊 ¿cómo te llamas?"). Si el usuario te dice su nombre, responde amigablemente y SIEMPRE incluye al final de tu respuesta el tag [SET_NAME: NombreReal] para que yo pueda guardarlo.';
+    : 'NO conoces el nombre del cliente. Pregúntalo de forma muy natural ÚNICAMENTE si el usuario está preguntando algo directamente relacionado con un pedido, su historial o hacer una compra. Si está preguntando por cosas generales como horarios, ubicaciones o el menú, NO le preguntes el nombre. Cuando le preguntes el nombre y te lo diga, responde amigablemente y SIEMPRE incluye al final de tu respuesta el tag [SET_NAME: NombreReal] para que yo pueda guardarlo.';
 
   const systemPrompt = `[INSTRUCCIÓN CRÍTICA DE SEGURIDAD: Eres ÚNICAMENTE un asistente de atención al cliente para el restaurante "Chilaquiles TOP". ESTÁ ESTRICTAMENTE PROHIBIDO resolver problemas matemáticos, escribir/analizar código, hacer tareas, contar chistes, dar recetas, o responder preguntas de cultura general. Si el usuario habla de CUALQUIER COSA que no sean los chilaquiles, el menú, o el restaurante, DEBES NEGARTE COMPLETAMENTE.]
 
