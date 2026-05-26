@@ -1,7 +1,10 @@
 import net from 'node:net'
 import tls from 'node:tls'
 
-const DEFAULT_ADMIN_ORDER_EMAIL = 'drodriguez@chilaquilestop.com'
+const DEFAULT_ADMIN_ORDER_EMAIL = [
+  'drodriguez@chilaquilestop.com',
+  'dulgv256@gmail.com',
+]
 
 const waitForConnect = (socket) => new Promise((resolve, reject) => {
   const onError = (error) => {
@@ -154,7 +157,10 @@ const formatOrderItem = (item, index) => {
 }
 
 export const notifyAdminNewOrder = async (order) => {
-  const to = process.env.ADMIN_ORDER_EMAIL || DEFAULT_ADMIN_ORDER_EMAIL
+  const toList = process.env.ADMIN_ORDER_EMAIL
+    ? process.env.ADMIN_ORDER_EMAIL.split(',').map(email => email.trim())
+    : DEFAULT_ADMIN_ORDER_EMAIL
+
   const maps = order.navigationLinks?.googleMaps || ''
   const waze = order.navigationLinks?.waze || ''
   const items = Array.isArray(order.items) ? order.items : []
@@ -175,9 +181,13 @@ export const notifyAdminNewOrder = async (order) => {
     ...items.map(formatOrderItem),
   ].filter(Boolean).join('\n')
 
-  return sendPlainEmail({
-    to,
-    subject: `Nuevo pedido Chilaquiles TOP #${order.orderNumber}`,
-    text,
-  })
+  return Promise.all(
+    toList.map((to) =>
+      sendPlainEmail({
+        to,
+        subject: `Nuevo pedido Chilaquiles TOP #${order.orderNumber}`,
+        text,
+      })
+    )
+  )
 }
