@@ -1,6 +1,5 @@
 import TelegramBot from 'node-telegram-bot-api';
 import { processAdminMessage } from './telegram.service.js';
-import { processVoiceNote } from './telegram.audio.js';
 
 let botInstance = null;
 
@@ -24,21 +23,19 @@ export const initTelegramBot = () => {
 
   console.log('[Telegram Bot] Bot initialized in Webhook mode.');
 
-  // Helper de validación de admin (Temporalmente desactivado a petición del usuario)
+  // Helper de validación de admin — solo IDs en TELEGRAM_ADMIN_IDS pueden usar el bot
   const isAuthorized = (msg) => {
-    /* 
-    // Lógica futura para validar administradores
     const adminIdsStr = process.env.TELEGRAM_ADMIN_IDS || '';
-    const adminIds = adminIdsStr.split(',').map(id => id.trim());
+    const adminIds = adminIdsStr.split(',').map(id => id.trim()).filter(Boolean);
     const userId = msg.from.id.toString();
-    
-    if (!adminIds.includes(userId)) {
+
+    if (adminIds.length > 0 && !adminIds.includes(userId)) {
       console.warn(`[Telegram Bot] Intento de acceso no autorizado por ID: ${userId}`);
-      bot.sendMessage(msg.chat.id, "No tienes permisos para interactuar con este bot.");
+      bot.sendMessage(msg.chat.id, '⛔ No tienes permisos para interactuar con este bot.');
       return false;
     }
-    */
-    return true; 
+
+    return true;
   };
 
   // Manejo de mensajes de texto
@@ -65,26 +62,8 @@ export const initTelegramBot = () => {
   // Manejo de notas de voz
   bot.on('voice', async (msg) => {
     if (!isAuthorized(msg)) return;
-
     const chatId = msg.chat.id;
-    const fileId = msg.voice.file_id;
-
-    try {
-      await bot.sendChatAction(chatId, 'typing');
-
-      console.log(`[Telegram Bot] Recibida nota de voz. Procesando...`);
-      const transcribedText = await processVoiceNote(bot, fileId);
-      
-      console.log(`[Telegram Bot] Audio transcrito: "${transcribedText}"`);
-      
-      // Procesar el texto transcrito de la misma forma que un texto normal
-      const response = await processAdminMessage(transcribedText);
-      await bot.sendMessage(chatId, response, { parse_mode: 'Markdown' });
-
-    } catch (error) {
-      console.error('[Telegram Bot] Error procesando nota de voz:', error);
-      bot.sendMessage(chatId, 'Ocurrió un error técnico procesando tu audio. Asegúrate de tener OPENAI_API_KEY configurado en el servidor si estás usando Whisper.');
-    }
+    await bot.sendMessage(chatId, 'Lo siento, no puedo procesar notas de voz. Por favor envíame tu consulta por texto. 📝');
   });
 
   // Webhook listener - Este método será llamado por Express
