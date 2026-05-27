@@ -40,7 +40,44 @@ const executeTool = async (toolCall) => {
       
       const limit = args.limit ? Math.min(args.limit, 500) : 100;
       const orders = await Order.find(filter).sort({ createdAt: -1 }).limit(limit).lean();
-      return JSON.stringify(orders);
+
+      // Pre-calculate summary so the AI doesn't have to do arithmetic
+      const totalRevenue = orders.reduce((sum, o) => sum + (o.total || 0), 0);
+      const orderCount = orders.length;
+      const averageTicket = orderCount > 0 ? Math.round((totalRevenue / orderCount) * 100) / 100 : 0;
+
+      // Breakdown by status
+      const byStatus = {};
+      for (const o of orders) {
+        const st = o.status || 'desconocido';
+        if (!byStatus[st]) byStatus[st] = { count: 0, revenue: 0 };
+        byStatus[st].count += 1;
+        byStatus[st].revenue += (o.total || 0);
+      }
+
+      // Compact order list (only essential fields to save tokens)
+      const compactOrders = orders.map(o => ({
+        orderNumber: o.orderNumber,
+        name: o.name,
+        items: (o.items || []).map(i => `${i.sauce} + ${i.protein} + ${i.complement}`),
+        itemCount: (o.items || []).length,
+        total: o.total,
+        status: o.status,
+        createdAt: o.createdAt
+      }));
+
+      const result = {
+        _summary: {
+          totalOrders: orderCount,
+          totalRevenue: totalRevenue,
+          averageTicket: averageTicket,
+          byStatus: byStatus,
+          note: "ESTOS TOTALES ESTÁN CALCULADOS POR EL SISTEMA Y SON EXACTOS. Usa estos números directamente, NO intentes re-sumar los pedidos."
+        },
+        orders: compactOrders
+      };
+
+      return JSON.stringify(result);
     }
     else if (name === 'getInventory') {
       const filter = args.itemName ? { name: { $regex: args.itemName, $options: 'i' } } : {};
