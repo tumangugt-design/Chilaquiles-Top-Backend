@@ -72,7 +72,7 @@ export const processAdminMessage = async (text, chatId) => {
     }
     
     // Preparar historial
-    let history = memory.messages.map(m => ({ role: m.role, content: m.content }));
+    let history = (memory.messages || []).map(m => ({ role: m.role, content: m.content }));
     if (history.length > 10) history = history.slice(-10);
 
     const messages = [
@@ -113,6 +113,7 @@ export const processAdminMessage = async (text, chatId) => {
     }
 
     // Guardar SOLO el texto inicial del usuario y la respuesta final en la BD para evitar romper el schema
+    if (!memory.messages) memory.messages = [];
     memory.messages.push({ role: 'user', content: text });
     if (finalResponse) {
       memory.messages.push({ role: 'assistant', content: finalResponse });
