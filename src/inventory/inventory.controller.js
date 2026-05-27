@@ -93,7 +93,16 @@ export const saveInventoryItem = async (req, res) => {
       return res.status(400).json({ message: 'El costo total debe ser un número válido mayor o igual a cero.' })
     }
 
-    const fixedPrice = hasPrice ? Math.round(totalPrice * 100) / 100 : undefined
+    let fixedPrice = undefined
+    if (hasPrice) {
+      if (amount > 0) {
+        const usedPerPlate = catalogItem.usedPerPlate || 1
+        const portionPrice = (totalPrice / amount) * usedPerPlate
+        fixedPrice = Math.round(portionPrice * 100) / 100
+      } else {
+        fixedPrice = Math.round(totalPrice * 100) / 100
+      }
+    }
 
     let inventoryItem = await Inventory.findOne({ name })
     if (!inventoryItem) {
@@ -113,7 +122,7 @@ export const saveInventoryItem = async (req, res) => {
       type: 'IN',
       price: fixedPrice,
       actor: req.user,
-      reason: `Entrada de inventario: ${rawAmount} ${inputUnit} → ${amount} ${catalogItem.unit}${hasPrice ? ` | Precio fijo Q${fixedPrice}` : ''}`
+      reason: `Entrada de inventario: ${rawAmount} ${inputUnit} → ${amount} ${catalogItem.unit}${hasPrice ? ` | Costo Total Q${totalPrice} (Porción por plato Q${fixedPrice})` : ''}`
     })
 
     return res.status(200).json({
