@@ -125,6 +125,16 @@ export const saveInventoryItem = async (req, res) => {
       reason: `Entrada de inventario: ${rawAmount} ${inputUnit} → ${amount} ${catalogItem.unit}${hasPrice ? ` | Costo Total Q${totalPrice} (Porción por plato Q${fixedPrice})` : ''}`
     })
 
+    // Store raw purchase data directly on the Inventory document for reliable retrieval
+    await Inventory.findOneAndUpdate(
+      { name },
+      {
+        lastPurchaseQty: rawAmount,
+        lastPurchaseUnit: inputUnit,
+        lastPurchaseTotalPrice: hasPrice ? totalPrice : null
+      }
+    )
+
     return res.status(200).json({
       message: 'Entrada de inventario registrada',
       item,
@@ -348,34 +358,51 @@ export const getLastPurchases = async (req, res) => {
     const items = await Inventory.find()
     const results = {}
     for (const item of items) {
-      const lastLog = await InventoryLog.findOne({
-        ingredientName: item.name,
-        type: 'IN'
-      }).sort({ createdAt: -1 })
-      
-      if (lastLog) {
-        const regex = /Entrada de inventario:\s*([\d.]+)\s*(\w+)\s*→.*?\|\s*Costo Total\s*Q([\d.]+)/i
-        const match = lastLog.reason?.match(regex)
-        if (match) {
-          const rawUnit = match[2].toLowerCase()
+      // Use directly stored purchase data (reliable, no regex parsing)
+      if (
+        item.lastPurchaseQty !== undefined &&
+        item.lastPurchaseQty !== null &&
+        item.lastPurchaseUnit
+      ) {
+        results[item.name] = {
+          qty: item.lastPurchaseQty,
+          unit: item.lastPurchaseUnit,
+          price: item.lastPurchaseTotalPrice ?? ''
+        }
+      } else {
+        // Fallback: parse the last IN log reason string (for older entries)
+        const lastLog = await InventoryLog.findOne({
+          ingredientName: item.name,
+          type: 'IN'
+        }).sort({ createdAt: -1 })
+
+        if (lastLog) {
+          const regexWithPrice = /Entrada de inventario:\s*([\d.]+)\s*(\w+)[^|]*\|\s*Costo Total\s*Q([\d.]+)/i
+          const regexNoPrice = /Entrada de inventario:\s*([\d.]+)\s*(\w+)/i
+
           const unitMap = {
-            lbs: 'lb',
-            lb: 'lb',
-            ltrs: 'l',
-            l: 'l',
-            gramos: 'g',
-            g: 'g',
-            unidad: 'und',
-            und: 'und',
-            ml: 'ml',
-            oz: 'oz'
+            lbs: 'lb', lb: 'lb', ltrs: 'l', l: 'l',
+            gramos: 'g', g: 'g', unidad: 'und', und: 'und', ml: 'ml', oz: 'oz'
           }
-          const normalizedUnit = unitMap[rawUnit] || rawUnit
-          
-          results[item.name] = {
-            qty: Number(match[1]),
-            unit: normalizedUnit,
-            price: Number(match[3])
+
+          const matchWithPrice = lastLog.reason?.match(regexWithPrice)
+          if (matchWithPrice) {
+            const normalizedUnit = unitMap[matchWithPrice[2].toLowerCase()] || matchWithPrice[2].toLowerCase()
+            results[item.name] = {
+              qty: Number(matchWithPrice[1]),
+              unit: normalizedUnit,
+              price: Number(matchWithPrice[3])
+            }
+          } else {
+            const matchNoPrice = lastLog.reason?.match(regexNoPrice)
+            if (matchNoPrice) {
+              const normalizedUnit = unitMap[matchNoPrice[2].toLowerCase()] || matchNoPrice[2].toLowerCase()
+              results[item.name] = {
+                qty: Number(matchNoPrice[1]),
+                unit: normalizedUnit,
+                price: ''
+              }
+            }
           }
         }
       }
