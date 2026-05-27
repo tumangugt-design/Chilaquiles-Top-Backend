@@ -79,6 +79,8 @@ export const createOrder = async (req, res) => {
       user,
       customer,
       items,
+      sauceTemperature: req.body.sauceTemperature,
+      appliedPromo: req.body.appliedPromo,
     })
 
     return res.status(201).json({ message: 'Pedido creado', order })

@@ -93,14 +93,15 @@ export const saveInventoryItem = async (req, res) => {
       return res.status(400).json({ message: 'El costo total debe ser un número válido mayor o igual a cero.' })
     }
 
-    let fixedPrice = undefined
+    let portionPrice = undefined
+    let unitPrice = undefined
     if (hasPrice) {
       if (amount > 0) {
         const usedPerPlate = catalogItem.usedPerPlate || 1
-        const portionPrice = (totalPrice / amount) * usedPerPlate
-        fixedPrice = Math.round(portionPrice * 100) / 100
+        unitPrice = roundMoney(totalPrice / amount)
+        portionPrice = roundMoney((totalPrice / amount) * usedPerPlate)
       } else {
-        fixedPrice = Math.round(totalPrice * 100) / 100
+        portionPrice = roundMoney(totalPrice)
       }
     }
 
@@ -120,15 +121,30 @@ export const saveInventoryItem = async (req, res) => {
       name,
       amount,
       type: 'IN',
-      price: fixedPrice,
+      totalPrice: hasPrice ? totalPrice : undefined,
+      portionPrice,
+      inputAmount: rawAmount,
+      inputUnit,
+      storedUnit: catalogItem.unit,
       actor: req.user,
-      reason: `Entrada de inventario: ${rawAmount} ${inputUnit} → ${amount} ${catalogItem.unit}${hasPrice ? ` | Costo Total Q${totalPrice} (Porción por plato Q${fixedPrice})` : ''}`
+      reason: `Entrada de inventario: ${rawAmount} ${inputUnit} → ${amount} ${catalogItem.unit}${hasPrice ? ` | Costo Total Q${roundMoney(totalPrice)} | Costo unitario Q${unitPrice || 0}/${catalogItem.unit} | Porción por plato Q${portionPrice}` : ''}`
     })
+
+    // Store raw purchase data directly on the Inventory document for reliable retrieval.
+    // Estos campos guardan la compra completa; lastPrice guarda solo el costo de porción por plato.
+    await Inventory.findOneAndUpdate(
+      { name },
+      {
+        lastPurchaseQty: rawAmount,
+        lastPurchaseUnit: inputUnit,
+        lastPurchaseTotalPrice: hasPrice ? roundMoney(totalPrice) : null
+      }
+    )
 
     return res.status(200).json({
       message: 'Entrada de inventario registrada',
       item,
-      conversion: { inputAmount: rawAmount, inputUnit, storedAmount: amount, storedUnit: catalogItem.unit, fixedPrice }
+      conversion: { inputAmount: rawAmount, inputUnit, storedAmount: amount, storedUnit: catalogItem.unit, totalPrice, unitPrice, portionPrice }
     })
   } catch (error) {
     return res.status(error.statusCode || 500).json({ message: error.message || 'Error saving inventory item', error: error.message })
@@ -343,43 +359,178 @@ export const syncInventory = async (req, res) => {
   }
 }
 
+const normalizeEntryUnitForUi = (unit = '') => {
+  const value = String(unit || '').trim().toLowerCase()
+  const unitMap = {
+    lbs: 'lb',
+    libra: 'lb',
+    libras: 'lb',
+    lb: 'lb',
+    ltrs: 'l',
+    litros: 'l',
+    litro: 'l',
+    lt: 'l',
+    l: 'l',
+    gramos: 'g',
+    gramo: 'g',
+    g: 'g',
+    unidades: 'und',
+    unidad: 'und',
+    und: 'und',
+    ml: 'ml',
+    oz: 'oz'
+  }
+
+  return unitMap[value] || value
+}
+
+const roundMoney = (value) => Math.round(Number(value || 0) * 100) / 100
+
+const deriveTotalPurchasePrice = ({ portionPrice, amount, unit, catalogItem }) => {
+  const portion = Number(portionPrice || 0)
+  const qty = Number(amount || 0)
+  const usedPerPlate = Number(catalogItem?.usedPerPlate || 0)
+
+  if (!portion || !qty || !usedPerPlate || !catalogItem) return null
+
+  try {
+    const amountInCatalogUnit = convertAmountToCatalogUnit(qty, unit || catalogItem.unit, catalogItem.unit)
+    return roundMoney((portion / usedPerPlate) * amountInCatalogUnit)
+  } catch (error) {
+    return null
+  }
+}
+
+const derivePortionPrice = ({ totalPrice, amount, unit, catalogItem }) => {
+  const total = Number(totalPrice || 0)
+  const qty = Number(amount || 0)
+  const usedPerPlate = Number(catalogItem?.usedPerPlate || 0)
+
+  if (!total || !qty || !usedPerPlate || !catalogItem) return 0
+
+  try {
+    const amountInCatalogUnit = convertAmountToCatalogUnit(qty, unit || catalogItem.unit, catalogItem.unit)
+    if (!amountInCatalogUnit) return 0
+    return roundMoney((total / amountInCatalogUnit) * usedPerPlate)
+  } catch (error) {
+    return 0
+  }
+}
+
+const buildLastPurchasePayload = ({ qty, unit, totalPrice, portionPrice, source, catalogItem }) => {
+  const normalizedUnit = normalizeEntryUnitForUi(unit || catalogItem.unit)
+  const numericTotalPrice = totalPrice !== undefined && totalPrice !== null && totalPrice !== '' ? Number(totalPrice) : null
+  const portionFromTotal = derivePortionPrice({
+    totalPrice: numericTotalPrice,
+    amount: qty,
+    unit: normalizedUnit,
+    catalogItem
+  })
+  const calculatedPortionPrice = portionFromTotal || Number(portionPrice || 0)
+
+  return {
+    qty: qty || '',
+    unit: normalizedUnit || catalogItem.unit,
+    price: numericTotalPrice !== null && !Number.isNaN(numericTotalPrice) ? roundMoney(numericTotalPrice) : '',
+    portionPrice: calculatedPortionPrice || 0,
+    source
+  }
+}
+
 export const getLastPurchases = async (req, res) => {
   try {
     const items = await Inventory.find()
     const results = {}
+
     for (const item of items) {
+      const catalogItem = INVENTORY_CATALOG_MAP[item.name]
+      if (!catalogItem) continue
+
+      const itemPortionPrice = Number(item.lastPrice || 0)
+      const hasDirectPurchaseData = (
+        item.lastPurchaseQty !== undefined &&
+        item.lastPurchaseQty !== null &&
+        item.lastPurchaseQty !== '' &&
+        item.lastPurchaseUnit
+      )
+
+      if (hasDirectPurchaseData) {
+        results[item.name] = buildLastPurchasePayload({
+          qty: Number(item.lastPurchaseQty),
+          unit: item.lastPurchaseUnit,
+          totalPrice: item.lastPurchaseTotalPrice,
+          portionPrice: itemPortionPrice,
+          source: 'inventory',
+          catalogItem
+        })
+        continue
+      }
+
+      // Fallback para entradas antiguas: leer último log IN.
       const lastLog = await InventoryLog.findOne({
         ingredientName: item.name,
         type: 'IN'
       }).sort({ createdAt: -1 })
-      
-      if (lastLog) {
-        const regex = /Entrada de inventario:\s*([\d.]+)\s*(\w+)\s*→.*?\|\s*Costo Total\s*Q([\d.]+)/i
-        const match = lastLog.reason?.match(regex)
-        if (match) {
-          const rawUnit = match[2].toLowerCase()
-          const unitMap = {
-            lbs: 'lb',
-            lb: 'lb',
-            ltrs: 'l',
-            l: 'l',
-            gramos: 'g',
-            g: 'g',
-            unidad: 'und',
-            und: 'und',
-            ml: 'ml',
-            oz: 'oz'
-          }
-          const normalizedUnit = unitMap[rawUnit] || rawUnit
-          
+
+      if (!lastLog) {
+        if (itemPortionPrice > 0) {
           results[item.name] = {
-            qty: Number(match[1]),
-            unit: normalizedUnit,
-            price: Number(match[3])
+            qty: '',
+            unit: catalogItem.unit,
+            price: '',
+            portionPrice: itemPortionPrice,
+            source: 'inventory-price'
           }
         }
+        continue
       }
+
+      // Registros nuevos: campos explícitos para no confundir costo total con costo por porción.
+      if (lastLog.inputAmount && lastLog.inputUnit) {
+        results[item.name] = buildLastPurchasePayload({
+          qty: Number(lastLog.inputAmount),
+          unit: lastLog.inputUnit,
+          totalPrice: lastLog.totalPrice ?? lastLog.price,
+          portionPrice: lastLog.portionPrice || itemPortionPrice,
+          source: 'log',
+          catalogItem
+        })
+        continue
+      }
+
+      // Registros viejos: se intenta leer el texto del reason si existe.
+      const rawReason = lastLog.reason || ''
+      const matchQty = rawReason.match(/Entrada de inventario:\s*([\d.]+)\s*([a-zA-ZáéíóúÁÉÍÓÚñÑ]+)/i)
+      const matchTotal = rawReason.match(/Costo Total\s*Q\s*([\d.]+)/i)
+      const matchPortion = rawReason.match(/Porción por plato\s*Q\s*([\d.]+)/i)
+
+      const qty = Number(matchQty?.[1] ?? lastLog.amount ?? 0)
+      const unit = normalizeEntryUnitForUi(matchQty?.[2] ?? catalogItem.unit)
+
+      // En los logs antiguos `price` fue usado como costo total de compra.
+      // NO se debe tratar como precio por plato; eso inflaba promociones brutalmente.
+      const totalPrice = matchTotal?.[1]
+        ? Number(matchTotal[1])
+        : (lastLog.totalPrice !== undefined && lastLog.totalPrice !== null ? Number(lastLog.totalPrice) : Number(lastLog.price || 0))
+
+      const portionPrice = matchPortion?.[1]
+        ? Number(matchPortion[1])
+        : derivePortionPrice({ totalPrice, amount: qty, unit, catalogItem }) || itemPortionPrice
+
+      results[item.name] = buildLastPurchasePayload({
+        qty,
+        unit,
+        totalPrice,
+        portionPrice,
+        source: 'log',
+        catalogItem
+      })
     }
+
+    res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate')
+    res.set('Pragma', 'no-cache')
+    res.set('Expires', '0')
+
     return res.status(200).json(results)
   } catch (error) {
     return res.status(500).json({ message: 'Error fetching last purchases', error: error.message })

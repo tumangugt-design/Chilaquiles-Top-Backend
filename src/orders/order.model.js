@@ -19,6 +19,19 @@ const orderItemSchema = new mongoose.Schema({
   baseRecipe: { type: baseRecipeSchema, default: () => ({}) }
 }, { _id: false });
 
+
+const appliedPromoSchema = new mongoose.Schema({
+  id: { type: String },
+  name: { type: String },
+  promoPrice: { type: Number },
+  requestedCount: { type: Number },
+  constraints: {
+    sauce: { type: String, default: 'ALL' },
+    protein: { type: String, default: 'ALL' },
+    complement: { type: String, default: 'ALL' }
+  }
+}, { _id: false });
+
 const orderSchema = new mongoose.Schema({
   userId: {
     type: mongoose.Schema.Types.ObjectId,
@@ -46,8 +59,9 @@ const orderSchema = new mongoose.Schema({
     type: String,
     enum: ['FRIO', 'CALIENTE'],
     required: true,
-    default: 'CALIENTE' // Fallback for safety, though frontend will always send it now
+    default: 'CALIENTE'
   },
+  appliedPromo: { type: appliedPromoSchema, default: null },
   total: { type: Number, required: true },
   status: {
     type: String,

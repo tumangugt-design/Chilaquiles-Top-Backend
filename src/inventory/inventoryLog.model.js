@@ -37,9 +37,40 @@ const inventoryLogSchema = new mongoose.Schema({
     required: true
   },
   userName: String,
+  // Para entradas de inventario, `price` se mantiene como costo total de la compra
+  // por compatibilidad con registros anteriores. Los campos específicos evitan confundir
+  // costo total de compra con costo de porción por plato.
   price: {
     type: Number,
     default: 0
+  },
+  inputAmount: {
+    type: Number,
+    default: null
+  },
+  inputUnit: {
+    type: String,
+    default: null
+  },
+  storedAmount: {
+    type: Number,
+    default: null
+  },
+  storedUnit: {
+    type: String,
+    default: null
+  },
+  totalPrice: {
+    type: Number,
+    default: null
+  },
+  portionPrice: {
+    type: Number,
+    default: null
+  },
+  unitPrice: {
+    type: Number,
+    default: null
   },
   reason: {
     type: String,

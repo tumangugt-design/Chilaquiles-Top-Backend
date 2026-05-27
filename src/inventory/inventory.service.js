@@ -7,6 +7,17 @@ const normalizeName = (value = '') => value.trim().toLowerCase()
 
 const normalizeUnit = (value = '') => String(value || '').trim().toLowerCase()
 
+
+const normalizeOptionValue = (value = '') => String(value || '').trim().toUpperCase().replace(/\s+/g, '_')
+
+const normalizeComplementValue = (value = '') => {
+  const normalized = normalizeOptionValue(value)
+  if (normalized === 'CEBOLLA_CARAMELIZADA') return 'CEBOLLA_CARAMELIZADA'
+  if (normalized === 'QUESO_EXTRA') return 'QUESO_EXTRA'
+  if (normalized === 'AGUACATE') return 'AGUACATE'
+  return normalized
+}
+
 const UNIT_ALIASES = {
   g: 'g',
   gramo: 'g',
@@ -65,33 +76,37 @@ export const convertAmountToCatalogUnit = (amount, inputUnit, catalogUnit) => {
 }
 
 const getConsumptionForItem = (item) => {
+  const sauce = normalizeOptionValue(item.sauce)
+  const protein = normalizeOptionValue(item.protein)
+  const complement = normalizeComplementValue(item.complement)
+
   const consumption = {
     totopos: DEFAULT_RECIPE_CONSUMPTION['totopos'],
     queso: DEFAULT_RECIPE_CONSUMPTION['queso'],
   }
 
-  if (item.sauce === 'ROJA') {
+  if (sauce === 'ROJA') {
     consumption['salsa roja'] = DEFAULT_RECIPE_CONSUMPTION['salsa roja']
     consumption['plato de 8 onz'] = 1
     consumption['tapadera de 8 onz'] = 1
-  } else if (item.sauce === 'VERDE') {
+  } else if (sauce === 'VERDE') {
     consumption['salsa verde'] = DEFAULT_RECIPE_CONSUMPTION['salsa verde']
     consumption['plato de 8 onz'] = 1
     consumption['tapadera de 8 onz'] = 1
-  } else if (item.sauce === 'DIVORCIADOS') {
+  } else if (sauce === 'DIVORCIADOS') {
     consumption['salsa roja'] = DEFAULT_RECIPE_CONSUMPTION['salsa roja'] / 2
     consumption['salsa verde'] = DEFAULT_RECIPE_CONSUMPTION['salsa verde'] / 2
     consumption['plato de 4 onz'] = 2
     consumption['tapadera de 4 onz'] = 2
   }
 
-  if (item.protein === 'STEAK') consumption['steak'] = DEFAULT_RECIPE_CONSUMPTION['steak']
-  if (item.protein === 'POLLO') consumption['pollo'] = DEFAULT_RECIPE_CONSUMPTION['pollo']
-  if (item.protein === 'CHORIZO') consumption['chorizo'] = DEFAULT_RECIPE_CONSUMPTION['chorizo']
+  if (protein === 'STEAK') consumption['steak'] = DEFAULT_RECIPE_CONSUMPTION['steak']
+  if (protein === 'POLLO') consumption['pollo'] = DEFAULT_RECIPE_CONSUMPTION['pollo']
+  if (protein === 'CHORIZO') consumption['chorizo'] = DEFAULT_RECIPE_CONSUMPTION['chorizo']
 
-  if (item.complement === 'AGUACATE') consumption['aguacate'] = DEFAULT_RECIPE_CONSUMPTION['aguacate']
-  if (item.complement === 'CEBOLLA_CARAMELIZADA') consumption['cebolla caramelizada'] = DEFAULT_RECIPE_CONSUMPTION['cebolla caramelizada']
-  if (item.complement === 'QUESO_EXTRA') consumption['queso extra'] = DEFAULT_RECIPE_CONSUMPTION['queso extra']
+  if (complement === 'AGUACATE') consumption['aguacate'] = DEFAULT_RECIPE_CONSUMPTION['aguacate']
+  if (complement === 'CEBOLLA_CARAMELIZADA') consumption['cebolla caramelizada'] = DEFAULT_RECIPE_CONSUMPTION['cebolla caramelizada']
+  if (complement === 'QUESO_EXTRA') consumption['queso extra'] = DEFAULT_RECIPE_CONSUMPTION['queso extra']
 
   if (item.baseRecipe?.onion) consumption['cebolla'] = DEFAULT_RECIPE_CONSUMPTION['cebolla']
   if (item.baseRecipe?.cilantro) consumption['cilantro'] = DEFAULT_RECIPE_CONSUMPTION['cilantro']
@@ -244,15 +259,31 @@ export const getAvailablePlatesCount = async () => {
   return Math.max(0, Math.min(...limits))
 }
 
-export const manualStockAdjustment = async ({ name, amount, type, price, actor, reason }) => {
+export const manualStockAdjustment = async ({
+  name,
+  amount,
+  type,
+  price,
+  totalPrice,
+  portionPrice,
+  inputAmount,
+  inputUnit,
+  storedUnit,
+  actor,
+  reason
+}) => {
   const normalized = normalizeName(name)
   const numericAmount = Number(amount)
+  const movementType = type || (numericAmount > 0 ? 'IN' : 'ADJUSTMENT')
   const updateQuery = { $inc: { stock: numericAmount } }
-  const hasFixedPrice = price !== undefined && price !== null && price !== ''
-  const fixedPrice = hasFixedPrice ? round(Number(price)) : undefined
-  
-  if (hasFixedPrice) {
-    updateQuery.$set = { lastPrice: fixedPrice }
+
+  const hasPortionPrice = portionPrice !== undefined && portionPrice !== null && portionPrice !== '' && !Number.isNaN(Number(portionPrice))
+  const normalizedPortionPrice = hasPortionPrice ? round(Number(portionPrice)) : undefined
+
+  // lastPrice SIEMPRE representa el costo de la porción usada por plato,
+  // no el costo total de la compra. Así promociones puede calcular correctamente.
+  if (hasPortionPrice) {
+    updateQuery.$set = { lastPrice: normalizedPortionPrice }
   }
 
   const previousItem = await Inventory.findOneAndUpdate(
@@ -266,13 +297,24 @@ export const manualStockAdjustment = async ({ name, amount, type, price, actor, 
   }
 
   const newStock = round(Number(previousItem.stock || 0) + numericAmount)
+  const normalizedTotalPrice = totalPrice !== undefined && totalPrice !== null && totalPrice !== '' && !Number.isNaN(Number(totalPrice))
+    ? round(Number(totalPrice))
+    : (price !== undefined && price !== null && price !== '' && !Number.isNaN(Number(price)) ? round(Number(price)) : 0)
+  const storedAmount = Math.abs(numericAmount)
 
   await InventoryLog.create({
     ingredient: previousItem._id,
     ingredientName: previousItem.name,
-    type: type || (numericAmount > 0 ? 'IN' : 'ADJUSTMENT'),
-    amount: Math.abs(numericAmount),
-    price: hasFixedPrice ? fixedPrice : 0,
+    type: movementType,
+    amount: storedAmount,
+    price: normalizedTotalPrice,
+    inputAmount: inputAmount !== undefined && inputAmount !== null && inputAmount !== '' ? Number(inputAmount) : null,
+    inputUnit: inputUnit || null,
+    storedAmount,
+    storedUnit: storedUnit || previousItem.unit || null,
+    totalPrice: normalizedTotalPrice || null,
+    portionPrice: hasPortionPrice ? normalizedPortionPrice : null,
+    unitPrice: storedAmount > 0 && normalizedTotalPrice > 0 ? round(normalizedTotalPrice / storedAmount) : null,
     previousStock: previousItem.stock,
     newStock,
     userId: actor?._id,
@@ -280,7 +322,7 @@ export const manualStockAdjustment = async ({ name, amount, type, price, actor, 
     reason: reason || 'Ajuste manual'
   })
 
-  return { ...previousItem.toObject(), stock: newStock, lastPrice: hasFixedPrice ? fixedPrice : previousItem.lastPrice }
+  return { ...previousItem.toObject(), stock: newStock, lastPrice: hasPortionPrice ? normalizedPortionPrice : previousItem.lastPrice }
 }
 
 export const toggleInventoryItem = async (id, isActive) => {

@@ -37,6 +37,18 @@ const inventoryItemSchema = new mongoose.Schema({
     type: Number,
     default: 0
   },
+  lastPurchaseQty: {
+    type: Number,
+    default: null
+  },
+  lastPurchaseUnit: {
+    type: String,
+    default: null
+  },
+  lastPurchaseTotalPrice: {
+    type: Number,
+    default: null
+  },
   notes: String
 }, { timestamps: true });
 
