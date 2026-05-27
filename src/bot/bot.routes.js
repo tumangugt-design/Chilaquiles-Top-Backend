@@ -9,6 +9,8 @@ import {
 } from './bot.controller.js';
 import { getTelegramBotInstance } from '../bots/telegram/telegram.bot.js';
 
+import { verifyMetaSignature } from './metaSignature.middleware.js';
+
 const router = Router();
 
 // Telegram Webhook
@@ -26,16 +28,16 @@ router.post('/telegram-webhook', (req, res) => {
 
 // WhatsApp Webhook
 router.get('/whatsapp', verifyWhatsAppWebhook);
-router.post('/whatsapp', handleWhatsAppWebhook);
+router.post('/whatsapp', verifyMetaSignature, handleWhatsAppWebhook);
 
 // Instagram Webhook
 router.get('/instagram', verifyInstagramWebhook);
-router.post('/instagram', handleInstagramWebhook);
+router.post('/instagram', verifyMetaSignature, handleInstagramWebhook);
 
 // ==========================================
 // UNIFIED/LEGACY ENDPOINT (BACKWARDS COMPAT)
 // ==========================================
 router.get('/webhook', verifyWebhook);
-router.post('/webhook', handleIncomingMessage);
+router.post('/webhook', verifyMetaSignature, handleIncomingMessage);
 
 export default router;
