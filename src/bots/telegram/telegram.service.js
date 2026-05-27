@@ -4,17 +4,6 @@ import { isOperatingNow, getOperatingHoursSetting } from '../../settings/setting
 import { getAdminAICompletion, prepareAdminBotContext } from './telegram.ai.js';
 import BotMemory from './bot_memory.model.js';
 
-/**
- * Obtiene el estado actual de la base de datos para pasárselo al LLM en cada consulta.
- * Como el LLM (Gemini) tiene ventana de contexto grande y esto es de uso administrativo,
- * es mejor pasarle toda la información relevante activa.
- */
-import Order from '../../orders/order.model.js';
-import Inventory from '../../inventory/inventory.model.js';
-import { isOperatingNow, getOperatingHoursSetting } from '../../settings/settings.service.js';
-import { getAdminAICompletion, prepareAdminBotContext } from './telegram.ai.js';
-import BotMemory from './bot_memory.model.js';
-
 const fetchContextData = async () => {
   try {
     const today = new Date();
