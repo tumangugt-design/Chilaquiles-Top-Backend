@@ -17,8 +17,14 @@ export const initTelegramBot = () => {
   // Registrar el Webhook en Telegram para evitar que el contenedor de Cloud Run se congele
   // Usa la URL de Cloud Run que vimos en tus logs
   const appUrl = process.env.APP_URL || 'https://chilaquiles-top-989051656049.us-central1.run.app';
-  bot.setWebHook(`${appUrl}/api/bot/telegram-webhook`)
-    .then(() => console.log(`[Telegram Bot] Webhook set to: ${appUrl}/api/bot/telegram-webhook`))
+  
+  // Telegram secret_token solo acepta caracteres [a-zA-Z0-9_-] y máximo 256 de longitud.
+  const secretToken = token.replace(/[^a-zA-Z0-9_-]/g, '').substring(0, 256);
+
+  bot.setWebHook(`${appUrl}/api/bot/telegram-webhook`, {
+    secret_token: secretToken
+  })
+    .then(() => console.log(`[Telegram Bot] Webhook set to: ${appUrl}/api/bot/telegram-webhook (Secured)`))
     .catch(err => console.error('[Telegram Bot] Error setting webhook:', err));
 
   console.log('[Telegram Bot] Bot initialized in Webhook mode.');

@@ -10,11 +10,12 @@ import {
 import { getTelegramBotInstance } from '../bots/telegram/telegram.bot.js';
 
 import { verifyMetaSignature } from './metaSignature.middleware.js';
+import { verifyTelegramSignature } from '../bots/telegram/telegramSignature.middleware.js';
 
 const router = Router();
 
 // Telegram Webhook
-router.post('/telegram-webhook', (req, res) => {
+router.post('/telegram-webhook', verifyTelegramSignature, (req, res) => {
   const bot = getTelegramBotInstance();
   if (bot) {
     bot.processUpdate(req.body);
