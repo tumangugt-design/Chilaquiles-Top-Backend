@@ -42,6 +42,38 @@ const throwPromoError = (message) => {
   throw error;
 };
 
+
+const cloneOrderItem = (item = {}) => ({
+  sauce: item.sauce,
+  protein: item.protein,
+  complement: item.complement,
+  baseRecipe: {
+    onion: item.baseRecipe?.onion !== false,
+    cilantro: item.baseRecipe?.cilantro !== false,
+    cream: item.baseRecipe?.cream !== false,
+  }
+});
+
+const completePromoItems = (items = [], requestedCount = 1) => {
+  const normalizedItems = items.map(cloneOrderItem);
+  const targetCount = Number(requestedCount || 1);
+
+  if (normalizedItems.length === 0 || !targetCount || Number.isNaN(targetCount)) {
+    return normalizedItems;
+  }
+
+  if (normalizedItems.length > targetCount) {
+    throwPromoError(`La promoción permite exactamente ${targetCount} plato(s).`);
+  }
+
+  const lastItem = normalizedItems[normalizedItems.length - 1];
+  while (normalizedItems.length < targetCount) {
+    normalizedItems.push(cloneOrderItem(lastItem));
+  }
+
+  return normalizedItems;
+};
+
 const getTodayGuatemalaString = () => getGuatemalaParts().dateString;
 
 const resolveAppliedPromotion = async ({ requestedPromo, items }) => {
@@ -69,11 +101,13 @@ const resolveAppliedPromotion = async ({ requestedPromo, items }) => {
     throwPromoError('La promoción no tiene un precio válido.');
   }
 
-  if (items.length !== requestedCount) {
-    throwPromoError(`La promoción requiere exactamente ${requestedCount} plato(s).`);
+  if (items.length > requestedCount) {
+    throwPromoError(`La promoción permite exactamente ${requestedCount} plato(s).`);
   }
 
-  items.forEach((item, index) => {
+  const itemsToValidate = completePromoItems(items, requestedCount);
+
+  itemsToValidate.forEach((item, index) => {
     const plateNumber = index + 1;
     if (!promoConstraintAllows(promo, 'sauce', item.sauce)) {
       throwPromoError(`El plato ${plateNumber} no cumple con la salsa permitida por la promoción.`);
@@ -134,12 +168,17 @@ const baseHistoryQuery = () => Order.find()
   .populate('repartidorId', 'name phone email photoUrl role status');
 
 export const createOrderRecord = async ({ user, customer, items, sauceTemperature, appliedPromo }) => {
-  const resolvedPromo = await resolveAppliedPromotion({ requestedPromo: appliedPromo, items });
-  const total = resolvedPromo ? resolvedPromo.promoPrice : calculateOrderTotal(items.length);
+  let orderItems = Array.isArray(items) ? items.map(cloneOrderItem) : [];
+  const resolvedPromo = await resolveAppliedPromotion({ requestedPromo: appliedPromo, items: orderItems });
+  if (resolvedPromo) {
+    orderItems = completePromoItems(orderItems, resolvedPromo.requestedCount);
+  }
+
+  const total = resolvedPromo ? resolvedPromo.promoPrice : calculateOrderTotal(orderItems.length);
   const navigationLinks = buildNavigationLinks(customer.location);
   const orderNumber = await generateOrderNumber();
 
-  const availability = await validateInventoryAvailability(items);
+  const availability = await validateInventoryAvailability(orderItems);
 
   if (!availability.ok) {
     const firstShortage = availability.shortages?.[0];
@@ -167,14 +206,14 @@ export const createOrderRecord = async ({ user, customer, items, sauceTemperatur
       accessCode: customer.accessCode || '',
       location: customer.location,
       navigationLinks,
-      items,
+      items: orderItems,
       sauceTemperature: sauceTemperature === 'FRIO' ? 'FRIO' : 'CALIENTE',
       appliedPromo: resolvedPromo,
       total,
       status: ORDER_STATUS.RECIBIDO
     });
 
-    await discountInventoryForOrder(items, order._id, user);
+    await discountInventoryForOrder(orderItems, order._id, user);
     await publishOrderRealtimeEvent(order);
     notifyAdminNewOrder(order).catch((emailError) => {
       console.error('No se pudo enviar correo de nuevo pedido:', emailError.message);
