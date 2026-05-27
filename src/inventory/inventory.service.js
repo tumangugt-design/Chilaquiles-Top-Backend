@@ -7,6 +7,17 @@ const normalizeName = (value = '') => value.trim().toLowerCase()
 
 const normalizeUnit = (value = '') => String(value || '').trim().toLowerCase()
 
+
+const normalizeOptionValue = (value = '') => String(value || '').trim().toUpperCase().replace(/\s+/g, '_')
+
+const normalizeComplementValue = (value = '') => {
+  const normalized = normalizeOptionValue(value)
+  if (normalized === 'CEBOLLA_CARAMELIZADA') return 'CEBOLLA_CARAMELIZADA'
+  if (normalized === 'QUESO_EXTRA') return 'QUESO_EXTRA'
+  if (normalized === 'AGUACATE') return 'AGUACATE'
+  return normalized
+}
+
 const UNIT_ALIASES = {
   g: 'g',
   gramo: 'g',
@@ -65,33 +76,37 @@ export const convertAmountToCatalogUnit = (amount, inputUnit, catalogUnit) => {
 }
 
 const getConsumptionForItem = (item) => {
+  const sauce = normalizeOptionValue(item.sauce)
+  const protein = normalizeOptionValue(item.protein)
+  const complement = normalizeComplementValue(item.complement)
+
   const consumption = {
     totopos: DEFAULT_RECIPE_CONSUMPTION['totopos'],
     queso: DEFAULT_RECIPE_CONSUMPTION['queso'],
   }
 
-  if (item.sauce === 'ROJA') {
+  if (sauce === 'ROJA') {
     consumption['salsa roja'] = DEFAULT_RECIPE_CONSUMPTION['salsa roja']
     consumption['plato de 8 onz'] = 1
     consumption['tapadera de 8 onz'] = 1
-  } else if (item.sauce === 'VERDE') {
+  } else if (sauce === 'VERDE') {
     consumption['salsa verde'] = DEFAULT_RECIPE_CONSUMPTION['salsa verde']
     consumption['plato de 8 onz'] = 1
     consumption['tapadera de 8 onz'] = 1
-  } else if (item.sauce === 'DIVORCIADOS') {
+  } else if (sauce === 'DIVORCIADOS') {
     consumption['salsa roja'] = DEFAULT_RECIPE_CONSUMPTION['salsa roja'] / 2
     consumption['salsa verde'] = DEFAULT_RECIPE_CONSUMPTION['salsa verde'] / 2
     consumption['plato de 4 onz'] = 2
     consumption['tapadera de 4 onz'] = 2
   }
 
-  if (item.protein === 'STEAK') consumption['steak'] = DEFAULT_RECIPE_CONSUMPTION['steak']
-  if (item.protein === 'POLLO') consumption['pollo'] = DEFAULT_RECIPE_CONSUMPTION['pollo']
-  if (item.protein === 'CHORIZO') consumption['chorizo'] = DEFAULT_RECIPE_CONSUMPTION['chorizo']
+  if (protein === 'STEAK') consumption['steak'] = DEFAULT_RECIPE_CONSUMPTION['steak']
+  if (protein === 'POLLO') consumption['pollo'] = DEFAULT_RECIPE_CONSUMPTION['pollo']
+  if (protein === 'CHORIZO') consumption['chorizo'] = DEFAULT_RECIPE_CONSUMPTION['chorizo']
 
-  if (item.complement === 'AGUACATE') consumption['aguacate'] = DEFAULT_RECIPE_CONSUMPTION['aguacate']
-  if (item.complement === 'CEBOLLA_CARAMELIZADA') consumption['cebolla caramelizada'] = DEFAULT_RECIPE_CONSUMPTION['cebolla caramelizada']
-  if (item.complement === 'QUESO_EXTRA') consumption['queso extra'] = DEFAULT_RECIPE_CONSUMPTION['queso extra']
+  if (complement === 'AGUACATE') consumption['aguacate'] = DEFAULT_RECIPE_CONSUMPTION['aguacate']
+  if (complement === 'CEBOLLA_CARAMELIZADA') consumption['cebolla caramelizada'] = DEFAULT_RECIPE_CONSUMPTION['cebolla caramelizada']
+  if (complement === 'QUESO_EXTRA') consumption['queso extra'] = DEFAULT_RECIPE_CONSUMPTION['queso extra']
 
   if (item.baseRecipe?.onion) consumption['cebolla'] = DEFAULT_RECIPE_CONSUMPTION['cebolla']
   if (item.baseRecipe?.cilantro) consumption['cilantro'] = DEFAULT_RECIPE_CONSUMPTION['cilantro']

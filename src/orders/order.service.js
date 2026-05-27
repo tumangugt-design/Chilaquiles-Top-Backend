@@ -1,11 +1,103 @@
 
 import Order from './order.model.js';
+import Setting from '../settings/settings.model.js';
 import { buildMapsLink, calculateOrderTotal, normalizePhone } from '../helpers/order.helper.js';
 import { ORDER_STATUS, USER_ROLES, CHEF_ALLOWED_TRANSITIONS, DELIVERY_ALLOWED_TRANSITIONS } from '../helpers/constants.js';
 import { discountInventoryForOrder, validateInventoryAvailability } from '../inventory/inventory.service.js';
 import { publishOrderRealtimeEvent } from '../realtime/realtime.service.js';
-import { getGuatemalaOrderDatePrefix } from '../helpers/timezone.helper.js';
+import { getGuatemalaOrderDatePrefix, getGuatemalaParts } from '../helpers/timezone.helper.js';
 import { notifyAdminNewOrder } from '../helpers/email.helper.js';
+
+
+const normalizeSelection = (value = '') => String(value || '').trim().toUpperCase().replace(/\s+/g, '_');
+
+const normalizeComplementSelection = (value = '') => {
+  const normalized = normalizeSelection(value);
+  if (normalized === 'CEBOLLA_CARAMELIZADA') return 'CEBOLLA_CARAMELIZADA';
+  if (normalized === 'QUESO_EXTRA') return 'QUESO_EXTRA';
+  if (normalized === 'AGUACATE') return 'AGUACATE';
+  return normalized;
+};
+
+const normalizePromoConstraint = (promo = {}, field) => {
+  const raw = promo?.constraints?.[field] ?? promo?.[field] ?? 'ALL';
+  if (field === 'complement') return normalizeComplementSelection(raw) || 'ALL';
+  return normalizeSelection(raw) || 'ALL';
+};
+
+const promoConstraintAllows = (promo = {}, field, value) => {
+  const constraint = normalizePromoConstraint(promo, field);
+  if (!constraint || constraint === 'ALL') return true;
+
+  const normalizedValue = field === 'complement'
+    ? normalizeComplementSelection(value)
+    : normalizeSelection(value);
+
+  return constraint === normalizedValue;
+};
+
+const throwPromoError = (message) => {
+  const error = new Error(message);
+  error.statusCode = 400;
+  throw error;
+};
+
+const getTodayGuatemalaString = () => getGuatemalaParts().dateString;
+
+const resolveAppliedPromotion = async ({ requestedPromo, items }) => {
+  if (!requestedPromo?.id) return null;
+
+  const promosSetting = await Setting.findOne({ key: 'promotions' });
+  const promotions = Array.isArray(promosSetting?.value) ? promosSetting.value : [];
+  const promo = promotions.find((item) => String(item.id) === String(requestedPromo.id));
+
+  if (!promo) throwPromoError('La promoción seleccionada ya no existe.');
+  if (!promo.isActive) throwPromoError('La promoción seleccionada no está activa.');
+
+  const today = getTodayGuatemalaString();
+  if (promo.startDate && today < promo.startDate) throwPromoError('La promoción todavía no está disponible.');
+  if (promo.endDate && today > promo.endDate) throwPromoError('La promoción ya finalizó.');
+
+  const requestedCount = Number(promo.requestedCount || promo.platesCount || promo.quantity || 2);
+  const promoPrice = Number(promo.promoPrice ?? promo.price ?? 0);
+
+  if (!requestedCount || Number.isNaN(requestedCount) || requestedCount < 1) {
+    throwPromoError('La promoción no tiene una cantidad válida de platos.');
+  }
+
+  if (!promoPrice || Number.isNaN(promoPrice) || promoPrice <= 0) {
+    throwPromoError('La promoción no tiene un precio válido.');
+  }
+
+  if (items.length !== requestedCount) {
+    throwPromoError(`La promoción requiere exactamente ${requestedCount} plato(s).`);
+  }
+
+  items.forEach((item, index) => {
+    const plateNumber = index + 1;
+    if (!promoConstraintAllows(promo, 'sauce', item.sauce)) {
+      throwPromoError(`El plato ${plateNumber} no cumple con la salsa permitida por la promoción.`);
+    }
+    if (!promoConstraintAllows(promo, 'protein', item.protein)) {
+      throwPromoError(`El plato ${plateNumber} no cumple con la proteína permitida por la promoción.`);
+    }
+    if (!promoConstraintAllows(promo, 'complement', item.complement)) {
+      throwPromoError(`El plato ${plateNumber} no cumple con el complemento permitido por la promoción.`);
+    }
+  });
+
+  return {
+    id: promo.id,
+    name: promo.name || 'Promoción',
+    promoPrice,
+    requestedCount,
+    constraints: {
+      sauce: normalizePromoConstraint(promo, 'sauce'),
+      protein: normalizePromoConstraint(promo, 'protein'),
+      complement: normalizePromoConstraint(promo, 'complement'),
+    }
+  };
+};
 
 const buildNavigationLinks = (location) => {
   if (!location || typeof location.lat !== 'number' || typeof location.lng !== 'number') {
@@ -41,8 +133,9 @@ const baseHistoryQuery = () => Order.find()
   .populate('chefId', 'name phone email photoUrl role status')
   .populate('repartidorId', 'name phone email photoUrl role status');
 
-export const createOrderRecord = async ({ user, customer, items }) => {
-  const total = calculateOrderTotal(items.length);
+export const createOrderRecord = async ({ user, customer, items, sauceTemperature, appliedPromo }) => {
+  const resolvedPromo = await resolveAppliedPromotion({ requestedPromo: appliedPromo, items });
+  const total = resolvedPromo ? resolvedPromo.promoPrice : calculateOrderTotal(items.length);
   const navigationLinks = buildNavigationLinks(customer.location);
   const orderNumber = await generateOrderNumber();
 
@@ -75,6 +168,8 @@ export const createOrderRecord = async ({ user, customer, items }) => {
       location: customer.location,
       navigationLinks,
       items,
+      sauceTemperature: sauceTemperature === 'FRIO' ? 'FRIO' : 'CALIENTE',
+      appliedPromo: resolvedPromo,
       total,
       status: ORDER_STATUS.RECIBIDO
     });
