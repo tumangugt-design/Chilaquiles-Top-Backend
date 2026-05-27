@@ -9,4 +9,4 @@ const botMemorySchema = new mongoose.Schema({
   }]
 }, { timestamps: true });
 
-export default mongoose.model('BotMemory', botMemorySchema);
+export default mongoose.models.BotMemory || mongoose.model('BotMemory', botMemorySchema);
