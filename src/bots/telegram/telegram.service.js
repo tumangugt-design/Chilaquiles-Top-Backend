@@ -1,85 +1,142 @@
 import Order from '../../orders/order.model.js';
 import Inventory from '../../inventory/inventory.model.js';
-import { isOperatingNow } from '../../settings/settings.service.js';
+import { isOperatingNow, getOperatingHoursSetting } from '../../settings/settings.service.js';
 import { getAdminAICompletion, prepareAdminBotContext } from './telegram.ai.js';
+import BotMemory from './bot_memory.model.js';
 
 /**
  * Obtiene el estado actual de la base de datos para pasárselo al LLM en cada consulta.
  * Como el LLM (Gemini) tiene ventana de contexto grande y esto es de uso administrativo,
  * es mejor pasarle toda la información relevante activa.
  */
-const fetchContextData = async (text) => {
-  let dataContext = '';
+import Order from '../../orders/order.model.js';
+import Inventory from '../../inventory/inventory.model.js';
+import { isOperatingNow, getOperatingHoursSetting } from '../../settings/settings.service.js';
+import { getAdminAICompletion, prepareAdminBotContext } from './telegram.ai.js';
+import BotMemory from './bot_memory.model.js';
 
+const fetchContextData = async () => {
   try {
-    // 1. Obtener TODOS los pedidos pendientes
-    const pendingOrders = await Order.find({ status: { $ne: 'entregado' } })
-      .select('orderNumber status total name items createdAt');
-    
-    dataContext += `[PEDIDOS PENDIENTES (Total: ${pendingOrders.length})]\n`;
-    pendingOrders.forEach(o => {
-      dataContext += `- Pedido ${o.orderNumber}: Estado=${o.status}, Total=Q${o.total}, Cliente=${o.name}\n`;
-    });
-    dataContext += '\n';
-
-    // 2. Obtener TODO el inventario activo
-    const allItems = await Inventory.find({ isActive: true });
-    dataContext += `[INVENTARIO Y STOCK ACTUAL]\n`;
-    allItems.forEach(item => {
-      dataContext += `- ${item.name}: ${item.stock} ${item.unit} (Mínimo: ${item.minimumStock})\n`;
-    });
-    dataContext += '\n';
-
-    // 3. Obtener resumen de ventas del día
     const today = new Date();
     today.setHours(0, 0, 0, 0);
-    const recentOrders = await Order.find({ createdAt: { $gte: today }, status: 'entregado' });
-    const totalSales = recentOrders.reduce((sum, o) => sum + (o.total || 0), 0);
-    
-    dataContext += `[VENTAS Y ENTREGAS DE HOY]\n`;
-    dataContext += `- Pedidos completados/entregados hoy: ${recentOrders.length}\n`;
-    dataContext += `- Ingresos totales hoy: Q${totalSales}\n`;
-    // 4. Obtener horario y estado de apertura actual
+    const pendingOrders = await Order.countDocuments({ status: { $ne: 'entregado' } });
+    const todayDelivered = await Order.countDocuments({ createdAt: { $gte: today }, status: 'entregado' });
     const operatingHours = await isOperatingNow();
-    dataContext += `[HORARIO Y ESTADO DEL RESTAURANTE]\n`;
-    if (operatingHours.isOpen) {
-      dataContext += `- Estado Actual: ${operatingHours.isCurrentlyOpen ? 'ABIERTO' : 'CERRADO'}\n`;
-      dataContext += `- Horario de hoy: ${operatingHours.openTime} a ${operatingHours.closeTime}\n`;
-    } else {
-      dataContext += `- Estado Actual: CERRADO todo el día.\n`;
-    }
-
+    
+    return `Estado Actual: ${operatingHours.isCurrentlyOpen ? 'ABIERTO' : 'CERRADO'}. Pedidos Pendientes: ${pendingOrders}. Entregados hoy: ${todayDelivered}. Fecha/Hora actual servidor: ${new Date().toLocaleString('es-GT', { timeZone: 'America/Guatemala' })}`;
   } catch (err) {
-    console.error('Error fetching context data for Telegram Bot:', err);
-    dataContext = 'Hubo un error obteniendo los datos de la base de datos. Pide al admin que revise los logs.';
+    return 'Error obteniendo contexto básico.';
   }
-
-  return dataContext;
 };
 
-/**
- * Procesa un mensaje de texto para el bot administrativo
- */
-export const processAdminMessage = async (text) => {
+const executeTool = async (toolCall) => {
+  const name = toolCall.function.name;
+  let args = {};
   try {
-    // 1. Recopilar datos del backend basados en la pregunta
-    const backendData = await fetchContextData(text);
+    args = JSON.parse(toolCall.function.arguments);
+  } catch (e) {
+    return "Error: Invalid JSON arguments.";
+  }
 
-    // 2. Preparar el prompt
+  try {
+    if (name === 'getOrders') {
+      const filter = {};
+      if (args.startDate || args.endDate) {
+        filter.createdAt = {};
+        if (args.startDate) filter.createdAt.$gte = new Date(args.startDate);
+        if (args.endDate) filter.createdAt.$lte = new Date(args.endDate);
+      }
+      if (args.status) filter.status = args.status;
+      if (args.customerName) filter.name = { $regex: args.customerName, $options: 'i' };
+      
+      const limit = args.limit ? Math.min(args.limit, 500) : 100;
+      const orders = await Order.find(filter).sort({ createdAt: -1 }).limit(limit).lean();
+      return JSON.stringify(orders);
+    }
+    else if (name === 'getInventory') {
+      const filter = args.itemName ? { name: { $regex: args.itemName, $options: 'i' } } : {};
+      const items = await Inventory.find(filter).lean();
+      return JSON.stringify(items);
+    }
+    else if (name === 'getSettings') {
+      const operatingHours = await isOperatingNow();
+      const fullSettings = await getOperatingHoursSetting();
+      return JSON.stringify({ operatingHours, fullSettings });
+    }
+    else {
+      return `Error: Tool ${name} not found.`;
+    }
+  } catch (err) {
+    console.error('Error executing tool:', err);
+    return `Error ejecutando ${name}: ${err.message}`;
+  }
+};
+
+export const processAdminMessage = async (text, chatId) => {
+  try {
+    const backendData = await fetchContextData();
     const systemPrompt = prepareAdminBotContext(backendData);
 
-    // 3. Construir mensajes para la IA
+    let memory = await BotMemory.findOne({ chatId: chatId.toString() });
+    if (!memory) {
+      memory = new BotMemory({ chatId: chatId.toString(), messages: [] });
+    }
+    
+    // Preparar historial
+    let history = memory.messages.map(m => ({ role: m.role, content: m.content }));
+    if (history.length > 10) history = history.slice(-10);
+
     const messages = [
       { role: 'system', content: systemPrompt },
+      ...history,
       { role: 'user', content: text }
     ];
 
-    // 4. Obtener la respuesta de la IA
-    const aiResponse = await getAdminAICompletion(messages);
+    let finalResponse = "Lo siento, no pude completar el análisis.";
+    let iterations = 0;
+    const maxIterations = 4; // Límite para evitar bucles infinitos
+
+    while (iterations < maxIterations) {
+      iterations++;
+      console.log(`[Agent] Iteration ${iterations}...`);
+      
+      const aiMessage = await getAdminAICompletion(messages);
+      
+      // Si hay tool calls, ejecutamos
+      if (aiMessage.tool_calls && aiMessage.tool_calls.length > 0) {
+        messages.push(aiMessage); // Agregamos la llamada al historial temporal
+
+        for (const toolCall of aiMessage.tool_calls) {
+          console.log(`[Agent] Executing tool: ${toolCall.function.name}`);
+          const result = await executeTool(toolCall);
+          
+          messages.push({
+            role: 'tool',
+            tool_call_id: toolCall.id,
+            content: result
+          });
+        }
+      } else {
+        // Respuesta final de texto
+        finalResponse = aiMessage.content;
+        break;
+      }
+    }
+
+    // Guardar SOLO el texto inicial del usuario y la respuesta final en la BD para evitar romper el schema
+    memory.messages.push({ role: 'user', content: text });
+    if (finalResponse) {
+      memory.messages.push({ role: 'assistant', content: finalResponse });
+    }
     
-    return aiResponse;
+    if (memory.messages.length > 12) {
+      memory.messages = memory.messages.slice(-12);
+    }
+    await memory.save();
+
+    return finalResponse || "Análisis completado sin comentarios adicionales.";
   } catch (error) {
-    console.error('Error in Admin Bot Service:', error);
-    return 'Ocurrió un error al procesar tu solicitud.';
+    console.error('Error in Admin Agent Loop:', error);
+    return 'Ocurrió un error al procesar tu solicitud como agente inteligente.';
   }
 };

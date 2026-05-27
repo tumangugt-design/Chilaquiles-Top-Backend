@@ -1,5 +1,46 @@
-
-
+export const AI_TOOLS = [
+  {
+    type: "function",
+    function: {
+      name: "getOrders",
+      description: "Busca pedidos en la base de datos. Úsala para responder sobre historial de ventas, ingresos, pedidos pasados o stock gastado (analizando los items de los pedidos).",
+      parameters: {
+        type: "object",
+        properties: {
+          startDate: { type: "string", description: "Fecha de inicio en formato ISO (ej: 2026-05-15T00:00:00.000Z)" },
+          endDate: { type: "string", description: "Fecha de fin en formato ISO (ej: 2026-05-27T23:59:59.999Z)" },
+          status: { type: "string", description: "Estado exacto del pedido (ej: 'entregado', 'pendiente', 'cancelado')" },
+          customerName: { type: "string", description: "Nombre del cliente a buscar" },
+          limit: { type: "number", description: "Límite de resultados (máximo 500)." }
+        }
+      }
+    }
+  },
+  {
+    type: "function",
+    function: {
+      name: "getInventory",
+      description: "Obtiene el inventario actual para consultar stock.",
+      parameters: {
+        type: "object",
+        properties: {
+          itemName: { type: "string", description: "Nombre del ingrediente a buscar (ej: pollo)" }
+        }
+      }
+    }
+  },
+  {
+    type: "function",
+    function: {
+      name: "getSettings",
+      description: "Obtiene la configuración del sistema como los horarios de apertura y días de cierre históricos.",
+      parameters: {
+        type: "object",
+        properties: {}
+      }
+    }
+  }
+];
 
 export const getAdminAICompletion = async (messages) => {
   const apiKey = process.env.OPEN_ROUTER_APIKEY;
@@ -16,7 +57,8 @@ export const getAdminAICompletion = async (messages) => {
       },
       body: JSON.stringify({
         model: model,
-        messages: messages
+        messages: messages,
+        tools: AI_TOOLS
       })
     });
 
@@ -24,28 +66,27 @@ export const getAdminAICompletion = async (messages) => {
 
     if (!data.choices || data.choices.length === 0) {
       console.error('OpenRouter Error Response:', JSON.stringify(data));
-      return 'Ocurrió un error al procesar tu solicitud con la IA (Respuesta vacía).';
+      return { role: 'assistant', content: 'Ocurrió un error al procesar tu solicitud con la IA (Respuesta vacía).' };
     }
 
-    return data.choices[0].message.content;
+    // Retorna el objeto de mensaje completo (puede incluir tool_calls)
+    return data.choices[0].message;
   } catch (error) {
     console.error('Error with OpenRouter:', error);
-    return 'Hubo un error de conexión con el proveedor de IA. Revisa los logs para más detalles.';
+    return { role: 'assistant', content: 'Hubo un error de conexión con el proveedor de IA. Revisa los logs.' };
   }
 };
 
 export const prepareAdminBotContext = (backendData) => {
-  const systemPrompt = `Eres el Asistente Administrativo de "Chilaquiles TOP". 
-Tu tarea es ayudar a los dueños o administradores con la información del negocio de forma amigable, cálida y servicial.
+  return `Eres el Asistente Administrativo Experto de "Chilaquiles TOP". 
+Tu tarea es ayudar a los dueños o administradores con la información del negocio de forma precisa y servicial.
 
-REGLAS DE RESPUESTA:
-1. Sé muy amable y humano. Puedes saludar y dar la bienvenida si el usuario te saluda o inicia la conversación (ej. con /start).
-2. Responde ÚNICAMENTE a lo que se te pregunta. No des información adicional que no haya sido solicitada.
-3. NUNCA inventes información. Si te preguntan algo y no tienes los datos exactos en la sección "DATOS DISPONIBLES", dile amablemente que no tienes esa información en este momento.
-4. Mantén las respuestas claras y estructuradas, usando emojis de forma profesional y amigable.
+REGLAS DE AGENTE:
+1. Eres un agente inteligente. NO intentes inventar datos. Si el usuario te pregunta por estadísticas, fechas específicas, pedidos pasados, ingresos, o inventario, **DEBES usar las herramientas (funciones) disponibles para buscar los datos reales en la base de datos**.
+2. Si un usuario pide algo que requiere consultar múltiples días o stock consumido, usa "getOrders" para traer esos pedidos y luego suma sus ingredientes o totales tú mismo antes de responderle al usuario.
+3. MANTÉN EL CONTEXTO: Recuerda lo que te dijeron en la conversación. Si te dicen "recuerdas lo que hablamos de pedidos", se refieren al contexto de la charla actual.
+4. Sé amigable y profesional.
 
-DATOS DISPONIBLES (obtenidos de la base de datos para esta pregunta):
-${backendData || 'Ningún dato del sistema requerido para esta interacción.'}`;
-
-  return systemPrompt;
+CONTEXTO ACTUAL DEL SISTEMA (Día de hoy):
+${backendData}`;
 };

@@ -50,7 +50,7 @@ export const initTelegramBot = () => {
       await bot.sendChatAction(chatId, 'typing');
 
       console.log(`[Telegram Bot] Recibido mensaje de texto: "${text}"`);
-      const response = await processAdminMessage(text);
+      const response = await processAdminMessage(text, chatId);
       
       await bot.sendMessage(chatId, response, { parse_mode: 'Markdown' });
     } catch (error) {
