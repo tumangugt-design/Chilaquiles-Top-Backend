@@ -1,5 +1,12 @@
 import { Router } from 'express'
-import { getOperatingHours, updateOperatingHours, getPromotions, updatePromotions } from './settings.controller.js'
+import { 
+  getOperatingHours, 
+  updateOperatingHours, 
+  getPromotions, 
+  updatePromotions,
+  getCalculatorCosts,
+  updateCalculatorCosts
+} from './settings.controller.js'
 import { verifyAuthToken } from '../middlewares/auth.middleware.js'
 import { requireApprovedStatus, requireRole } from '../middlewares/role.middleware.js'
 import { USER_ROLES } from '../helpers/constants.js'
@@ -11,5 +18,8 @@ router.patch('/operating-hours', verifyAuthToken, requireApprovedStatus, require
 
 router.get('/promotions', getPromotions)
 router.patch('/promotions', verifyAuthToken, requireApprovedStatus, requireRole([USER_ROLES.ADMIN]), updatePromotions)
+
+router.get('/calculator-costs', getCalculatorCosts)
+router.patch('/calculator-costs', verifyAuthToken, requireApprovedStatus, requireRole([USER_ROLES.ADMIN]), updateCalculatorCosts)
 
 export default router
