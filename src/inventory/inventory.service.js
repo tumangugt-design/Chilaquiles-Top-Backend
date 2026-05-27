@@ -259,15 +259,31 @@ export const getAvailablePlatesCount = async () => {
   return Math.max(0, Math.min(...limits))
 }
 
-export const manualStockAdjustment = async ({ name, amount, type, price, actor, reason }) => {
+export const manualStockAdjustment = async ({
+  name,
+  amount,
+  type,
+  price,
+  totalPrice,
+  portionPrice,
+  inputAmount,
+  inputUnit,
+  storedUnit,
+  actor,
+  reason
+}) => {
   const normalized = normalizeName(name)
   const numericAmount = Number(amount)
+  const movementType = type || (numericAmount > 0 ? 'IN' : 'ADJUSTMENT')
   const updateQuery = { $inc: { stock: numericAmount } }
-  const hasFixedPrice = price !== undefined && price !== null && price !== ''
-  const fixedPrice = hasFixedPrice ? round(Number(price)) : undefined
-  
-  if (hasFixedPrice) {
-    updateQuery.$set = { lastPrice: fixedPrice }
+
+  const hasPortionPrice = portionPrice !== undefined && portionPrice !== null && portionPrice !== '' && !Number.isNaN(Number(portionPrice))
+  const normalizedPortionPrice = hasPortionPrice ? round(Number(portionPrice)) : undefined
+
+  // lastPrice SIEMPRE representa el costo de la porción usada por plato,
+  // no el costo total de la compra. Así promociones puede calcular correctamente.
+  if (hasPortionPrice) {
+    updateQuery.$set = { lastPrice: normalizedPortionPrice }
   }
 
   const previousItem = await Inventory.findOneAndUpdate(
@@ -281,13 +297,24 @@ export const manualStockAdjustment = async ({ name, amount, type, price, actor, 
   }
 
   const newStock = round(Number(previousItem.stock || 0) + numericAmount)
+  const normalizedTotalPrice = totalPrice !== undefined && totalPrice !== null && totalPrice !== '' && !Number.isNaN(Number(totalPrice))
+    ? round(Number(totalPrice))
+    : (price !== undefined && price !== null && price !== '' && !Number.isNaN(Number(price)) ? round(Number(price)) : 0)
+  const storedAmount = Math.abs(numericAmount)
 
   await InventoryLog.create({
     ingredient: previousItem._id,
     ingredientName: previousItem.name,
-    type: type || (numericAmount > 0 ? 'IN' : 'ADJUSTMENT'),
-    amount: Math.abs(numericAmount),
-    price: hasFixedPrice ? fixedPrice : 0,
+    type: movementType,
+    amount: storedAmount,
+    price: normalizedTotalPrice,
+    inputAmount: inputAmount !== undefined && inputAmount !== null && inputAmount !== '' ? Number(inputAmount) : null,
+    inputUnit: inputUnit || null,
+    storedAmount,
+    storedUnit: storedUnit || previousItem.unit || null,
+    totalPrice: normalizedTotalPrice || null,
+    portionPrice: hasPortionPrice ? normalizedPortionPrice : null,
+    unitPrice: storedAmount > 0 && normalizedTotalPrice > 0 ? round(normalizedTotalPrice / storedAmount) : null,
     previousStock: previousItem.stock,
     newStock,
     userId: actor?._id,
@@ -295,7 +322,7 @@ export const manualStockAdjustment = async ({ name, amount, type, price, actor, 
     reason: reason || 'Ajuste manual'
   })
 
-  return { ...previousItem.toObject(), stock: newStock, lastPrice: hasFixedPrice ? fixedPrice : previousItem.lastPrice }
+  return { ...previousItem.toObject(), stock: newStock, lastPrice: hasPortionPrice ? normalizedPortionPrice : previousItem.lastPrice }
 }
 
 export const toggleInventoryItem = async (id, isActive) => {
