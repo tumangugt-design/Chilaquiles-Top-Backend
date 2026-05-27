@@ -17,6 +17,11 @@ const botMemorySchema = new mongoose.Schema({
   context: {
     type: Object,
     default: {}
+  },
+  securityFlags: {
+    totalFlags: { type: Number, default: 0 },
+    lastFlagAt: Date,
+    isQuarantined: { type: Boolean, default: false }
   }
 }, { timestamps: true });
 
