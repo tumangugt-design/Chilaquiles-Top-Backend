@@ -3,6 +3,7 @@ import Inventory from '../../inventory/inventory.model.js';
 import { isOperatingNow, getOperatingHoursSetting } from '../../settings/settings.service.js';
 import { getAdminAICompletion, prepareAdminBotContext } from './telegram.ai.js';
 import TelegramBotMemory from './bot_memory.model.js';
+import { getFinancialSummary } from '../../finances/finances.service.js';
 
 const fetchContextData = async () => {
   try {
@@ -28,14 +29,27 @@ const executeTool = async (toolCall) => {
   }
 
   try {
-    if (name === 'getOrders') {
+    if (name === 'getFinancialSummary') {
+      // Use the EXACT same function the admin dashboard uses — guarantees identical numbers
+      const summary = await getFinancialSummary();
+      return JSON.stringify({
+        note: "ESTOS DATOS SON EXACTOS Y PROVIENEN DEL MISMO CÁLCULO QUE EL PANEL ADMINISTRATIVO. Usa estos números directamente.",
+        ...summary
+      });
+    }
+    else if (name === 'getOrders') {
       const filter = {};
       if (args.startDate || args.endDate) {
         filter.createdAt = {};
         if (args.startDate) filter.createdAt.$gte = new Date(args.startDate);
-        if (args.endDate) filter.createdAt.$lte = new Date(args.endDate);
+        if (args.endDate) filter.createdAt.$lt = new Date(args.endDate);
       }
-      if (args.status) filter.status = args.status;
+      // Exclude cancelled orders by default (same as dashboard), unless specifically requested
+      if (args.status) {
+        filter.status = args.status;
+      } else {
+        filter.status = { $ne: 'cancelado' };
+      }
       if (args.customerName) filter.name = { $regex: args.customerName, $options: 'i' };
       
       const limit = args.limit ? Math.min(args.limit, 500) : 100;
