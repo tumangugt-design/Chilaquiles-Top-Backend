@@ -52,7 +52,13 @@ export const initTelegramBot = () => {
       console.log(`[Telegram Bot] Recibido mensaje de texto: "${text}"`);
       const response = await processAdminMessage(text, chatId);
       
-      await bot.sendMessage(chatId, response, { parse_mode: 'Markdown' });
+      // Intentar enviar con Markdown; si Telegram lo rechaza por formato inválido, reenviar como texto plano
+      try {
+        await bot.sendMessage(chatId, response, { parse_mode: 'Markdown' });
+      } catch (markdownError) {
+        console.warn('[Telegram Bot] Markdown rechazado por Telegram, reenviando como texto plano.');
+        await bot.sendMessage(chatId, response);
+      }
     } catch (error) {
       console.error('[Telegram Bot] Error procesando texto:', error);
       bot.sendMessage(chatId, 'Ocurrió un error técnico procesando tu solicitud.');
