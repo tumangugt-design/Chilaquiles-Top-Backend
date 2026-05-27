@@ -1,5 +1,5 @@
 
-import { listUsersByRole, createLocalStaffUser, updateStaffUser, deleteUser } from './user.service.js';
+import { listUsersByRole, createLocalStaffUser, updateStaffUser, deleteUser, findCustomerProfileByPhone } from './user.service.js';
 
 export const createStaffUser = async (req, res) => {
   try {
@@ -54,3 +54,13 @@ export const updateProfile = async (req, res) => {
   }
 };
 
+
+
+export const getCustomerByPhone = async (req, res) => {
+  try {
+    const customer = await findCustomerProfileByPhone(req.params.phone);
+    return res.status(200).json({ customer });
+  } catch (error) {
+    return res.status(500).json({ message: 'Error al buscar cliente por teléfono', error: error.message });
+  }
+};

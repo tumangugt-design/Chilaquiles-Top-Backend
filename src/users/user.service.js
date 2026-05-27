@@ -55,6 +55,32 @@ const consolidateClientUsersByPhone = async ({ users, normalizedPhone, name, add
   return primaryUser
 }
 
+
+export const findCustomerProfileByPhone = async (phone) => {
+  const { normalizedPhone, phoneConditions } = buildPhoneMatchQuery(phone)
+  if (!normalizedPhone || phoneConditions.length === 0) return null
+
+  const [user, lastOrder] = await Promise.all([
+    User.findOne({ role: USER_ROLES.CLIENT, $or: phoneConditions })
+      .sort({ updatedAt: -1, createdAt: -1 })
+      .lean(),
+    Order.findOne({ $or: phoneConditions })
+      .sort({ createdAt: -1 })
+      .lean(),
+  ])
+
+  if (!user && !lastOrder) return null
+
+  return {
+    phone: normalizedPhone,
+    name: lastOrder?.name || user?.name || '',
+    address: lastOrder?.address || user?.address || '',
+    accessCode: lastOrder?.accessCode || '',
+    // La ubicación no se precarga a propósito: el cliente/admin debe verificarla en cada pedido.
+    location: null,
+  }
+}
+
 export const upsertGuestClientUser = async ({ phone, name, address, location }) => {
   const { normalizedPhone, phoneConditions } = buildPhoneMatchQuery(phone)
 

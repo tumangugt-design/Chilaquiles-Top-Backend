@@ -1,6 +1,6 @@
 import { USER_ROLES } from '../helpers/constants.js'
 import { signLocalToken } from '../helpers/token.helper.js'
-import { authenticateLocalStaffUser, createLocalStaffUser } from '../users/user.service.js'
+import { authenticateLocalStaffUser, createLocalStaffUser, findCustomerProfileByPhone } from '../users/user.service.js'
 import { generateAndSendOTP, verifyOTP } from './otp.service.js'
 
 const JWT_SECRET = process.env.APP_JWT_SECRET || 'change-me-please'
@@ -68,7 +68,9 @@ export const verifyOTPController = async (req, res) => {
       return res.status(400).json({ message: 'Código inválido o expirado' })
     }
 
-    return res.status(200).json({ message: 'Verificado correctamente' })
+    const customer = await findCustomerProfileByPhone(phone)
+
+    return res.status(200).json({ message: 'Verificado correctamente', customer })
   } catch (error) {
     return res.status(500).json({ message: error.message })
   }
