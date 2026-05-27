@@ -1,5 +1,19 @@
 import { Router } from 'express';
-import { getInventoryItems, saveInventoryItem, deleteInventoryItem, adjustInventoryStock, previewRecipeConsumption, getInventoryLogs, getAvailablePlates, getPublicInventoryOptions, toggleInventoryItemStatus, syncInventory, updateInventoryItemPrice, updateInventoryItemStock } from './inventory.controller.js';
+import { 
+  getInventoryItems, 
+  saveInventoryItem, 
+  deleteInventoryItem, 
+  adjustInventoryStock, 
+  previewRecipeConsumption, 
+  getInventoryLogs, 
+  getAvailablePlates, 
+  getPublicInventoryOptions, 
+  toggleInventoryItemStatus, 
+  syncInventory, 
+  updateInventoryItemPrice, 
+  updateInventoryItemStock,
+  getLastPurchases
+} from './inventory.controller.js';
 import { verifyAuthToken } from '../middlewares/auth.middleware.js';
 import { requireApprovedStatus, requireRole } from '../middlewares/role.middleware.js';
 import { USER_ROLES } from '../helpers/constants.js';
@@ -12,6 +26,7 @@ router.get('/public-options', getPublicInventoryOptions);
 router.use(verifyAuthToken, requireApprovedStatus);
 router.get('/', requireRole([USER_ROLES.ADMIN, USER_ROLES.CHEF]), getInventoryItems);
 router.get('/logs', requireRole([USER_ROLES.ADMIN]), getInventoryLogs);
+router.get('/last-purchases', requireRole([USER_ROLES.ADMIN]), getLastPurchases);
 router.post('/', requireRole([USER_ROLES.ADMIN]), saveInventoryItem);
 router.post('/sync', requireRole([USER_ROLES.ADMIN]), syncInventory);
 router.delete('/:name', requireRole([USER_ROLES.ADMIN]), deleteInventoryItem);

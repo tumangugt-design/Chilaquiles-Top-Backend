@@ -342,3 +342,46 @@ export const syncInventory = async (req, res) => {
     return res.status(500).json({ message: 'Error sincronizando inventario', error: error.message });
   }
 }
+
+export const getLastPurchases = async (req, res) => {
+  try {
+    const items = await Inventory.find()
+    const results = {}
+    for (const item of items) {
+      const lastLog = await InventoryLog.findOne({
+        ingredientName: item.name,
+        type: 'IN'
+      }).sort({ createdAt: -1 })
+      
+      if (lastLog) {
+        const regex = /Entrada de inventario:\s*([\d.]+)\s*(\w+)\s*→.*?\|\s*Costo Total\s*Q([\d.]+)/i
+        const match = lastLog.reason?.match(regex)
+        if (match) {
+          const rawUnit = match[2].toLowerCase()
+          const unitMap = {
+            lbs: 'lb',
+            lb: 'lb',
+            ltrs: 'l',
+            l: 'l',
+            gramos: 'g',
+            g: 'g',
+            unidad: 'und',
+            und: 'und',
+            ml: 'ml',
+            oz: 'oz'
+          }
+          const normalizedUnit = unitMap[rawUnit] || rawUnit
+          
+          results[item.name] = {
+            qty: Number(match[1]),
+            unit: normalizedUnit,
+            price: Number(match[3])
+          }
+        }
+      }
+    }
+    return res.status(200).json(results)
+  } catch (error) {
+    return res.status(500).json({ message: 'Error fetching last purchases', error: error.message })
+  }
+}
