@@ -155,4 +155,10 @@ export const seedSettings = async () => {
     await Setting.create({ key: OPERATING_HOURS_KEY, value: DEFAULT_OPERATING_HOURS })
     console.log('Settings seeded: operating-hours')
   }
+
+  const existingPromos = await Setting.findOne({ key: 'promotions' })
+  if (!existingPromos) {
+    await Setting.create({ key: 'promotions', value: [] })
+    console.log('Settings seeded: promotions')
+  }
 }
