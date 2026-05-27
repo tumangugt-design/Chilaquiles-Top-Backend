@@ -2,14 +2,25 @@ export const AI_TOOLS = [
   {
     type: "function",
     function: {
+      name: "getFinancialSummary",
+      description: "Obtiene el resumen financiero OFICIAL del negocio (ventas, costos, utilidades) desglosado por día, semana y mes. USA ESTA HERRAMIENTA SIEMPRE que te pregunten por ingresos, ventas totales, ganancias o dinero. Los datos son idénticos a los del panel administrativo.",
+      parameters: {
+        type: "object",
+        properties: {}
+      }
+    }
+  },
+  {
+    type: "function",
+    function: {
       name: "getOrders",
-      description: "Busca pedidos en la base de datos. Úsala para responder sobre historial de ventas, ingresos, pedidos pasados o stock gastado (analizando los items de los pedidos).",
+      description: "Busca pedidos individuales en la base de datos. Úsala SOLO para ver detalles de pedidos específicos, buscar por cliente, o analizar ingredientes consumidos. Para totales de ventas/ingresos usa SIEMPRE getFinancialSummary en su lugar.",
       parameters: {
         type: "object",
         properties: {
           startDate: { type: "string", description: "Fecha de inicio en formato ISO (ej: 2026-05-15T00:00:00.000Z)" },
-          endDate: { type: "string", description: "Fecha de fin en formato ISO (ej: 2026-05-27T23:59:59.999Z)" },
-          status: { type: "string", description: "Estado exacto del pedido (ej: 'entregado', 'pendiente', 'cancelado')" },
+          endDate: { type: "string", description: "Fecha de fin en formato ISO (ej: 2026-05-28T00:00:00.000Z). IMPORTANTE: este valor es EXCLUSIVO ($lt), no inclusivo." },
+          status: { type: "string", description: "Estado exacto del pedido (ej: 'entregado', 'cancelado'). Si no se especifica, se excluyen los cancelados automáticamente." },
           customerName: { type: "string", description: "Nombre del cliente a buscar" },
           limit: { type: "number", description: "Límite de resultados (máximo 500)." }
         }
@@ -83,9 +94,12 @@ Tu tarea es ayudar a los dueños o administradores con la información del negoc
 
 REGLAS DE AGENTE:
 1. Eres un agente inteligente. NO intentes inventar datos. Si el usuario te pregunta por estadísticas, fechas específicas, pedidos pasados, ingresos, o inventario, **DEBES usar las herramientas (funciones) disponibles para buscar los datos reales en la base de datos**.
-2. Si un usuario pide algo que requiere consultar múltiples días o stock consumido, usa "getOrders" para traer esos pedidos y luego suma sus ingredientes o totales tú mismo antes de responderle al usuario.
-3. MANTÉN EL CONTEXTO: Recuerda lo que te dijeron en la conversación. Si te dicen "recuerdas lo que hablamos de pedidos", se refieren al contexto de la charla actual.
-4. Sé amigable y profesional.
+2. **REGLA CRÍTICA FINANCIERA**: Para CUALQUIER pregunta sobre ventas, ingresos, ganancias, utilidades o dinero, DEBES usar la herramienta "getFinancialSummary". Esta herramienta usa EXACTAMENTE el mismo cálculo que el panel administrativo, por lo que los números siempre coinciden. NUNCA uses "getOrders" para calcular totales de dinero.
+3. **getOrders** es SOLO para: ver detalles de pedidos individuales, buscar por nombre de cliente, o analizar ingredientes/stock consumido. Cuando uses getOrders, los resultados incluyen un campo "_summary" con totales pre-calculados; usa esos valores y NUNCA intentes contar o sumar manualmente.
+4. Si un usuario pide stock consumido o detalles de ingredientes, usa "getOrders" para traer los pedidos y analiza los items de cada pedido.
+5. MANTÉN EL CONTEXTO: Recuerda lo que te dijeron en la conversación.
+6. Sé amigable y profesional.
+7. Cuando reportes montos monetarios, usa el formato Q seguido del monto (ej: Q1,910.00).
 
 CONTEXTO ACTUAL DEL SISTEMA (Día de hoy):
 ${backendData}`;
