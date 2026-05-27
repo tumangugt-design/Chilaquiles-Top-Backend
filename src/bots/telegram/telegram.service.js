@@ -2,7 +2,7 @@ import Order from '../../orders/order.model.js';
 import Inventory from '../../inventory/inventory.model.js';
 import { isOperatingNow, getOperatingHoursSetting } from '../../settings/settings.service.js';
 import { getAdminAICompletion, prepareAdminBotContext } from './telegram.ai.js';
-import BotMemory from './bot_memory.model.js';
+import TelegramBotMemory from './bot_memory.model.js';
 
 const fetchContextData = async () => {
   try {
@@ -66,9 +66,9 @@ export const processAdminMessage = async (text, chatId) => {
     const backendData = await fetchContextData();
     const systemPrompt = prepareAdminBotContext(backendData);
 
-    let memory = await BotMemory.findOne({ chatId: chatId.toString() });
+    let memory = await TelegramBotMemory.findOne({ chatId: chatId.toString() });
     if (!memory) {
-      memory = new BotMemory({ chatId: chatId.toString(), messages: [] });
+      memory = new TelegramBotMemory({ chatId: chatId.toString(), messages: [] });
     }
     
     // Preparar historial
