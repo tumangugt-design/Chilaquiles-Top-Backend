@@ -353,60 +353,137 @@ export const syncInventory = async (req, res) => {
   }
 }
 
+const normalizeEntryUnitForUi = (unit = '') => {
+  const value = String(unit || '').trim().toLowerCase()
+  const unitMap = {
+    lbs: 'lb',
+    libra: 'lb',
+    libras: 'lb',
+    lb: 'lb',
+    ltrs: 'l',
+    litros: 'l',
+    litro: 'l',
+    lt: 'l',
+    l: 'l',
+    gramos: 'g',
+    gramo: 'g',
+    g: 'g',
+    unidades: 'und',
+    unidad: 'und',
+    und: 'und',
+    ml: 'ml',
+    oz: 'oz'
+  }
+
+  return unitMap[value] || value
+}
+
+const roundMoney = (value) => Math.round(Number(value || 0) * 100) / 100
+
+const deriveTotalPurchasePrice = ({ portionPrice, amount, unit, catalogItem }) => {
+  const portion = Number(portionPrice || 0)
+  const qty = Number(amount || 0)
+  const usedPerPlate = Number(catalogItem?.usedPerPlate || 0)
+
+  if (!portion || !qty || !usedPerPlate || !catalogItem) return null
+
+  try {
+    const amountInCatalogUnit = convertAmountToCatalogUnit(qty, unit || catalogItem.unit, catalogItem.unit)
+    return roundMoney((portion / usedPerPlate) * amountInCatalogUnit)
+  } catch (error) {
+    return null
+  }
+}
+
 export const getLastPurchases = async (req, res) => {
   try {
     const items = await Inventory.find()
     const results = {}
+
     for (const item of items) {
-      // Use directly stored purchase data (reliable, no regex parsing)
-      if (
+      const catalogItem = INVENTORY_CATALOG_MAP[item.name]
+      if (!catalogItem) continue
+
+      const portionPrice = Number(item.lastPrice || 0)
+      const hasDirectPurchaseData = (
         item.lastPurchaseQty !== undefined &&
         item.lastPurchaseQty !== null &&
         item.lastPurchaseUnit
-      ) {
+      )
+
+      if (hasDirectPurchaseData) {
+        const normalizedUnit = normalizeEntryUnitForUi(item.lastPurchaseUnit)
+        const storedTotalPrice = item.lastPurchaseTotalPrice !== undefined && item.lastPurchaseTotalPrice !== null && item.lastPurchaseTotalPrice !== ''
+          ? Number(item.lastPurchaseTotalPrice)
+          : null
+        const derivedTotalPrice = storedTotalPrice !== null
+          ? storedTotalPrice
+          : deriveTotalPurchasePrice({
+              portionPrice,
+              amount: item.lastPurchaseQty,
+              unit: normalizedUnit,
+              catalogItem
+            })
+
         results[item.name] = {
           qty: item.lastPurchaseQty,
-          unit: item.lastPurchaseUnit,
-          price: item.lastPurchaseTotalPrice ?? ''
+          unit: normalizedUnit,
+          price: derivedTotalPrice !== null ? roundMoney(derivedTotalPrice) : '',
+          portionPrice: portionPrice || 0,
+          source: 'inventory'
         }
-      } else {
-        // Fallback: parse the last IN log reason string (for older entries)
-        const lastLog = await InventoryLog.findOne({
-          ingredientName: item.name,
-          type: 'IN'
-        }).sort({ createdAt: -1 })
+        continue
+      }
 
-        if (lastLog) {
-          const regexWithPrice = /Entrada de inventario:\s*([\d.]+)\s*(\w+)[^|]*\|\s*Costo Total\s*Q([\d.]+)/i
-          const regexNoPrice = /Entrada de inventario:\s*([\d.]+)\s*(\w+)/i
+      // Fallback para entradas antiguas: leer último log IN.
+      const lastLog = await InventoryLog.findOne({
+        ingredientName: item.name,
+        type: 'IN'
+      }).sort({ createdAt: -1 })
 
-          const unitMap = {
-            lbs: 'lb', lb: 'lb', ltrs: 'l', l: 'l',
-            gramos: 'g', g: 'g', unidad: 'und', und: 'und', ml: 'ml', oz: 'oz'
-          }
-
-          const matchWithPrice = lastLog.reason?.match(regexWithPrice)
-          if (matchWithPrice) {
-            const normalizedUnit = unitMap[matchWithPrice[2].toLowerCase()] || matchWithPrice[2].toLowerCase()
-            results[item.name] = {
-              qty: Number(matchWithPrice[1]),
-              unit: normalizedUnit,
-              price: Number(matchWithPrice[3])
-            }
-          } else {
-            const matchNoPrice = lastLog.reason?.match(regexNoPrice)
-            if (matchNoPrice) {
-              const normalizedUnit = unitMap[matchNoPrice[2].toLowerCase()] || matchNoPrice[2].toLowerCase()
-              results[item.name] = {
-                qty: Number(matchNoPrice[1]),
-                unit: normalizedUnit,
-                price: ''
-              }
-            }
+      if (!lastLog) {
+        if (portionPrice > 0) {
+          results[item.name] = {
+            qty: '',
+            unit: catalogItem.unit,
+            price: '',
+            portionPrice,
+            source: 'inventory-price'
           }
         }
+        continue
+      }
+
+      const regexWithPrice = /Entrada de inventario:\s*([\d.]+)\s*([a-zA-ZáéíóúÁÉÍÓÚñÑ]+)[^|]*\|\s*Costo Total\s*Q([\d.]+)/i
+      const regexNoPrice = /Entrada de inventario:\s*([\d.]+)\s*([a-zA-ZáéíóúÁÉÍÓÚñÑ]+)/i
+      const matchWithPrice = lastLog.reason?.match(regexWithPrice)
+      const matchNoPrice = lastLog.reason?.match(regexNoPrice)
+      const parsedQty = Number(matchWithPrice?.[1] ?? matchNoPrice?.[1] ?? lastLog.amount ?? 0)
+      const parsedUnit = normalizeEntryUnitForUi(matchWithPrice?.[2] ?? matchNoPrice?.[2] ?? catalogItem.unit)
+      const parsedTotal = matchWithPrice?.[3] ? Number(matchWithPrice[3]) : null
+      const logPortionPrice = Number(lastLog.price || portionPrice || 0)
+      const derivedTotalPrice = parsedTotal !== null
+        ? parsedTotal
+        : deriveTotalPurchasePrice({
+            portionPrice: logPortionPrice,
+            amount: parsedQty,
+            unit: parsedUnit,
+            catalogItem
+          })
+
+      results[item.name] = {
+        qty: parsedQty || '',
+        unit: parsedUnit || catalogItem.unit,
+        price: derivedTotalPrice !== null ? roundMoney(derivedTotalPrice) : '',
+        portionPrice: logPortionPrice || 0,
+        source: 'log'
       }
     }
+
+    res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate')
+    res.set('Pragma', 'no-cache')
+    res.set('Expires', '0')
+
     return res.status(200).json(results)
   } catch (error) {
     return res.status(500).json({ message: 'Error fetching last purchases', error: error.message })
