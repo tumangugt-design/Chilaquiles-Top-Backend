@@ -101,30 +101,36 @@ const resolveAppliedPromotion = async ({ requestedPromo, items }) => {
     throwPromoError('La promoción no tiene un precio válido.');
   }
 
-  if (items.length > requestedCount) {
-    throwPromoError(`La promoción permite exactamente ${requestedCount} plato(s).`);
+  let promoPlates = [];
+  if (Array.isArray(promo.plates) && promo.plates.length > 0) {
+    promoPlates = promo.plates.map(cloneOrderItem);
+  } else {
+    // Legacy fallback using single config and constraints
+    if (items.length > requestedCount) {
+      throwPromoError(`La promoción permite exactamente ${requestedCount} plato(s).`);
+    }
+
+    promoPlates = completePromoItems(items, requestedCount);
+    promoPlates.forEach((item, index) => {
+      const plateNumber = index + 1;
+      if (!promoConstraintAllows(promo, 'sauce', item.sauce)) {
+        throwPromoError(`El plato ${plateNumber} no cumple con la salsa permitida por la promoción.`);
+      }
+      if (!promoConstraintAllows(promo, 'protein', item.protein)) {
+        throwPromoError(`El plato ${plateNumber} no cumple con la proteína permitida por la promoción.`);
+      }
+      if (!promoConstraintAllows(promo, 'complement', item.complement)) {
+        throwPromoError(`El plato ${plateNumber} no cumple con el complemento permitido por la promoción.`);
+      }
+    });
   }
-
-  const itemsToValidate = completePromoItems(items, requestedCount);
-
-  itemsToValidate.forEach((item, index) => {
-    const plateNumber = index + 1;
-    if (!promoConstraintAllows(promo, 'sauce', item.sauce)) {
-      throwPromoError(`El plato ${plateNumber} no cumple con la salsa permitida por la promoción.`);
-    }
-    if (!promoConstraintAllows(promo, 'protein', item.protein)) {
-      throwPromoError(`El plato ${plateNumber} no cumple con la proteína permitida por la promoción.`);
-    }
-    if (!promoConstraintAllows(promo, 'complement', item.complement)) {
-      throwPromoError(`El plato ${plateNumber} no cumple con el complemento permitido por la promoción.`);
-    }
-  });
 
   return {
     id: promo.id,
     name: promo.name || 'Promoción',
     promoPrice,
     requestedCount,
+    plates: promoPlates,
     constraints: {
       sauce: normalizePromoConstraint(promo, 'sauce'),
       protein: normalizePromoConstraint(promo, 'protein'),
@@ -171,7 +177,11 @@ export const createOrderRecord = async ({ user, customer, items, sauceTemperatur
   let orderItems = Array.isArray(items) ? items.map(cloneOrderItem) : [];
   const resolvedPromo = await resolveAppliedPromotion({ requestedPromo: appliedPromo, items: orderItems });
   if (resolvedPromo) {
-    orderItems = completePromoItems(orderItems, resolvedPromo.requestedCount);
+    if (resolvedPromo.plates && resolvedPromo.plates.length > 0) {
+      orderItems = resolvedPromo.plates.map(cloneOrderItem);
+    } else {
+      orderItems = completePromoItems(orderItems, resolvedPromo.requestedCount);
+    }
   }
 
   const total = resolvedPromo ? resolvedPromo.promoPrice : calculateOrderTotal(orderItems.length);
