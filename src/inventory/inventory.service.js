@@ -407,6 +407,80 @@ export const toggleInventoryItem = async (id, isActive) => {
   return item
 }
 
+export const recalculatePortionPrices = async () => {
+  try {
+    const portions = await Portion.find({})
+    for (const portion of portions) {
+      const invItem = await Inventory.findOne({ name: portion.name })
+      if (!invItem) continue
+
+      let qty = Number(invItem.lastPurchaseQty)
+      let unit = invItem.lastPurchaseUnit
+      let totalPrice = invItem.lastPurchaseTotalPrice
+
+      const hasDirectPurchaseData = qty > 0 && totalPrice > 0 && unit
+
+      if (!hasDirectPurchaseData) {
+        const lastLog = await InventoryLog.findOne({
+          ingredientName: portion.name,
+          type: 'IN'
+        }).sort({ createdAt: -1 })
+
+        if (lastLog) {
+          if (lastLog.inputAmount && lastLog.inputUnit) {
+            qty = Number(lastLog.inputAmount)
+            unit = lastLog.inputUnit
+            totalPrice = lastLog.totalPrice ?? lastLog.price
+          } else {
+            const rawReason = lastLog.reason || ''
+            const matchQty = rawReason.match(/Entrada de inventario:\s*([\d.]+)\s*([a-zA-ZáéíóúÁÉÍÓÚñÑ]+)/i)
+            const matchTotal = rawReason.match(/Costo Total\s*Q\s*([\d.]+)/i)
+            qty = Number(matchQty?.[1] ?? lastLog.amount ?? 0)
+            unit = matchQty?.[2] ?? invItem.unit
+            totalPrice = matchTotal?.[1] ? Number(matchTotal[1]) : Number(lastLog.totalPrice ?? lastLog.price ?? 0)
+          }
+        }
+      }
+
+      if (qty > 0 && totalPrice > 0 && unit) {
+        try {
+          const amountInCatalogUnit = convertAmountToCatalogUnit(qty, unit, invItem.unit)
+          if (amountInCatalogUnit > 0) {
+            let portionInBaseUnit = portion.usedPerPlate
+            if (portion.unit !== invItem.unit) {
+              try {
+                portionInBaseUnit = convertAmountToCatalogUnit(portion.usedPerPlate, portion.unit, invItem.unit)
+              } catch (e) {
+                portionInBaseUnit = portion.usedPerPlate
+              }
+            }
+            const unitPrice = totalPrice / amountInCatalogUnit
+            const portionPrice = Math.round(unitPrice * portionInBaseUnit * 100) / 100
+            
+            const isWrongLegacyPrice = portion.price === totalPrice && qty > 1
+            const isZeroPrice = portion.price === 0
+
+            if (isWrongLegacyPrice || isZeroPrice || portion.price > totalPrice) {
+              const prevPrice = portion.price
+              portion.price = portionPrice
+              await portion.save()
+              
+              invItem.lastPrice = portionPrice
+              await invItem.save()
+              
+              console.log(`[MIGRATION] Recalculated wrong/legacy price for portion ${portion.name}: was Q${prevPrice}, corrected to Q${portionPrice}`)
+            }
+          }
+        } catch (error) {
+          console.error(`Error recalculating portion price for ${portion.name}:`, error.message)
+        }
+      }
+    }
+  } catch (err) {
+    console.error('Error during recalculatePortionPrices migration:', err.message)
+  }
+}
+
 export const seedPortions = async () => {
   for (const item of INVENTORY_CATALOG) {
     const normalizedName = normalizeName(item.name)
@@ -425,6 +499,8 @@ export const seedPortions = async () => {
       console.log(`Portion seeded: ${normalizedName} (${item.usedPerPlate} ${item.unit}, price: Q${price})`)
     }
   }
+  // Recalculate and fix any wrong legacy prices in database on start
+  await recalculatePortionPrices()
 }
 
 export const seedInventory = async () => {
