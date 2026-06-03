@@ -699,6 +699,17 @@ export const createPackagingProduct = async (req, res) => {
       return res.status(400).json({ message: 'El producto ya existe en el inventario.' })
     }
 
+    const amount = Number(req.body.amount || 0)
+    const totalPrice = req.body.totalPrice !== undefined && req.body.totalPrice !== null ? Number(req.body.totalPrice) : 0
+
+    if (Number.isNaN(amount) || amount < 0) {
+      return res.status(400).json({ message: 'La cantidad inicial debe ser un número válido mayor o igual a 0.' })
+    }
+
+    if (Number.isNaN(totalPrice) || totalPrice < 0) {
+      return res.status(400).json({ message: 'El costo total debe ser un número válido mayor o igual a 0.' })
+    }
+
     const inventoryItem = await Inventory.create({
       name,
       unit: 'und',
@@ -708,15 +719,42 @@ export const createPackagingProduct = async (req, res) => {
       isActive: true
     })
 
+    let portionPrice = 0
+    if (amount > 0) {
+      portionPrice = Math.round((totalPrice / amount) * 1 * 100) / 100
+    }
+
     const portionItem = await Portion.create({
       name,
       usedPerPlate: 1,
       unit: 'und',
-      price: 0
+      price: portionPrice
     })
 
+    if (amount > 0) {
+      await manualStockAdjustment({
+        name,
+        amount,
+        type: 'IN',
+        totalPrice,
+        portionPrice,
+        inputAmount: amount,
+        inputUnit: 'und',
+        storedUnit: 'und',
+        actor: req.user,
+        reason: `Entrada inicial al crear producto: ${amount} und | Costo Total Q${totalPrice} | Porción por plato Q${portionPrice}`
+      })
+
+      inventoryItem.stock = amount
+      inventoryItem.lastPrice = portionPrice
+      inventoryItem.lastPurchaseQty = amount
+      inventoryItem.lastPurchaseUnit = 'und'
+      inventoryItem.lastPurchaseTotalPrice = totalPrice
+      await inventoryItem.save()
+    }
+
     return res.status(200).json({
-      message: 'Producto de empaque creado exitosamente',
+      message: 'Producto de empaque creado y entrada registrada exitosamente',
       item: inventoryItem,
       portion: portionItem
     })
