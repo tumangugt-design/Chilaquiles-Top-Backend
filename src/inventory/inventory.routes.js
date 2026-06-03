@@ -12,7 +12,10 @@ import {
   syncInventory, 
   updateInventoryItemPrice, 
   updateInventoryItemStock,
-  getLastPurchases
+  getLastPurchases,
+  getPortions,
+  updatePortion,
+  createPackagingProduct
 } from './inventory.controller.js';
 import { verifyAuthToken } from '../middlewares/auth.middleware.js';
 import { requireApprovedStatus, requireRole } from '../middlewares/role.middleware.js';
@@ -27,6 +30,9 @@ router.use(verifyAuthToken, requireApprovedStatus);
 router.get('/', requireRole([USER_ROLES.ADMIN, USER_ROLES.CHEF]), getInventoryItems);
 router.get('/logs', requireRole([USER_ROLES.ADMIN]), getInventoryLogs);
 router.get('/last-purchases', requireRole([USER_ROLES.ADMIN]), getLastPurchases);
+router.get('/portions', requireRole([USER_ROLES.ADMIN]), getPortions);
+router.put('/portions/:name', requireRole([USER_ROLES.ADMIN]), updatePortion);
+router.post('/packaging', requireRole([USER_ROLES.ADMIN]), createPackagingProduct);
 router.post('/', requireRole([USER_ROLES.ADMIN]), saveInventoryItem);
 router.post('/sync', requireRole([USER_ROLES.ADMIN]), syncInventory);
 router.delete('/:name', requireRole([USER_ROLES.ADMIN]), deleteInventoryItem);

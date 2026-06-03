@@ -51,7 +51,8 @@ const cloneOrderItem = (item = {}) => ({
     onion: item.baseRecipe?.onion !== false,
     cilantro: item.baseRecipe?.cilantro !== false,
     cream: item.baseRecipe?.cream !== false,
-  }
+  },
+  packagingOverrides: item.packagingOverrides || null
 });
 
 const completePromoItems = (items = [], requestedCount = 1) => {

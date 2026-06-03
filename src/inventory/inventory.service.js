@@ -1,12 +1,12 @@
 import Inventory from './inventory.model.js'
 import InventoryLog from './inventoryLog.model.js'
+import Portion from './portion.model.js'
 import { DEFAULT_RECIPE_CONSUMPTION, PACKAGING_CONSUMPTION, INVENTORY_CATALOG, INVENTORY_CATALOG_MAP } from '../helpers/constants.js'
 
 const round = (value) => Math.round(value * 1000) / 1000
 const normalizeName = (value = '') => value.trim().toLowerCase()
 
 const normalizeUnit = (value = '') => String(value || '').trim().toLowerCase()
-
 
 const normalizeOptionValue = (value = '') => String(value || '').trim().toUpperCase().replace(/\s+/g, '_')
 
@@ -75,54 +75,105 @@ export const convertAmountToCatalogUnit = (amount, inputUnit, catalogUnit) => {
   return round(numericAmount * conversionFactor)
 }
 
-const getConsumptionForItem = (item) => {
+const getPortionQtyInBaseUnit = (name, portionMap, inventoryMap) => {
+  const portion = portionMap[name]
+  const inv = inventoryMap[name]
+  if (!portion) {
+    return DEFAULT_RECIPE_CONSUMPTION[name] || PACKAGING_CONSUMPTION[name] || 0
+  }
+  const baseUnit = inv?.unit || portion.unit
+  if (portion.unit === baseUnit) {
+    return portion.usedPerPlate
+  }
+  try {
+    return convertAmountToCatalogUnit(portion.usedPerPlate, portion.unit, baseUnit)
+  } catch (err) {
+    return portion.usedPerPlate
+  }
+}
+
+const getConsumptionForItem = (item, portionMap, inventoryMap) => {
   const sauce = normalizeOptionValue(item.sauce)
   const protein = normalizeOptionValue(item.protein)
   const complement = normalizeComplementValue(item.complement)
 
+  const getQty = (name) => getPortionQtyInBaseUnit(name, portionMap, inventoryMap)
+
   const consumption = {
-    totopos: DEFAULT_RECIPE_CONSUMPTION['totopos'],
-    queso: DEFAULT_RECIPE_CONSUMPTION['queso'],
+    totopos: getQty('totopos'),
+    queso: getQty('queso'),
   }
 
   if (sauce === 'ROJA') {
-    consumption['salsa roja'] = DEFAULT_RECIPE_CONSUMPTION['salsa roja']
-    consumption['plato de 8 onz'] = 1
-    consumption['tapadera de 8 onz'] = 1
+    consumption['salsa roja'] = getQty('salsa roja')
+    consumption['plato de 8 onz'] = getQty('plato de 8 onz')
+    consumption['tapadera de 8 onz'] = getQty('tapadera de 8 onz')
   } else if (sauce === 'VERDE') {
-    consumption['salsa verde'] = DEFAULT_RECIPE_CONSUMPTION['salsa verde']
-    consumption['plato de 8 onz'] = 1
-    consumption['tapadera de 8 onz'] = 1
+    consumption['salsa verde'] = getQty('salsa verde')
+    consumption['plato de 8 onz'] = getQty('plato de 8 onz')
+    consumption['tapadera de 8 onz'] = getQty('tapadera de 8 onz')
   } else if (sauce === 'DIVORCIADOS') {
-    consumption['salsa roja'] = DEFAULT_RECIPE_CONSUMPTION['salsa roja'] / 2
-    consumption['salsa verde'] = DEFAULT_RECIPE_CONSUMPTION['salsa verde'] / 2
-    consumption['plato de 4 onz'] = 2
-    consumption['tapadera de 4 onz'] = 2
+    consumption['salsa roja'] = round(getQty('salsa roja') / 2)
+    consumption['salsa verde'] = round(getQty('salsa verde') / 2)
+    consumption['plato de 4 onz'] = getQty('plato de 4 onz')
+    consumption['tapadera de 4 onz'] = getQty('tapadera de 4 onz')
   }
 
-  if (protein === 'STEAK') consumption['steak'] = DEFAULT_RECIPE_CONSUMPTION['steak']
-  if (protein === 'POLLO') consumption['pollo'] = DEFAULT_RECIPE_CONSUMPTION['pollo']
-  if (protein === 'CHORIZO') consumption['chorizo'] = DEFAULT_RECIPE_CONSUMPTION['chorizo']
+  if (protein === 'STEAK') consumption['steak'] = getQty('steak')
+  if (protein === 'POLLO') consumption['pollo'] = getQty('pollo')
+  if (protein === 'CHORIZO') consumption['chorizo'] = getQty('chorizo')
 
-  if (complement === 'AGUACATE') consumption['aguacate'] = DEFAULT_RECIPE_CONSUMPTION['aguacate']
-  if (complement === 'CEBOLLA_CARAMELIZADA') consumption['cebolla caramelizada'] = DEFAULT_RECIPE_CONSUMPTION['cebolla caramelizada']
-  if (complement === 'QUESO_EXTRA') consumption['queso extra'] = DEFAULT_RECIPE_CONSUMPTION['queso extra']
+  if (complement === 'AGUACATE') consumption['aguacate'] = getQty('aguacate')
+  if (complement === 'CEBOLLA_CARAMELIZADA') consumption['cebolla caramelizada'] = getQty('cebolla caramelizada')
+  if (complement === 'QUESO_EXTRA') consumption['queso extra'] = getQty('queso extra')
 
-  if (item.baseRecipe?.onion) consumption['cebolla'] = DEFAULT_RECIPE_CONSUMPTION['cebolla']
-  if (item.baseRecipe?.cilantro) consumption['cilantro'] = DEFAULT_RECIPE_CONSUMPTION['cilantro']
-  if (item.baseRecipe?.cream) consumption['crema'] = DEFAULT_RECIPE_CONSUMPTION['crema']
+  if (item.baseRecipe?.onion) consumption['cebolla'] = getQty('cebolla')
+  if (item.baseRecipe?.cilantro) consumption['cilantro'] = getQty('cilantro')
+  if (item.baseRecipe?.cream) consumption['crema'] = getQty('crema')
 
-  Object.entries(PACKAGING_CONSUMPTION).forEach(([name, qty]) => {
-    consumption[name] = qty
+  // Fixed packaging
+  const fixedPackagingNames = ['plato rectangular', 'tenedor', 'servilleta', 'sticker']
+  fixedPackagingNames.forEach((name) => {
+    consumption[name] = getQty(name)
   })
+
+  // Apply packaging overrides if present
+  if (item.packagingOverrides && typeof item.packagingOverrides === 'object') {
+    Object.entries(item.packagingOverrides).forEach(([name, overrideQty]) => {
+      const normalizedOverrideName = name.trim().toLowerCase()
+      const val = Number(overrideQty)
+      if (!Number.isNaN(val)) {
+        if (val > 0) {
+          const portion = portionMap[normalizedOverrideName]
+          const inv = inventoryMap[normalizedOverrideName]
+          if (portion && inv && portion.unit !== inv.unit) {
+            try {
+              consumption[normalizedOverrideName] = convertAmountToCatalogUnit(val, portion.unit, inv.unit)
+            } catch (err) {
+              consumption[normalizedOverrideName] = val
+            }
+          } else {
+            consumption[normalizedOverrideName] = val
+          }
+        } else {
+          delete consumption[normalizedOverrideName]
+        }
+      }
+    })
+  }
 
   return consumption
 }
 
-export const getAggregatedConsumption = (items = []) => {
+export const getAggregatedConsumption = async (items = []) => {
+  const portions = await Portion.find({})
+  const portionMap = Object.fromEntries(portions.map(p => [p.name, p]))
+  const inventoryItems = await Inventory.find({})
+  const inventoryMap = Object.fromEntries(inventoryItems.map(i => [i.name, i]))
+
   const aggregated = {}
   items.forEach((item) => {
-    const consumption = getConsumptionForItem(item)
+    const consumption = getConsumptionForItem(item, portionMap, inventoryMap)
     Object.entries(consumption).forEach(([name, qty]) => {
       aggregated[name] = round((aggregated[name] || 0) + qty)
     })
@@ -131,7 +182,7 @@ export const getAggregatedConsumption = (items = []) => {
 }
 
 export const validateInventoryAvailability = async (items = []) => {
-  const aggregated = getAggregatedConsumption(items)
+  const aggregated = await getAggregatedConsumption(items)
   const names = Object.keys(aggregated).map(normalizeName)
   const inventoryItems = await Inventory.find({ name: { $in: names } })
 
@@ -199,32 +250,29 @@ export const discountInventoryForOrder = async (items = [], orderId, actor) => {
   return consumption
 }
 
-const getMaxSaucePlates = (rojaStock, verdeStock) => {
-  const roja = Number(rojaStock || 0)
-  const verde = Number(verdeStock || 0)
-  const fullPortion = DEFAULT_RECIPE_CONSUMPTION['salsa roja']
-  const halfPortion = fullPortion / 2
-  let maxPlates = 0
-  const maxDivorciados = Math.min(Math.floor(roja / halfPortion), Math.floor(verde / halfPortion))
-
-  for (let divorciados = 0; divorciados <= maxDivorciados; divorciados += 1) {
-    const remainingRoja = roja - divorciados * halfPortion
-    const remainingVerde = verde - divorciados * halfPortion
-    const total = divorciados + Math.floor(remainingRoja / fullPortion) + Math.floor(remainingVerde / fullPortion)
-    if (total > maxPlates) maxPlates = total
-  }
-
-  return maxPlates
-}
-
 export const getAvailablePlatesCount = async () => {
   const inventory = await Inventory.find({})
+  const portions = await Portion.find({})
+  const portionMap = Object.fromEntries(portions.map(p => [p.name, p]))
   
   const getRawStock = (name) => {
     const item = inventory.find(i => i.name === name)
     if (!item) return 0
-    if (item.isActive === false) return 0 // If inactive, stock is effectively 0
+    if (item.isActive === false) return 0
     return Number(item.stock || 0)
+  }
+
+  const getRequiredPortionQty = (name) => {
+    const portion = portionMap[name]
+    const inv = inventory.find(i => i.name === name)
+    if (portion && inv) {
+      try {
+        return convertAmountToCatalogUnit(portion.usedPerPlate, portion.unit, inv.unit)
+      } catch (err) {
+        return portion.usedPerPlate
+      }
+    }
+    return PACKAGING_CONSUMPTION[name] || DEFAULT_RECIPE_CONSUMPTION[name] || 1
   }
 
   const mandatoryNames = [
@@ -239,7 +287,7 @@ export const getAvailablePlatesCount = async () => {
 
   let mandatoryLimit = Infinity
   mandatoryNames.forEach((name) => {
-    const required = PACKAGING_CONSUMPTION[name] || DEFAULT_RECIPE_CONSUMPTION[name] || INVENTORY_CATALOG_MAP[name]?.usedPerPlate || 1
+    const required = getRequiredPortionQty(name)
     const stock = getRawStock(name)
     const possible = Math.floor(stock / required)
     if (possible < mandatoryLimit) mandatoryLimit = possible
@@ -247,13 +295,35 @@ export const getAvailablePlatesCount = async () => {
 
   const rojaStock = getRawStock('salsa roja')
   const verdeStock = getRawStock('salsa verde')
-  const sauceLimit = getMaxSaucePlates(rojaStock, verdeStock)
+  
+  const rojaPortion = getRequiredPortionQty('salsa roja')
+  const halfRojaPortion = rojaPortion / 2
+  const verdePortion = getRequiredPortionQty('salsa verde')
+  const halfVerdePortion = verdePortion / 2
+
+  const getMaxSaucePlatesDynamic = (rStock, vStock) => {
+    const roja = Number(rStock || 0)
+    const verde = Number(vStock || 0)
+    let maxPlates = 0
+    const maxDivorciados = Math.min(Math.floor(roja / halfRojaPortion), Math.floor(verde / halfVerdePortion))
+
+    for (let divorciados = 0; divorciados <= maxDivorciados; divorciados += 1) {
+      const remainingRoja = roja - divorciados * halfRojaPortion
+      const remainingVerde = verde - divorciados * halfVerdePortion
+      const total = divorciados + Math.floor(remainingRoja / rojaPortion) + Math.floor(remainingVerde / verdePortion)
+      if (total > maxPlates) maxPlates = total
+    }
+
+    return maxPlates
+  }
+
+  const sauceLimit = getMaxSaucePlatesDynamic(rojaStock, verdeStock)
 
   const proteinNames = ['steak', 'pollo', 'chorizo']
-  const proteinLimit = proteinNames.reduce((sum, name) => sum + Math.floor(getRawStock(name) / DEFAULT_RECIPE_CONSUMPTION[name]), 0)
+  const proteinLimit = proteinNames.reduce((sum, name) => sum + Math.floor(getRawStock(name) / getRequiredPortionQty(name)), 0)
 
   const complementNames = ['aguacate', 'cebolla caramelizada', 'queso extra']
-  const complementLimit = complementNames.reduce((sum, name) => sum + Math.floor(getRawStock(name) / DEFAULT_RECIPE_CONSUMPTION[name]), 0)
+  const complementLimit = complementNames.reduce((sum, name) => sum + Math.floor(getRawStock(name) / getRequiredPortionQty(name)), 0)
 
   const limits = [mandatoryLimit, sauceLimit, proteinLimit, complementLimit]
   return Math.max(0, Math.min(...limits))
@@ -280,8 +350,6 @@ export const manualStockAdjustment = async ({
   const hasPortionPrice = portionPrice !== undefined && portionPrice !== null && portionPrice !== '' && !Number.isNaN(Number(portionPrice))
   const normalizedPortionPrice = hasPortionPrice ? round(Number(portionPrice)) : undefined
 
-  // lastPrice SIEMPRE representa el costo de la porción usada por plato,
-  // no el costo total de la compra. Así promociones puede calcular correctamente.
   if (hasPortionPrice) {
     updateQuery.$set = { lastPrice: normalizedPortionPrice }
   }
@@ -322,6 +390,14 @@ export const manualStockAdjustment = async ({
     reason: reason || 'Ajuste manual'
   })
 
+  // Synchronize dynamic portion price if Portion entry exists
+  if (hasPortionPrice) {
+    await Portion.findOneAndUpdate(
+      { name: normalized },
+      { $set: { price: normalizedPortionPrice } }
+    )
+  }
+
   return { ...previousItem.toObject(), stock: newStock, lastPrice: hasPortionPrice ? normalizedPortionPrice : previousItem.lastPrice }
 }
 
@@ -329,6 +405,26 @@ export const toggleInventoryItem = async (id, isActive) => {
   const item = await Inventory.findByIdAndUpdate(id, { isActive }, { new: true })
   if (!item) throw new Error('Item not found')
   return item
+}
+
+export const seedPortions = async () => {
+  for (const item of INVENTORY_CATALOG) {
+    const normalizedName = normalizeName(item.name)
+    const existing = await Portion.findOne({ name: normalizedName })
+    
+    if (!existing) {
+      const invItem = await Inventory.findOne({ name: normalizedName })
+      const price = invItem?.lastPrice || 0
+      
+      await Portion.create({
+        name: normalizedName,
+        usedPerPlate: item.usedPerPlate || 1,
+        unit: item.unit,
+        price
+      })
+      console.log(`Portion seeded: ${normalizedName} (${item.usedPerPlate} ${item.unit}, price: Q${price})`)
+    }
+  }
 }
 
 export const seedInventory = async () => {
@@ -364,4 +460,7 @@ export const seedInventory = async () => {
       }
     }
   }
+
+  // Seed Portion sizes/prices
+  await seedPortions()
 }

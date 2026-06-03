@@ -1,5 +1,6 @@
 import Inventory from './inventory.model.js'
 import InventoryLog from './inventoryLog.model.js'
+import Portion from './portion.model.js'
 import { getAggregatedConsumption, validateInventoryAvailability, manualStockAdjustment, getAvailablePlatesCount, convertAmountToCatalogUnit } from './inventory.service.js'
 import { INVENTORY_CATALOG, INVENTORY_CATALOG_MAP } from '../helpers/constants.js'
 
@@ -18,8 +19,15 @@ export const getAvailablePlates = async (req, res) => {
   }
 }
 
-
-const getRequiredStockForPublicOption = (item) => {
+const getRequiredStockForPublicOption = async (item) => {
+  const dbPortion = await Portion.findOne({ name: item.name })
+  if (dbPortion) {
+    try {
+      return convertAmountToCatalogUnit(dbPortion.usedPerPlate, dbPortion.unit, item.unit)
+    } catch (e) {
+      return dbPortion.usedPerPlate
+    }
+  }
   const catalogItem = INVENTORY_CATALOG_MAP[item.name]
   return Number(catalogItem?.usedPerPlate || 1)
 }
@@ -28,8 +36,8 @@ export const getPublicInventoryOptions = async (req, res) => {
   try {
     const items = await Inventory.find({}, 'name stock unit category isActive').sort({ name: 1 })
 
-    const publicItems = items.map((item) => {
-      const required = getRequiredStockForPublicOption(item)
+    const publicItems = await Promise.all(items.map(async (item) => {
+      const required = await getRequiredStockForPublicOption(item)
       const stock = Number(item.stock || 0)
       const isActive = item.isActive !== false
       const hasEnoughStock = stock >= required
@@ -46,7 +54,7 @@ export const getPublicInventoryOptions = async (req, res) => {
         available: isActive && hasEnoughStock,
         availabilityStatus
       }
-    })
+    }))
 
     const activeNames = publicItems
       .filter((item) => item.available)
@@ -76,11 +84,34 @@ export const saveInventoryItem = async (req, res) => {
   try {
     const name = String(req.body.name || '').trim().toLowerCase()
     const rawAmount = Number(req.body.amount ?? req.body.stock ?? 0)
-    const catalogItem = INVENTORY_CATALOG_MAP[name]
+    
+    let catalogItem = INVENTORY_CATALOG_MAP[name]
+    let isEmpaque = catalogItem?.category === 'Empaque' || req.body.category === 'Empaque'
+
+    if (!catalogItem && !isEmpaque) {
+      const dbItem = await Inventory.findOne({ name })
+      if (dbItem?.category === 'Empaque') {
+        isEmpaque = true
+      }
+    }
+
+    if (!catalogItem && isEmpaque) {
+      catalogItem = {
+        name,
+        label: req.body.label || req.body.name,
+        unit: 'und',
+        category: 'Empaque',
+        usedPerPlate: 1
+      }
+    }
 
     if (!catalogItem) {
       return res.status(400).json({ message: 'Producto no permitido en inventario.' })
     }
+
+    const dbPortion = await Portion.findOne({ name })
+    const usedPerPlate = dbPortion?.usedPerPlate || catalogItem.usedPerPlate || 1
+    const portionUnit = dbPortion?.unit || catalogItem.unit
 
     const inputUnit = catalogItem.category === 'Empaque' ? 'und' : (req.body.inputUnit || req.body.unit || catalogItem.unit)
     const amount = convertAmountToCatalogUnit(rawAmount, inputUnit, catalogItem.unit)
@@ -97,9 +128,16 @@ export const saveInventoryItem = async (req, res) => {
     let unitPrice = undefined
     if (hasPrice) {
       if (amount > 0) {
-        const usedPerPlate = catalogItem.usedPerPlate || 1
+        let portionInBaseUnit = usedPerPlate
+        if (portionUnit !== catalogItem.unit) {
+          try {
+            portionInBaseUnit = convertAmountToCatalogUnit(usedPerPlate, portionUnit, catalogItem.unit)
+          } catch (e) {
+            portionInBaseUnit = usedPerPlate
+          }
+        }
         unitPrice = roundMoney(totalPrice / amount)
-        portionPrice = roundMoney((totalPrice / amount) * usedPerPlate)
+        portionPrice = roundMoney((totalPrice / amount) * portionInBaseUnit)
       } else {
         portionPrice = roundMoney(totalPrice)
       }
@@ -117,6 +155,16 @@ export const saveInventoryItem = async (req, res) => {
       })
     }
 
+    let portionItem = await Portion.findOne({ name })
+    if (!portionItem) {
+      await Portion.create({
+        name,
+        usedPerPlate: catalogItem.usedPerPlate || 1,
+        unit: catalogItem.unit,
+        price: portionPrice || 0
+      })
+    }
+
     const item = await manualStockAdjustment({
       name,
       amount,
@@ -130,8 +178,6 @@ export const saveInventoryItem = async (req, res) => {
       reason: `Entrada de inventario: ${rawAmount} ${inputUnit} → ${amount} ${catalogItem.unit}${hasPrice ? ` | Costo Total Q${roundMoney(totalPrice)} | Costo unitario Q${unitPrice || 0}/${catalogItem.unit} | Porción por plato Q${portionPrice}` : ''}`
     })
 
-    // Store raw purchase data directly on the Inventory document for reliable retrieval.
-    // Estos campos guardan la compra completa; lastPrice guarda solo el costo de porción por plato.
     await Inventory.findOneAndUpdate(
       { name },
       {
@@ -156,7 +202,7 @@ export const previewRecipeConsumption = async (req, res) => {
     const items = Array.isArray(req.body.items) ? req.body.items : []
     const validation = await validateInventoryAvailability(items)
     return res.status(200).json({
-      consumption: getAggregatedConsumption(items),
+      consumption: await getAggregatedConsumption(items),
       validation,
       futurePhase: 'Ready for detailed recipe breakdown per plate and sub-ingredient.'
     })
@@ -169,6 +215,7 @@ export const deleteInventoryItem = async (req, res) => {
   try {
     const { name } = req.params
     await Inventory.findOneAndDelete({ name: name.toLowerCase() })
+    await Portion.findOneAndDelete({ name: name.toLowerCase() })
     return res.status(200).json({ message: 'Item deleted from inventory' })
   } catch (error) {
     return res.status(500).json({ message: 'Error deleting item', error: error.message })
@@ -213,12 +260,30 @@ export const getInventoryLogs = async (req, res) => {
   }
 }
 
-
 export const updateInventoryItemStock = async (req, res) => {
   try {
     const normalizedName = String(req.params.name || '').trim().toLowerCase()
     const rawStock = Number(req.body.stock)
-    const catalogItem = INVENTORY_CATALOG_MAP[normalizedName]
+    
+    let catalogItem = INVENTORY_CATALOG_MAP[normalizedName]
+    let isEmpaque = catalogItem?.category === 'Empaque' || req.body.category === 'Empaque'
+
+    if (!catalogItem && !isEmpaque) {
+      const dbItem = await Inventory.findOne({ name: normalizedName })
+      if (dbItem?.category === 'Empaque') {
+        isEmpaque = true
+      }
+    }
+
+    if (!catalogItem && isEmpaque) {
+      catalogItem = {
+        name: normalizedName,
+        label: req.body.label || req.body.name || normalizedName,
+        unit: 'und',
+        category: 'Empaque',
+        usedPerPlate: 1
+      }
+    }
 
     if (!catalogItem) {
       return res.status(400).json({ message: 'Producto no permitido en inventario.' })
@@ -240,6 +305,16 @@ export const updateInventoryItemStock = async (req, res) => {
         stock: 0,
         minimumStock: 5,
         isActive: true
+      })
+    }
+
+    let portionItem = await Portion.findOne({ name: normalizedName })
+    if (!portionItem) {
+      await Portion.create({
+        name: normalizedName,
+        usedPerPlate: catalogItem.usedPerPlate || 1,
+        unit: catalogItem.unit,
+        price: 0
       })
     }
 
@@ -275,12 +350,30 @@ export const updateInventoryItemStock = async (req, res) => {
   }
 }
 
-
 export const updateInventoryItemPrice = async (req, res) => {
   try {
     const normalizedName = String(req.params.name || '').trim().toLowerCase()
     const price = Number(req.body.price)
-    const catalogItem = INVENTORY_CATALOG_MAP[normalizedName]
+    
+    let catalogItem = INVENTORY_CATALOG_MAP[normalizedName]
+    let isEmpaque = catalogItem?.category === 'Empaque' || req.body.category === 'Empaque'
+
+    if (!catalogItem && !isEmpaque) {
+      const dbItem = await Inventory.findOne({ name: normalizedName })
+      if (dbItem?.category === 'Empaque') {
+        isEmpaque = true
+      }
+    }
+
+    if (!catalogItem && isEmpaque) {
+      catalogItem = {
+        name: normalizedName,
+        label: req.body.label || req.body.name || normalizedName,
+        unit: 'und',
+        category: 'Empaque',
+        usedPerPlate: 1
+      }
+    }
 
     if (!catalogItem) {
       return res.status(400).json({ message: 'Producto no permitido en inventario.' })
@@ -305,6 +398,12 @@ export const updateInventoryItemPrice = async (req, res) => {
           minimumStock: 5
         }
       },
+      { new: true, upsert: true, setDefaultsOnInsert: true }
+    )
+
+    await Portion.findOneAndUpdate(
+      { name: normalizedName },
+      { $set: { price } },
       { new: true, upsert: true, setDefaultsOnInsert: true }
     )
 
@@ -386,10 +485,12 @@ const normalizeEntryUnitForUi = (unit = '') => {
 
 const roundMoney = (value) => Math.round(Number(value || 0) * 100) / 100
 
-const deriveTotalPurchasePrice = ({ portionPrice, amount, unit, catalogItem }) => {
+const deriveTotalPurchasePrice = async ({ portionPrice, amount, unit, catalogItem }) => {
   const portion = Number(portionPrice || 0)
   const qty = Number(amount || 0)
-  const usedPerPlate = Number(catalogItem?.usedPerPlate || 0)
+  
+  const dbPortion = await Portion.findOne({ name: catalogItem.name })
+  const usedPerPlate = Number(dbPortion?.usedPerPlate || catalogItem?.usedPerPlate || 0)
 
   if (!portion || !qty || !usedPerPlate || !catalogItem) return null
 
@@ -401,10 +502,12 @@ const deriveTotalPurchasePrice = ({ portionPrice, amount, unit, catalogItem }) =
   }
 }
 
-const derivePortionPrice = ({ totalPrice, amount, unit, catalogItem }) => {
+const derivePortionPrice = async ({ totalPrice, amount, unit, catalogItem }) => {
   const total = Number(totalPrice || 0)
   const qty = Number(amount || 0)
-  const usedPerPlate = Number(catalogItem?.usedPerPlate || 0)
+  
+  const dbPortion = await Portion.findOne({ name: catalogItem.name })
+  const usedPerPlate = Number(dbPortion?.usedPerPlate || catalogItem?.usedPerPlate || 0)
 
   if (!total || !qty || !usedPerPlate || !catalogItem) return 0
 
@@ -417,10 +520,11 @@ const derivePortionPrice = ({ totalPrice, amount, unit, catalogItem }) => {
   }
 }
 
-const buildLastPurchasePayload = ({ qty, unit, totalPrice, portionPrice, source, catalogItem }) => {
+const buildLastPurchasePayload = async ({ qty, unit, totalPrice, portionPrice, source, catalogItem }) => {
   const normalizedUnit = normalizeEntryUnitForUi(unit || catalogItem.unit)
   const numericTotalPrice = totalPrice !== undefined && totalPrice !== null && totalPrice !== '' ? Number(totalPrice) : null
-  const portionFromTotal = derivePortionPrice({
+  
+  const portionFromTotal = await derivePortionPrice({
     totalPrice: numericTotalPrice,
     amount: qty,
     unit: normalizedUnit,
@@ -443,7 +547,18 @@ export const getLastPurchases = async (req, res) => {
     const results = {}
 
     for (const item of items) {
-      const catalogItem = INVENTORY_CATALOG_MAP[item.name]
+      let catalogItem = INVENTORY_CATALOG_MAP[item.name]
+      
+      if (!catalogItem && item.category === 'Empaque') {
+        catalogItem = {
+          name: item.name,
+          label: item.name,
+          unit: item.unit,
+          category: item.category,
+          usedPerPlate: 1
+        }
+      }
+      
       if (!catalogItem) continue
 
       const itemPortionPrice = Number(item.lastPrice || 0)
@@ -455,7 +570,7 @@ export const getLastPurchases = async (req, res) => {
       )
 
       if (hasDirectPurchaseData) {
-        results[item.name] = buildLastPurchasePayload({
+        results[item.name] = await buildLastPurchasePayload({
           qty: Number(item.lastPurchaseQty),
           unit: item.lastPurchaseUnit,
           totalPrice: item.lastPurchaseTotalPrice,
@@ -466,7 +581,6 @@ export const getLastPurchases = async (req, res) => {
         continue
       }
 
-      // Fallback para entradas antiguas: leer último log IN.
       const lastLog = await InventoryLog.findOne({
         ingredientName: item.name,
         type: 'IN'
@@ -485,9 +599,8 @@ export const getLastPurchases = async (req, res) => {
         continue
       }
 
-      // Registros nuevos: campos explícitos para no confundir costo total con costo por porción.
       if (lastLog.inputAmount && lastLog.inputUnit) {
-        results[item.name] = buildLastPurchasePayload({
+        results[item.name] = await buildLastPurchasePayload({
           qty: Number(lastLog.inputAmount),
           unit: lastLog.inputUnit,
           totalPrice: lastLog.totalPrice ?? lastLog.price,
@@ -498,7 +611,6 @@ export const getLastPurchases = async (req, res) => {
         continue
       }
 
-      // Registros viejos: se intenta leer el texto del reason si existe.
       const rawReason = lastLog.reason || ''
       const matchQty = rawReason.match(/Entrada de inventario:\s*([\d.]+)\s*([a-zA-ZáéíóúÁÉÍÓÚñÑ]+)/i)
       const matchTotal = rawReason.match(/Costo Total\s*Q\s*([\d.]+)/i)
@@ -507,17 +619,15 @@ export const getLastPurchases = async (req, res) => {
       const qty = Number(matchQty?.[1] ?? lastLog.amount ?? 0)
       const unit = normalizeEntryUnitForUi(matchQty?.[2] ?? catalogItem.unit)
 
-      // En los logs antiguos `price` fue usado como costo total de compra.
-      // NO se debe tratar como precio por plato; eso inflaba promociones brutalmente.
       const totalPrice = matchTotal?.[1]
         ? Number(matchTotal[1])
         : (lastLog.totalPrice !== undefined && lastLog.totalPrice !== null ? Number(lastLog.totalPrice) : Number(lastLog.price || 0))
 
       const portionPrice = matchPortion?.[1]
         ? Number(matchPortion[1])
-        : derivePortionPrice({ totalPrice, amount: qty, unit, catalogItem }) || itemPortionPrice
+        : await derivePortionPrice({ totalPrice, amount: qty, unit, catalogItem }) || itemPortionPrice
 
-      results[item.name] = buildLastPurchasePayload({
+      results[item.name] = await buildLastPurchasePayload({
         qty,
         unit,
         totalPrice,
@@ -534,5 +644,83 @@ export const getLastPurchases = async (req, res) => {
     return res.status(200).json(results)
   } catch (error) {
     return res.status(500).json({ message: 'Error fetching last purchases', error: error.message })
+  }
+}
+
+export const getPortions = async (req, res) => {
+  try {
+    const portions = await Portion.find().sort({ name: 1 })
+    return res.status(200).json(portions)
+  } catch (error) {
+    return res.status(500).json({ message: 'Error fetching portions', error: error.message })
+  }
+}
+
+export const updatePortion = async (req, res) => {
+  try {
+    const { name } = req.params
+    const { usedPerPlate, unit, price } = req.body
+    const normalizedName = String(name || '').trim().toLowerCase()
+
+    if (usedPerPlate === undefined || usedPerPlate <= 0) {
+      return res.status(400).json({ message: 'La cantidad de la porción debe ser un número válido mayor a 0' })
+    }
+
+    if (!unit) {
+      return res.status(400).json({ message: 'La unidad es requerida' })
+    }
+
+    const portion = await Portion.findOneAndUpdate(
+      { name: normalizedName },
+      { $set: { usedPerPlate: Number(usedPerPlate), unit, price: Number(price || 0) } },
+      { new: true, upsert: true }
+    )
+
+    await Inventory.findOneAndUpdate(
+      { name: normalizedName },
+      { $set: { lastPrice: Number(price || 0) } }
+    )
+
+    return res.status(200).json({ message: 'Porción actualizada exitosamente', portion })
+  } catch (error) {
+    return res.status(500).json({ message: 'Error updating portion', error: error.message })
+  }
+}
+
+export const createPackagingProduct = async (req, res) => {
+  try {
+    const name = String(req.body.name || '').trim().toLowerCase()
+    if (!name) {
+      return res.status(400).json({ message: 'El nombre del producto es requerido.' })
+    }
+
+    const existing = await Inventory.findOne({ name })
+    if (existing) {
+      return res.status(400).json({ message: 'El producto ya existe en el inventario.' })
+    }
+
+    const inventoryItem = await Inventory.create({
+      name,
+      unit: 'und',
+      category: 'Empaque',
+      stock: 0,
+      minimumStock: 5,
+      isActive: true
+    })
+
+    const portionItem = await Portion.create({
+      name,
+      usedPerPlate: 1,
+      unit: 'und',
+      price: 0
+    })
+
+    return res.status(200).json({
+      message: 'Producto de empaque creado exitosamente',
+      item: inventoryItem,
+      portion: portionItem
+    })
+  } catch (error) {
+    return res.status(500).json({ message: 'Error creating packaging product', error: error.message })
   }
 }
