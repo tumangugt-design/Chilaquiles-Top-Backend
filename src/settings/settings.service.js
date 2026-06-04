@@ -161,4 +161,10 @@ export const seedSettings = async () => {
     await Setting.create({ key: 'promotions', value: [] })
     console.log('Settings seeded: promotions')
   }
+
+  const existingCoupons = await Setting.findOne({ key: 'coupons' })
+  if (!existingCoupons) {
+    await Setting.create({ key: 'coupons', value: [] })
+    console.log('Settings seeded: coupons')
+  }
 }

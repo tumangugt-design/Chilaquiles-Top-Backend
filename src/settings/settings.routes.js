@@ -5,7 +5,10 @@ import {
   getPromotions, 
   updatePromotions,
   getCalculatorCosts,
-  updateCalculatorCosts
+  updateCalculatorCosts,
+  getCoupons,
+  updateCoupons,
+  validateCoupon
 } from './settings.controller.js'
 import { verifyAuthToken } from '../middlewares/auth.middleware.js'
 import { requireApprovedStatus, requireRole } from '../middlewares/role.middleware.js'
@@ -21,5 +24,9 @@ router.patch('/promotions', verifyAuthToken, requireApprovedStatus, requireRole(
 
 router.get('/calculator-costs', getCalculatorCosts)
 router.patch('/calculator-costs', verifyAuthToken, requireApprovedStatus, requireRole([USER_ROLES.ADMIN]), updateCalculatorCosts)
+
+router.get('/coupons', verifyAuthToken, requireApprovedStatus, requireRole([USER_ROLES.ADMIN]), getCoupons)
+router.patch('/coupons', verifyAuthToken, requireApprovedStatus, requireRole([USER_ROLES.ADMIN]), updateCoupons)
+router.post('/validate-coupon', validateCoupon)
 
 export default router

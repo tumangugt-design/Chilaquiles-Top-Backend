@@ -174,7 +174,7 @@ const baseHistoryQuery = () => Order.find()
   .populate('chefId', 'name phone email photoUrl role status')
   .populate('repartidorId', 'name phone email photoUrl role status');
 
-export const createOrderRecord = async ({ user, customer, items, sauceTemperature, appliedPromo }) => {
+export const createOrderRecord = async ({ user, customer, items, sauceTemperature, appliedPromo, couponCode }) => {
   let orderItems = Array.isArray(items) ? items.map(cloneOrderItem) : [];
   const resolvedPromo = await resolveAppliedPromotion({ requestedPromo: appliedPromo, items: orderItems });
   if (resolvedPromo) {
@@ -185,7 +185,38 @@ export const createOrderRecord = async ({ user, customer, items, sauceTemperatur
     }
   }
 
-  const total = resolvedPromo ? resolvedPromo.promoPrice : calculateOrderTotal(orderItems.length);
+  let total = resolvedPromo ? resolvedPromo.promoPrice : calculateOrderTotal(orderItems.length);
+  
+  let couponDiscount = 0;
+  let cleanCouponCode = null;
+
+  if (couponCode) {
+    cleanCouponCode = String(couponCode).trim().toUpperCase();
+    const couponsSetting = await Setting.findOne({ key: 'coupons' });
+    const coupons = Array.isArray(couponsSetting?.value) ? couponsSetting.value : [];
+    const coupon = coupons.find(c => c.code === cleanCouponCode);
+    
+    if (coupon) {
+      if (!coupon.isActive) {
+        throwPromoError('El cupón seleccionado no está activo.');
+      }
+      if (coupon.usedCount >= coupon.maxUses) {
+        throwPromoError('El cupón ha alcanzado su límite de usos.');
+      }
+      couponDiscount = Math.round((total * (coupon.discountPercent / 100)) * 100) / 100;
+      total = Math.max(0, total - couponDiscount);
+      
+      // Increment coupon usage
+      coupon.usedCount += 1;
+      await Setting.findOneAndUpdate(
+        { key: 'coupons' },
+        { $set: { value: coupons } }
+      );
+    } else {
+      throwPromoError('El cupón ingresado no es válido.');
+    }
+  }
+
   const navigationLinks = buildNavigationLinks(customer.location);
   const orderNumber = await generateOrderNumber();
 
@@ -220,6 +251,8 @@ export const createOrderRecord = async ({ user, customer, items, sauceTemperatur
       items: orderItems,
       sauceTemperature: sauceTemperature === 'FRIO' ? 'FRIO' : 'CALIENTE',
       appliedPromo: resolvedPromo,
+      couponCode: cleanCouponCode,
+      couponDiscount,
       total,
       status: ORDER_STATUS.RECIBIDO
     });

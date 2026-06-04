@@ -125,3 +125,86 @@ export const updateCalculatorCosts = async (req, res) => {
     return res.status(500).json({ message: 'No se pudieron guardar los costos de la calculadora', error: error.message })
   }
 }
+
+export const getCoupons = async (req, res) => {
+  try {
+    const doc = await Setting.findOne({ key: 'coupons' })
+    const coupons = doc ? doc.value : []
+    
+    res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate')
+    res.set('Pragma', 'no-cache')
+    res.set('Expires', '0')
+
+    return res.status(200).json(coupons)
+  } catch (error) {
+    return res.status(500).json({ message: 'No se pudieron cargar los cupones', error: error.message })
+  }
+}
+
+export const updateCoupons = async (req, res) => {
+  try {
+    const coupons = req.body
+    if (!Array.isArray(coupons)) {
+      return res.status(400).json({ message: 'El formato de cupones debe ser un arreglo' })
+    }
+
+    const normalized = coupons.map(c => ({
+      code: String(c.code || '').trim().toUpperCase(),
+      discountPercent: Math.max(0, Math.min(100, Number(c.discountPercent || 0))),
+      maxUses: Math.max(1, Number(c.maxUses || 1)),
+      usedCount: Math.max(0, Number(c.usedCount || 0)),
+      isActive: c.isActive !== false
+    })).filter(c => c.code)
+
+    const updated = await Setting.findOneAndUpdate(
+      { key: 'coupons' },
+      { $set: { value: normalized } },
+      { new: true, upsert: true }
+    )
+
+    res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate')
+    res.set('Pragma', 'no-cache')
+    res.set('Expires', '0')
+
+    return res.status(200).json(updated.value)
+  } catch (error) {
+    return res.status(500).json({ message: 'No se pudieron guardar los cupones', error: error.message })
+  }
+}
+
+export const validateCoupon = async (req, res) => {
+  try {
+    const { code } = req.body
+    if (!code) {
+      return res.status(400).json({ message: 'El código de cupón es requerido' })
+    }
+
+    const doc = await Setting.findOne({ key: 'coupons' })
+    const coupons = doc ? doc.value : []
+    const cleanCode = String(code).trim().toUpperCase()
+
+    const coupon = coupons.find(c => c.code === cleanCode)
+    if (!coupon) {
+      return res.status(400).json({ message: 'Cupón no encontrado o inválido' })
+    }
+
+    if (!coupon.isActive) {
+      return res.status(400).json({ message: 'El cupón no está activo' })
+    }
+
+    if (coupon.usedCount >= coupon.maxUses) {
+      return res.status(400).json({ message: 'El cupón ha agotado su cantidad de usos' })
+    }
+
+    return res.status(200).json({
+      code: coupon.code,
+      discountPercent: coupon.discountPercent,
+      maxUses: coupon.maxUses,
+      usedCount: coupon.usedCount,
+      isActive: coupon.isActive
+    })
+  } catch (error) {
+    return res.status(500).json({ message: 'Error validando cupón', error: error.message })
+  }
+}
+

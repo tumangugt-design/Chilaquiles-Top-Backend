@@ -63,7 +63,7 @@ export const createOrder = async (req, res) => {
       }
 
       if (!isInsideZona6VillaNueva(customer.location)) {
-        return res.status(403).json({ message: 'Cobertura fuera de rango. Solo atendemos Zona 6 de Villa Nueva.' })
+        return res.status(403).json({ message: 'Cobertura fuera de rango. Solo atendemos algunas zonas de Villa Nueva y alrededores.' })
       }
     }
 
@@ -81,6 +81,7 @@ export const createOrder = async (req, res) => {
       items,
       sauceTemperature: req.body.sauceTemperature,
       appliedPromo: req.body.appliedPromo,
+      couponCode: req.body.couponCode,
     })
 
     return res.status(201).json({ message: 'Pedido creado', order })

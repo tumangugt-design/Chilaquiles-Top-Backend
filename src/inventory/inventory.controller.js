@@ -710,10 +710,14 @@ export const createPackagingProduct = async (req, res) => {
       return res.status(400).json({ message: 'El costo total debe ser un número válido mayor o igual a 0.' })
     }
 
+    const category = String(req.body.category || 'Empaque').trim()
+    const unit = String(req.body.unit || 'und').trim()
+    const usedPerPlate = Number(req.body.usedPerPlate !== undefined ? req.body.usedPerPlate : 1)
+
     const inventoryItem = await Inventory.create({
       name,
-      unit: 'und',
-      category: 'Empaque',
+      unit,
+      category,
       stock: 0,
       minimumStock: 5,
       isActive: true
@@ -721,13 +725,13 @@ export const createPackagingProduct = async (req, res) => {
 
     let portionPrice = 0
     if (amount > 0) {
-      portionPrice = Math.round((totalPrice / amount) * 1 * 100) / 100
+      portionPrice = Math.round((totalPrice / amount) * usedPerPlate * 100) / 100
     }
 
     const portionItem = await Portion.create({
       name,
-      usedPerPlate: 1,
-      unit: 'und',
+      usedPerPlate,
+      unit,
       price: portionPrice
     })
 
@@ -739,26 +743,26 @@ export const createPackagingProduct = async (req, res) => {
         totalPrice,
         portionPrice,
         inputAmount: amount,
-        inputUnit: 'und',
-        storedUnit: 'und',
+        inputUnit: unit,
+        storedUnit: unit,
         actor: req.user,
-        reason: `Entrada inicial al crear producto: ${amount} und | Costo Total Q${totalPrice} | Porción por plato Q${portionPrice}`
+        reason: `Entrada inicial al crear producto: ${amount} ${unit} | Costo Total Q${totalPrice} | Porción por plato Q${portionPrice}`
       })
 
       inventoryItem.stock = amount
       inventoryItem.lastPrice = portionPrice
       inventoryItem.lastPurchaseQty = amount
-      inventoryItem.lastPurchaseUnit = 'und'
+      inventoryItem.lastPurchaseUnit = unit
       inventoryItem.lastPurchaseTotalPrice = totalPrice
       await inventoryItem.save()
     }
 
     return res.status(200).json({
-      message: 'Producto de empaque creado y entrada registrada exitosamente',
+      message: 'Producto creado exitosamente',
       item: inventoryItem,
       portion: portionItem
     })
   } catch (error) {
-    return res.status(500).json({ message: 'Error creating packaging product', error: error.message })
+    return res.status(500).json({ message: 'Error creating product', error: error.message })
   }
 }
