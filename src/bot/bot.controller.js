@@ -1,4 +1,5 @@
 import { processIncomingMessage } from './bot.service.js';
+import Order from '../orders/order.model.js';
 
 // ==========================================
 // WHATSAPP WEBHOOK CONTROLLERS (DEDICATED)
@@ -36,17 +37,44 @@ export const handleWhatsAppWebhook = async (req, res) => {
       ) {
         const message = body.entry[0].changes[0].value.messages[0];
         const from = message.from; // Phone number
-        const text = message.text ? message.text.body : '';
 
-        if (text) {
+        if (message.type === 'interactive' && message.interactive?.type === 'nfm_reply') {
+          try {
+            const responseJson = message.interactive.nfm_reply.response_json;
+            console.log(`[WhatsApp Webhook Recv] Flow reply from ${from}: ${responseJson}`);
+            const data = JSON.parse(responseJson);
+
+            const order = await Order.findOne({ phone: from, status: 'ENTREGADO', surveyStatus: 'SENT' }).sort({ deliveredAt: -1 });
+            if (order) {
+              order.surveyResponses = {
+                orderOk: data.order_ok || null,
+                foodRating: data.food_rating || null,
+                orderingExperience: data.ordering_experience || null,
+                respondedAt: new Date()
+              };
+              order.surveyStatus = 'COMPLETED';
+              await order.save();
+              console.log(`[WhatsApp Webhook Recv] Survey saved for order ${order._id}`);
+              // No enviamos mensaje de agradecimiento para no exceder los 4 mensajes automatizados
+            } else {
+              console.log(`[WhatsApp Webhook Recv] No pending survey found for ${from}`);
+            }
+          } catch (err) {
+            console.error('[WhatsApp Webhook Recv] Error processing flow reply:', err);
+          }
+        } else {
+          const text = message.text ? message.text.body : '';
+
+          if (text) {
           console.log(`[WhatsApp Webhook Recv] Processing message from ${from}: "${text}"`);
           try {
             await processIncomingMessage(from, text, 'whatsapp');
           } catch (err) {
             console.error('[WhatsApp Webhook Recv] Error during processing, but returning 200 to prevent Meta retries:', err);
           }
-        } else {
-          console.log('[WhatsApp Webhook Recv] Message body is empty or non-text type event');
+          } else {
+            console.log('[WhatsApp Webhook Recv] Message body is empty or non-text type event');
+          }
         }
       } else {
         console.log('[WhatsApp Webhook Recv] Webhook event received but has no messages array');
@@ -159,13 +187,33 @@ export const handleIncomingMessage = async (req, res) => {
       ) {
         const message = body.entry[0].changes[0].value.messages[0];
         const from = message.from; 
-        const text = message.text ? message.text.body : '';
 
-        if (text) {
+        if (message.type === 'interactive' && message.interactive?.type === 'nfm_reply') {
           try {
-            await processIncomingMessage(from, text, 'whatsapp');
+            const responseJson = message.interactive.nfm_reply.response_json;
+            const data = JSON.parse(responseJson);
+            const order = await Order.findOne({ phone: from, status: 'ENTREGADO', surveyStatus: 'SENT' }).sort({ deliveredAt: -1 });
+            if (order) {
+              order.surveyResponses = {
+                orderOk: data.order_ok || null,
+                foodRating: data.food_rating || null,
+                orderingExperience: data.ordering_experience || null,
+                respondedAt: new Date()
+              };
+              order.surveyStatus = 'COMPLETED';
+              await order.save();
+            }
           } catch (err) {
-            console.error('[Legacy Webhook Recv] WhatsApp processing error:', err);
+            console.error('[Legacy Webhook Recv] Error processing flow reply:', err);
+          }
+        } else {
+          const text = message.text ? message.text.body : '';
+          if (text) {
+            try {
+              await processIncomingMessage(from, text, 'whatsapp');
+            } catch (err) {
+              console.error('[Legacy Webhook Recv] WhatsApp processing error:', err);
+            }
           }
         }
       }

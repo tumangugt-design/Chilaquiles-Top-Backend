@@ -7,6 +7,7 @@ import { discountInventoryForOrder, validateInventoryAvailability } from '../inv
 import { publishOrderRealtimeEvent } from '../realtime/realtime.service.js';
 import { getGuatemalaOrderDatePrefix, getGuatemalaParts } from '../helpers/timezone.helper.js';
 import { notifyAdminNewOrder } from '../helpers/email.helper.js';
+import { sendOrderReceivedMessage, sendOrderEnRouteMessage, sendOrderDeliveredMessage } from '../bot/whatsapp.service.js';
 
 
 const normalizeSelection = (value = '') => String(value || '').trim().toUpperCase().replace(/\s+/g, '_');
@@ -263,6 +264,10 @@ export const createOrderRecord = async ({ user, customer, items, sauceTemperatur
       console.error('No se pudo enviar correo de nuevo pedido:', emailError.message);
     });
 
+    if (order.phone) {
+      sendOrderReceivedMessage(order.phone);
+    }
+
     return order;
   } catch (error) {
     if (order?._id) {
@@ -375,6 +380,15 @@ export const updateOrderStatusRecord = async ({ orderId, nextStatus, actor }) =>
   }
 
   order.status = nextStatus;
+  
+  if (nextStatus === ORDER_STATUS.EN_CAMINO) {
+    if (order.phone) sendOrderEnRouteMessage(order.phone);
+  } else if (nextStatus === ORDER_STATUS.ENTREGADO) {
+    if (order.phone) sendOrderDeliveredMessage(order.phone, order.sauceTemperature === 'FRIO');
+    order.deliveredAt = new Date();
+    order.surveyStatus = 'PENDING';
+  }
+
   await order.save();
   await publishOrderRealtimeEvent(order);
   return order;

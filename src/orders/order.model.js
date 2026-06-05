@@ -78,7 +78,19 @@ const orderSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User'
   },
-  hiddenForAdmin: { type: Boolean, default: false }
+  hiddenForAdmin: { type: Boolean, default: false },
+  deliveredAt: { type: Date, default: null },
+  surveyStatus: {
+    type: String,
+    enum: ['PENDING', 'SENT', 'COMPLETED', 'FAILED'],
+    default: null
+  },
+  surveyResponses: {
+    orderOk: { type: String, enum: ['yes', 'no'], default: null },
+    foodRating: { type: String, enum: ['excellent', 'normal', 'bad'], default: null },
+    orderingExperience: { type: String, enum: ['easy', 'difficult'], default: null },
+    respondedAt: { type: Date, default: null }
+  }
 }, { timestamps: true });
 
 export default mongoose.model('Order', orderSchema);
