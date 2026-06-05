@@ -1,6 +1,10 @@
 import Order from '../../orders/order.model.js';
 import Inventory from '../../inventory/inventory.model.js';
-import { isOperatingNow, getOperatingHoursSetting } from '../../settings/settings.service.js';
+import InventoryLog from '../../inventory/inventoryLog.model.js';
+import Portion from '../../inventory/portion.model.js';
+import User from '../../users/user.model.js';
+import Setting from '../../settings/settings.model.js';
+import { isOperatingNow, getOperatingHoursSetting, updateOperatingHoursSetting } from '../../settings/settings.service.js';
 import { getAdminAICompletion, prepareAdminBotContext } from './telegram.ai.js';
 import TelegramBotMemory from './bot_memory.model.js';
 import { getFinancialSummary } from '../../finances/finances.service.js';
@@ -13,9 +17,9 @@ const fetchContextData = async () => {
     const todayDelivered = await Order.countDocuments({ createdAt: { $gte: today }, status: 'entregado' });
     const operatingHours = await isOperatingNow();
     
-    return `Estado Actual: ${operatingHours.isCurrentlyOpen ? 'ABIERTO' : 'CERRADO'}. Pedidos Pendientes: ${pendingOrders}. Entregados hoy: ${todayDelivered}. Fecha/Hora actual servidor: ${new Date().toLocaleString('es-GT', { timeZone: 'America/Guatemala' })}`;
+    return `Estado: ${operatingHours.isCurrentlyOpen ? 'ABIERTO' : 'CERRADO'} | Pendientes: ${pendingOrders} | Entregados hoy: ${todayDelivered} | Ahora: ${new Date().toLocaleString('es-GT', { timeZone: 'America/Guatemala' })}`;
   } catch (err) {
-    return 'Error obteniendo contexto básico.';
+    return 'Error obteniendo contexto.';
   }
 };
 
@@ -25,18 +29,18 @@ const executeTool = async (toolCall) => {
   try {
     args = JSON.parse(toolCall.function.arguments);
   } catch (e) {
-    return "Error: Invalid JSON arguments.";
+    return "Error: JSON inválido en argumentos.";
   }
 
   try {
     if (name === 'getFinancialSummary') {
-      // Use the EXACT same function the admin dashboard uses — guarantees identical numbers
       const summary = await getFinancialSummary();
       return JSON.stringify({
-        note: "ESTOS DATOS SON EXACTOS Y PROVIENEN DEL MISMO CÁLCULO QUE EL PANEL ADMINISTRATIVO. Usa estos números directamente.",
+        note: "DATOS EXACTOS del panel administrativo. Usa estos números directamente.",
         ...summary
       });
     }
+
     else if (name === 'getOrders') {
       const filter = {};
       if (args.startDate || args.endDate) {
@@ -44,7 +48,6 @@ const executeTool = async (toolCall) => {
         if (args.startDate) filter.createdAt.$gte = new Date(args.startDate);
         if (args.endDate) filter.createdAt.$lt = new Date(args.endDate);
       }
-      // Exclude cancelled orders by default (same as dashboard), unless specifically requested
       if (args.status) {
         filter.status = args.status;
       } else {
@@ -55,12 +58,10 @@ const executeTool = async (toolCall) => {
       const limit = args.limit ? Math.min(args.limit, 500) : 100;
       const orders = await Order.find(filter).sort({ createdAt: -1 }).limit(limit).lean();
 
-      // Pre-calculate summary so the AI doesn't have to do arithmetic
       const totalRevenue = orders.reduce((sum, o) => sum + (o.total || 0), 0);
       const orderCount = orders.length;
       const averageTicket = orderCount > 0 ? Math.round((totalRevenue / orderCount) * 100) / 100 : 0;
 
-      // Breakdown by status
       const byStatus = {};
       for (const o of orders) {
         const st = o.status || 'desconocido';
@@ -69,10 +70,10 @@ const executeTool = async (toolCall) => {
         byStatus[st].revenue += (o.total || 0);
       }
 
-      // Compact order list (only essential fields to save tokens)
       const compactOrders = orders.map(o => ({
         orderNumber: o.orderNumber,
         name: o.name,
+        phone: o.phone,
         items: (o.items || []).map(i => `${i.sauce} + ${i.protein} + ${i.complement}`),
         itemCount: (o.items || []).length,
         total: o.total,
@@ -80,31 +81,133 @@ const executeTool = async (toolCall) => {
         createdAt: o.createdAt
       }));
 
-      const result = {
+      return JSON.stringify({
         _summary: {
           totalOrders: orderCount,
-          totalRevenue: totalRevenue,
-          averageTicket: averageTicket,
-          byStatus: byStatus,
-          note: "ESTOS TOTALES ESTÁN CALCULADOS POR EL SISTEMA Y SON EXACTOS. Usa estos números directamente, NO intentes re-sumar los pedidos."
+          totalRevenue,
+          averageTicket,
+          byStatus,
+          note: "Totales pre-calculados. Usa estos directamente, NO re-sumes."
         },
         orders: compactOrders
-      };
-
-      return JSON.stringify(result);
+      });
     }
+
     else if (name === 'getInventory') {
       const filter = args.itemName ? { name: { $regex: args.itemName, $options: 'i' } } : {};
       const items = await Inventory.find(filter).lean();
-      return JSON.stringify(items);
+      const portions = await Portion.find(args.itemName ? { name: { $regex: args.itemName, $options: 'i' } } : {}).lean();
+
+      // Merge inventory with portion data for complete cost info
+      const portionMap = Object.fromEntries(portions.map(p => [p.name, p]));
+      const enriched = items.map(item => {
+        const portion = portionMap[item.name];
+        return {
+          name: item.name,
+          stock: item.stock,
+          unit: item.unit,
+          category: item.category,
+          isActive: item.isActive,
+          minimumStock: item.minimumStock,
+          lastPrice: item.lastPrice,
+          lastPurchaseQty: item.lastPurchaseQty,
+          lastPurchaseUnit: item.lastPurchaseUnit,
+          lastPurchaseTotalPrice: item.lastPurchaseTotalPrice,
+          portion: portion ? {
+            usedPerPlate: portion.usedPerPlate,
+            unit: portion.unit,
+            pricePerPortion: portion.price
+          } : null
+        };
+      });
+
+      return JSON.stringify(enriched);
     }
+
     else if (name === 'getSettings') {
       const operatingHours = await isOperatingNow();
       const fullSettings = await getOperatingHoursSetting();
-      return JSON.stringify({ operatingHours, fullSettings });
+      return JSON.stringify({ currentStatus: operatingHours, fullSchedule: fullSettings });
     }
+
+    else if (name === 'updateOperatingHours') {
+      // Merge the incoming partial update with current settings
+      const current = await getOperatingHoursSetting();
+      const payload = { ...current };
+
+      if (args.weekly) {
+        payload.weekly = { ...current.weekly, ...args.weekly };
+      }
+      if (args.specialDates) {
+        payload.specialDates = { ...(current.specialDates || {}), ...args.specialDates };
+      }
+      if (args.dateRanges) {
+        payload.dateRanges = args.dateRanges;
+      }
+
+      const updated = await updateOperatingHoursSetting(payload);
+      const newStatus = await isOperatingNow();
+      return JSON.stringify({ message: "Horario actualizado correctamente.", updatedSchedule: updated, currentStatus: newStatus });
+    }
+
+    else if (name === 'getUsers') {
+      if (args.phone) {
+        const user = await User.findOne({ phone: { $regex: args.phone, $options: 'i' } }).lean();
+        return JSON.stringify(user || { error: "No se encontró usuario con ese teléfono." });
+      }
+      if (args.role) {
+        const users = await User.find({ role: args.role.toUpperCase() }).lean();
+        return JSON.stringify({ count: users.length, users: users.map(u => ({ name: u.name, phone: u.phone, role: u.role, status: u.status })) });
+      }
+      // All users summary
+      const counts = {};
+      const roles = ['CLIENT', 'ADMIN', 'CHEF', 'REPARTIDOR'];
+      for (const role of roles) {
+        counts[role] = await User.countDocuments({ role });
+      }
+      counts.total = await User.countDocuments({});
+      return JSON.stringify(counts);
+    }
+
+    else if (name === 'getPromotions') {
+      const doc = await Setting.findOne({ key: 'promotions' });
+      return JSON.stringify(doc ? doc.value : []);
+    }
+
+    else if (name === 'getCoupons') {
+      const doc = await Setting.findOne({ key: 'coupons' });
+      return JSON.stringify(doc ? doc.value : []);
+    }
+
+    else if (name === 'getCalculatorCosts') {
+      const doc = await Setting.findOne({ key: 'calculator_costs' });
+      return JSON.stringify(doc ? doc.value : {});
+    }
+
+    else if (name === 'getInventoryLogs') {
+      const filter = {};
+      if (args.ingredientName) filter.ingredientName = { $regex: args.ingredientName, $options: 'i' };
+      if (args.type) filter.type = args.type;
+      const limit = args.limit ? Math.min(args.limit, 100) : 20;
+
+      const logs = await InventoryLog.find(filter).sort({ createdAt: -1 }).limit(limit).lean();
+      const compact = logs.map(l => ({
+        ingredient: l.ingredientName,
+        type: l.type,
+        amount: l.amount,
+        unit: l.storedUnit || l.inputUnit,
+        totalPrice: l.totalPrice || l.price,
+        portionPrice: l.portionPrice,
+        previousStock: l.previousStock,
+        newStock: l.newStock,
+        reason: l.reason,
+        date: l.createdAt
+      }));
+      return JSON.stringify(compact);
+    }
+
     else {
-      return `Error: Tool ${name} not found.`;
+      return `Error: Herramienta ${name} no encontrada.`;
     }
   } catch (err) {
     console.error('Error executing tool:', err);
@@ -122,7 +225,6 @@ export const processAdminMessage = async (text, chatId) => {
       memory = new TelegramBotMemory({ chatId: chatId.toString(), messages: [] });
     }
     
-    // Preparar historial
     let history = (memory.messages || []).map(m => ({ role: m.role, content: m.content }));
     if (history.length > 10) history = history.slice(-10);
 
@@ -132,9 +234,9 @@ export const processAdminMessage = async (text, chatId) => {
       { role: 'user', content: text }
     ];
 
-    let finalResponse = "Lo siento, no pude completar el análisis.";
+    let finalResponse = "No pude completar la consulta.";
     let iterations = 0;
-    const maxIterations = 4; // Límite para evitar bucles infinitos
+    const maxIterations = 5;
 
     while (iterations < maxIterations) {
       iterations++;
@@ -142,9 +244,8 @@ export const processAdminMessage = async (text, chatId) => {
       
       const aiMessage = await getAdminAICompletion(messages);
       
-      // Si hay tool calls, ejecutamos
       if (aiMessage.tool_calls && aiMessage.tool_calls.length > 0) {
-        messages.push(aiMessage); // Agregamos la llamada al historial temporal
+        messages.push(aiMessage);
 
         for (const toolCall of aiMessage.tool_calls) {
           console.log(`[Agent] Executing tool: ${toolCall.function.name}`);
@@ -157,13 +258,11 @@ export const processAdminMessage = async (text, chatId) => {
           });
         }
       } else {
-        // Respuesta final de texto
         finalResponse = aiMessage.content;
         break;
       }
     }
 
-    // Guardar SOLO el texto inicial del usuario y la respuesta final en la BD para evitar romper el schema
     if (!memory.messages) memory.messages = [];
     memory.messages.push({ role: 'user', content: text });
     if (finalResponse) {
@@ -175,9 +274,9 @@ export const processAdminMessage = async (text, chatId) => {
     }
     await memory.save();
 
-    return finalResponse || "Análisis completado sin comentarios adicionales.";
+    return finalResponse || "Consulta completada.";
   } catch (error) {
     console.error('Error in Admin Agent Loop:', error);
-    return 'Ocurrió un error al procesar tu solicitud como agente inteligente.';
+    return 'Error procesando la solicitud.';
   }
 };
