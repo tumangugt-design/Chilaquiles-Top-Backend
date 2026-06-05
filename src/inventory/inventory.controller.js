@@ -86,6 +86,19 @@ export const saveInventoryItem = async (req, res) => {
     const rawAmount = Number(req.body.amount ?? req.body.stock ?? 0)
     
     let catalogItem = INVENTORY_CATALOG_MAP[name]
+    if (!catalogItem) {
+      const dbItem = await Inventory.findOne({ name })
+      if (dbItem) {
+        const dbPortion = await Portion.findOne({ name })
+        catalogItem = {
+          name: dbItem.name,
+          label: dbItem.name.charAt(0).toUpperCase() + dbItem.name.slice(1),
+          unit: dbItem.unit || 'g',
+          category: dbItem.category || 'Otros',
+          usedPerPlate: dbPortion?.usedPerPlate || 1
+        }
+      }
+    }
     let isEmpaque = catalogItem?.category === 'Empaque' || req.body.category === 'Empaque'
 
     if (!catalogItem && !isEmpaque) {
@@ -266,6 +279,19 @@ export const updateInventoryItemStock = async (req, res) => {
     const rawStock = Number(req.body.stock)
     
     let catalogItem = INVENTORY_CATALOG_MAP[normalizedName]
+    if (!catalogItem) {
+      const dbItem = await Inventory.findOne({ name: normalizedName })
+      if (dbItem) {
+        const dbPortion = await Portion.findOne({ name: normalizedName })
+        catalogItem = {
+          name: dbItem.name,
+          label: dbItem.name.charAt(0).toUpperCase() + dbItem.name.slice(1),
+          unit: dbItem.unit || 'g',
+          category: dbItem.category || 'Otros',
+          usedPerPlate: dbPortion?.usedPerPlate || 1
+        }
+      }
+    }
     let isEmpaque = catalogItem?.category === 'Empaque' || req.body.category === 'Empaque'
 
     if (!catalogItem && !isEmpaque) {
@@ -356,6 +382,19 @@ export const updateInventoryItemPrice = async (req, res) => {
     const price = Number(req.body.price)
     
     let catalogItem = INVENTORY_CATALOG_MAP[normalizedName]
+    if (!catalogItem) {
+      const dbItem = await Inventory.findOne({ name: normalizedName })
+      if (dbItem) {
+        const dbPortion = await Portion.findOne({ name: normalizedName })
+        catalogItem = {
+          name: dbItem.name,
+          label: dbItem.name.charAt(0).toUpperCase() + dbItem.name.slice(1),
+          unit: dbItem.unit || 'g',
+          category: dbItem.category || 'Otros',
+          usedPerPlate: dbPortion?.usedPerPlate || 1
+        }
+      }
+    }
     let isEmpaque = catalogItem?.category === 'Empaque' || req.body.category === 'Empaque'
 
     if (!catalogItem && !isEmpaque) {
