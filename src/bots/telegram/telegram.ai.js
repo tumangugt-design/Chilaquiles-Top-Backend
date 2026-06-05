@@ -55,11 +55,11 @@ export const AI_TOOLS = [
         properties: {
           weekly: {
             type: "object",
-            description: "Horario semanal por día (sunday, monday, etc). Formato: { isOpen: boolean, openTime: 'HH:MM', closeTime: 'HH:MM' }. ¡IMPORTANTE! Usa SIEMPRE formato 24 horas (ej. 21:00 para 9 PM)."
+            description: "Horario semanal por día (sunday, monday, etc). Formato: { isOpen: boolean, openTime: 'HH:MM', closeTime: 'HH:MM' }. ¡PROHIBIDO USAR 'AM' o 'PM'! Usa solo 5 caracteres en formato militar (ej. '21:00' para 9 de la noche)."
           },
           specialDates: {
             type: "object",
-            description: "Excepciones por fecha específica. Llave = fecha 'YYYY-MM-DD', valor = { isOpen: boolean, openTime: 'HH:MM', closeTime: 'HH:MM', note: 'razón' }. ¡CRÍTICO! Si el usuario te pide ABRIR AHORA/HOY y la hora actual es menor que el openTime, DEBES cambiar el openTime a una hora más temprana (ej. '08:00' o la hora actual) para que el sistema lo detecte como ABIERTO de inmediato. Usa SIEMPRE formato 24 horas."
+            description: "Excepciones por fecha específica. Llave = fecha 'YYYY-MM-DD', valor = { isOpen: boolean, openTime: 'HH:MM', closeTime: 'HH:MM', note: 'razón' }. ¡CRÍTICO! Si te pide ABRIR AHORA y la hora actual es menor que openTime, DEBES cambiar el openTime a una hora anterior (ej. '08:00') para que abra de inmediato. ¡PROHIBIDO USAR 'AM' o 'PM'! Usa solo formato militar '21:00'."
           },
           dateRanges: {
             type: "array",
@@ -70,8 +70,8 @@ export const AI_TOOLS = [
                 start: { type: "string", description: "Fecha inicio YYYY-MM-DD" },
                 end: { type: "string", description: "Fecha fin YYYY-MM-DD" },
                 isOpen: { type: "boolean" },
-                openTime: { type: "string", description: "HH:MM (24h)" },
-                closeTime: { type: "string", description: "HH:MM (24h)" },
+                openTime: { type: "string", description: "HH:MM (PROHIBIDO AM/PM)" },
+                closeTime: { type: "string", description: "HH:MM (PROHIBIDO AM/PM)" },
                 note: { type: "string" }
               }
             }
