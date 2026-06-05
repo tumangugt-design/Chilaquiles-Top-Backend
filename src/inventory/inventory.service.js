@@ -117,15 +117,36 @@ const getConsumptionForItem = (item, portionMap, inventoryMap) => {
     consumption['salsa verde'] = round(getQty('salsa verde') / 2)
     consumption['plato de 4 onz'] = getQty('plato de 4 onz')
     consumption['tapadera de 4 onz'] = getQty('tapadera de 4 onz')
+  } else if (sauce) {
+    const dbSauceName = sauce.toLowerCase().replace(/_/g, ' ')
+    consumption[dbSauceName] = getQty(dbSauceName)
+    consumption['plato de 8 onz'] = getQty('plato de 8 onz')
+    consumption['tapadera de 8 onz'] = getQty('tapadera de 8 onz')
   }
 
-  if (protein === 'STEAK') consumption['steak'] = getQty('steak')
-  if (protein === 'POLLO') consumption['pollo'] = getQty('pollo')
-  if (protein === 'CHORIZO') consumption['chorizo'] = getQty('chorizo')
+  const hardcodedProteins = { STEAK: 'steak', POLLO: 'pollo', CHORIZO: 'chorizo' }
+  if (protein) {
+    if (hardcodedProteins[protein]) {
+      consumption[hardcodedProteins[protein]] = getQty(hardcodedProteins[protein])
+    } else {
+      const dbName = protein.toLowerCase().replace(/_/g, ' ')
+      consumption[dbName] = getQty(dbName)
+    }
+  }
 
-  if (complement === 'AGUACATE') consumption['aguacate'] = getQty('aguacate')
-  if (complement === 'CEBOLLA_CARAMELIZADA') consumption['cebolla caramelizada'] = getQty('cebolla caramelizada')
-  if (complement === 'QUESO_EXTRA') consumption['queso extra'] = getQty('queso extra')
+  const hardcodedComplements = {
+    AGUACATE: 'aguacate',
+    CEBOLLA_CARAMELIZADA: 'cebolla caramelizada',
+    QUESO_EXTRA: 'queso extra'
+  }
+  if (complement) {
+    if (hardcodedComplements[complement]) {
+      consumption[hardcodedComplements[complement]] = getQty(hardcodedComplements[complement])
+    } else {
+      const dbName = complement.toLowerCase().replace(/_/g, ' ')
+      consumption[dbName] = getQty(dbName)
+    }
+  }
 
   if (item.baseRecipe?.onion) consumption['cebolla'] = getQty('cebolla')
   if (item.baseRecipe?.cilantro) consumption['cilantro'] = getQty('cilantro')
