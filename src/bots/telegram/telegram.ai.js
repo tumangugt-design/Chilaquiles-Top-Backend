@@ -59,7 +59,7 @@ export const AI_TOOLS = [
           },
           specialDates: {
             type: "object",
-            description: "Excepciones por fecha específica. Llave = fecha 'YYYY-MM-DD', valor = { isOpen: boolean, openTime: 'HH:MM', closeTime: 'HH:MM', note: 'razón' }. ¡IMPORTANTE! Usa SIEMPRE formato 24 horas (ej. 21:00 para 9 PM)."
+            description: "Excepciones por fecha específica. Llave = fecha 'YYYY-MM-DD', valor = { isOpen: boolean, openTime: 'HH:MM', closeTime: 'HH:MM', note: 'razón' }. ¡CRÍTICO! Si el usuario te pide ABRIR AHORA/HOY y la hora actual es menor que el openTime, DEBES cambiar el openTime a una hora más temprana (ej. '08:00' o la hora actual) para que el sistema lo detecte como ABIERTO de inmediato. Usa SIEMPRE formato 24 horas."
           },
           dateRanges: {
             type: "array",
