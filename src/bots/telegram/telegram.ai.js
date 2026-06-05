@@ -63,7 +63,18 @@ export const AI_TOOLS = [
           },
           dateRanges: {
             type: "array",
-            description: "Rangos de fechas con horario especial. Array de { start: 'YYYY-MM-DD', end: 'YYYY-MM-DD', isOpen: boolean, openTime, closeTime, note }."
+            description: "Rangos de fechas con horario especial.",
+            items: {
+              type: "object",
+              properties: {
+                start: { type: "string", description: "Fecha inicio YYYY-MM-DD" },
+                end: { type: "string", description: "Fecha fin YYYY-MM-DD" },
+                isOpen: { type: "boolean" },
+                openTime: { type: "string", description: "HH:MM" },
+                closeTime: { type: "string", description: "HH:MM" },
+                note: { type: "string" }
+              }
+            }
           }
         }
       }
@@ -159,18 +170,24 @@ export const getAdminAICompletion = async (messages) => {
 };
 
 export const prepareAdminBotContext = (backendData) => {
-  return `Eres el asistente administrativo de "Chilaquiles TOP". Hablas con un administrador con acceso total al sistema.
+  return `Eres el asistente administrativo de "Chilaquiles TOP". Hablas con el dueño/administrador con acceso total al sistema.
 
-REGLAS:
-1. Responde BREVE y DIRECTO. Solo lo que se preguntó. Sin explicaciones extras, sin recomendaciones no solicitadas, sin párrafos largos.
-2. Usa herramientas para obtener datos reales. NUNCA inventes datos.
-3. Para dinero/ventas/ingresos → usa getFinancialSummary SIEMPRE.
-4. Para costos internos de platos → usa getInventory (incluye precio por porción) y getCalculatorCosts.
-5. Para pedidos individuales/buscar cliente → usa getOrders.
-6. Para horarios → usa getSettings para consultar, updateOperatingHours para modificar.
-7. Formato moneda: Q seguido del monto (ej: Q18.75).
-8. Cuando getOrders retorne _summary, usa esos totales directamente. NUNCA sumes manualmente.
-9. Mantén contexto de la conversación.
+PERSONALIDAD: Amigable y profesional. Puedes saludar, ser cálido y usar emojis con moderación. Pero ve al grano.
+
+REGLAS DE BREVEDAD:
+- Responde lo que se preguntó sin agregar contexto que no se pidió.
+- No expliques procesos internos ("He revisado los registros...", "Tras analizar la base de datos...") a menos que te lo pidan.
+- Si la respuesta es un dato, da el dato. Ej: "¿Horario de hoy?" → "8:00 AM a 9:00 PM"
+- Puedes cerrar con una pregunta corta tipo "¿Algo más?" o "¿Necesitas algo más?" pero no agregues recomendaciones.
+
+REGLAS TÉCNICAS:
+1. Usa herramientas para datos reales. NUNCA inventes.
+2. Dinero/ventas/ingresos → getFinancialSummary SIEMPRE.
+3. Costos internos → getInventory (precio por porción) y getCalculatorCosts.
+4. Pedidos/buscar cliente → getOrders. Usa los totales de _summary directamente, NUNCA sumes manualmente.
+5. Horarios → getSettings para consultar, updateOperatingHours para modificar.
+6. Formato moneda: Q seguido del monto (ej: Q18.75).
+7. Mantén contexto de la conversación.
 
 ${backendData}`;
 };
