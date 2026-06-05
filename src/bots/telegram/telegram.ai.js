@@ -3,26 +3,23 @@ export const AI_TOOLS = [
     type: "function",
     function: {
       name: "getFinancialSummary",
-      description: "Obtiene el resumen financiero OFICIAL del negocio (ventas, costos, utilidades) desglosado por día, semana y mes. USA ESTA HERRAMIENTA SIEMPRE que te pregunten por ingresos, ventas totales, ganancias o dinero. Los datos son idénticos a los del panel administrativo.",
-      parameters: {
-        type: "object",
-        properties: {}
-      }
+      description: "Resumen financiero OFICIAL: ventas, costos, utilidades desglosado por día, semana, mes y global. Usar SIEMPRE para preguntas de dinero/ingresos/ganancias.",
+      parameters: { type: "object", properties: {} }
     }
   },
   {
     type: "function",
     function: {
       name: "getOrders",
-      description: "Busca pedidos individuales en la base de datos. Úsala SOLO para ver detalles de pedidos específicos, buscar por cliente, o analizar ingredientes consumidos. Para totales de ventas/ingresos usa SIEMPRE getFinancialSummary en su lugar.",
+      description: "Busca pedidos individuales. Para totales de dinero usa getFinancialSummary. Esta es SOLO para detalles de pedidos, buscar por cliente, filtrar por estado, o analizar ingredientes consumidos.",
       parameters: {
         type: "object",
         properties: {
-          startDate: { type: "string", description: "Fecha de inicio en formato ISO (ej: 2026-05-15T00:00:00.000Z)" },
-          endDate: { type: "string", description: "Fecha de fin en formato ISO (ej: 2026-05-28T00:00:00.000Z). IMPORTANTE: este valor es EXCLUSIVO ($lt), no inclusivo." },
-          status: { type: "string", description: "Estado exacto del pedido (ej: 'entregado', 'cancelado'). Si no se especifica, se excluyen los cancelados automáticamente." },
+          startDate: { type: "string", description: "Fecha inicio ISO (ej: 2026-05-15T00:00:00.000Z)" },
+          endDate: { type: "string", description: "Fecha fin ISO, EXCLUSIVO ($lt)" },
+          status: { type: "string", description: "Estado exacto: 'recibido', 'en_proceso', 'listo_para_despacho', 'recolectado', 'en_camino', 'entregado', 'cancelado'. Sin filtro = excluye cancelados." },
           customerName: { type: "string", description: "Nombre del cliente a buscar" },
-          limit: { type: "number", description: "Límite de resultados (máximo 500)." }
+          limit: { type: "number", description: "Límite de resultados (máx 500)" }
         }
       }
     }
@@ -31,11 +28,11 @@ export const AI_TOOLS = [
     type: "function",
     function: {
       name: "getInventory",
-      description: "Obtiene el inventario actual para consultar stock.",
+      description: "Inventario actual: stock, precios por porción, costos internos, estado activo/inactivo. Incluye datos de porciones (cuánto se usa por plato y costo por porción).",
       parameters: {
         type: "object",
         properties: {
-          itemName: { type: "string", description: "Nombre del ingrediente a buscar (ej: pollo)" }
+          itemName: { type: "string", description: "Nombre del ingrediente (ej: pollo, steak, salsa roja). Vacío = todo el inventario." }
         }
       }
     }
@@ -44,10 +41,95 @@ export const AI_TOOLS = [
     type: "function",
     function: {
       name: "getSettings",
-      description: "Obtiene la configuración del sistema como los horarios de apertura y días de cierre históricos.",
+      description: "Configuración completa del sistema: horarios semanales, fechas especiales, rangos de cierre, estado actual (abierto/cerrado).",
+      parameters: { type: "object", properties: {} }
+    }
+  },
+  {
+    type: "function",
+    function: {
+      name: "updateOperatingHours",
+      description: "Modifica los horarios. ÚSALA si el usuario pide 'abrir', 'cerrar' o cambiar horas. Envía SOLO los campos a cambiar.",
       parameters: {
         type: "object",
-        properties: {}
+        properties: {
+          weekly: {
+            type: "object",
+            description: "Horario semanal por día (sunday, monday, etc). Formato: { isOpen: boolean, openTime: 'HH:MM', closeTime: 'HH:MM' }. ¡PROHIBIDO USAR 'AM' o 'PM'! Usa solo 5 caracteres en formato militar (ej. '21:00' para 9 de la noche)."
+          },
+          specialDates: {
+            type: "object",
+            description: "Excepciones por fecha específica. Llave = fecha 'YYYY-MM-DD', valor = { isOpen: boolean, openTime: 'HH:MM', closeTime: 'HH:MM', note: 'razón' }. ¡CRÍTICO! Si te pide ABRIR AHORA y la hora actual es menor que openTime, DEBES cambiar el openTime a una hora anterior (ej. '08:00') para que abra de inmediato. ¡PROHIBIDO USAR 'AM' o 'PM'! Usa solo formato militar '21:00'."
+          },
+          dateRanges: {
+            type: "array",
+            description: "Rangos de fechas con horario especial.",
+            items: {
+              type: "object",
+              properties: {
+                start: { type: "string", description: "Fecha inicio YYYY-MM-DD" },
+                end: { type: "string", description: "Fecha fin YYYY-MM-DD" },
+                isOpen: { type: "boolean" },
+                openTime: { type: "string", description: "HH:MM (PROHIBIDO AM/PM)" },
+                closeTime: { type: "string", description: "HH:MM (PROHIBIDO AM/PM)" },
+                note: { type: "string" }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  {
+    type: "function",
+    function: {
+      name: "getUsers",
+      description: "Lista usuarios del sistema. Puede filtrar por rol (CLIENT, ADMIN, CHEF, REPARTIDOR) o buscar un cliente por teléfono.",
+      parameters: {
+        type: "object",
+        properties: {
+          role: { type: "string", description: "Filtrar por rol: CLIENT, ADMIN, CHEF, REPARTIDOR" },
+          phone: { type: "string", description: "Buscar cliente por número de teléfono" }
+        }
+      }
+    }
+  },
+  {
+    type: "function",
+    function: {
+      name: "getPromotions",
+      description: "Lista las promociones/banners activos configurados en el sistema.",
+      parameters: { type: "object", properties: {} }
+    }
+  },
+  {
+    type: "function",
+    function: {
+      name: "getCoupons",
+      description: "Lista todos los cupones de descuento: código, porcentaje, usos máximos, usos actuales, si está activo.",
+      parameters: { type: "object", properties: {} }
+    }
+  },
+  {
+    type: "function",
+    function: {
+      name: "getCalculatorCosts",
+      description: "Costos internos configurados: costos de ingredientes, márgenes, gastos operativos para la calculadora de precios.",
+      parameters: { type: "object", properties: {} }
+    }
+  },
+  {
+    type: "function",
+    function: {
+      name: "getInventoryLogs",
+      description: "Historial de movimientos del inventario: entradas (compras), salidas (ventas), ajustes. Incluye precios de compra, cantidades y fechas.",
+      parameters: {
+        type: "object",
+        properties: {
+          ingredientName: { type: "string", description: "Filtrar por nombre de ingrediente" },
+          type: { type: "string", description: "Filtrar por tipo: 'IN' (entrada/compra), 'OUT' (salida/venta), 'ADJUSTMENT'" },
+          limit: { type: "number", description: "Límite de resultados (máx 100)" }
+        }
       }
     }
   }
@@ -77,30 +159,35 @@ export const getAdminAICompletion = async (messages) => {
 
     if (!data.choices || data.choices.length === 0) {
       console.error('OpenRouter Error Response:', JSON.stringify(data));
-      return { role: 'assistant', content: 'Ocurrió un error al procesar tu solicitud con la IA (Respuesta vacía).' };
+      return { role: 'assistant', content: 'Error al procesar la solicitud (respuesta vacía).' };
     }
 
-    // Retorna el objeto de mensaje completo (puede incluir tool_calls)
     return data.choices[0].message;
   } catch (error) {
     console.error('Error with OpenRouter:', error);
-    return { role: 'assistant', content: 'Hubo un error de conexión con el proveedor de IA. Revisa los logs.' };
+    return { role: 'assistant', content: 'Error de conexión con el proveedor de IA.' };
   }
 };
 
 export const prepareAdminBotContext = (backendData) => {
-  return `Eres el Asistente Administrativo Experto de "Chilaquiles TOP". 
-Tu tarea es ayudar a los dueños o administradores con la información del negocio de forma precisa y servicial.
+  return `Eres el asistente administrativo de "Chilaquiles TOP". Hablas con el dueño/administrador con acceso total al sistema.
 
-REGLAS DE AGENTE:
-1. Eres un agente inteligente. NO intentes inventar datos. Si el usuario te pregunta por estadísticas, fechas específicas, pedidos pasados, ingresos, o inventario, **DEBES usar las herramientas (funciones) disponibles para buscar los datos reales en la base de datos**.
-2. **REGLA CRÍTICA FINANCIERA**: Para CUALQUIER pregunta sobre ventas, ingresos, ganancias, utilidades o dinero, DEBES usar la herramienta "getFinancialSummary". Esta herramienta usa EXACTAMENTE el mismo cálculo que el panel administrativo, por lo que los números siempre coinciden. NUNCA uses "getOrders" para calcular totales de dinero.
-3. **getOrders** es SOLO para: ver detalles de pedidos individuales, buscar por nombre de cliente, o analizar ingredientes/stock consumido. Cuando uses getOrders, los resultados incluyen un campo "_summary" con totales pre-calculados; usa esos valores y NUNCA intentes contar o sumar manualmente.
-4. Si un usuario pide stock consumido o detalles de ingredientes, usa "getOrders" para traer los pedidos y analiza los items de cada pedido.
-5. MANTÉN EL CONTEXTO: Recuerda lo que te dijeron en la conversación.
-6. Sé amigable y profesional.
-7. Cuando reportes montos monetarios, usa el formato Q seguido del monto (ej: Q1,910.00).
+PERSONALIDAD: Amigable y profesional. Puedes saludar, ser cálido y usar emojis con moderación. Pero ve al grano.
 
-CONTEXTO ACTUAL DEL SISTEMA (Día de hoy):
+REGLAS DE BREVEDAD:
+- Responde lo que se preguntó sin agregar contexto que no se pidió.
+- No expliques procesos internos ("He revisado los registros...", "Tras analizar la base de datos...") a menos que te lo pidan.
+- Si la respuesta es un dato, da el dato. Ej: "¿Horario de hoy?" → "8:00 AM a 9:00 PM"
+- Puedes cerrar con una pregunta corta tipo "¿Algo más?" o "¿Necesitas algo más?" pero no agregues recomendaciones.
+
+REGLAS TÉCNICAS:
+1. Usa herramientas para datos reales. NUNCA inventes.
+2. Dinero/ventas/ingresos → getFinancialSummary SIEMPRE.
+3. Costos internos → getInventory (precio por porción) y getCalculatorCosts.
+4. Pedidos/buscar cliente → getOrders. Usa los totales de _summary directamente, NUNCA sumes manualmente.
+5. Horarios → getSettings para consultar, updateOperatingHours para modificar.
+6. Formato moneda: Q seguido del monto (ej: Q18.75).
+7. Mantén contexto de la conversación.
+
 ${backendData}`;
 };
