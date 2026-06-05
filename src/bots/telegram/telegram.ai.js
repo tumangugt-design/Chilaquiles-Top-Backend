@@ -49,17 +49,17 @@ export const AI_TOOLS = [
     type: "function",
     function: {
       name: "updateOperatingHours",
-      description: "Modifica los horarios del restaurante. Puede cambiar horario semanal, agregar fechas especiales (cerrar/abrir un día específico), o rangos de fechas. Envía SOLO los campos que se quieren cambiar.",
+      description: "Modifica los horarios. ÚSALA si el usuario pide 'abrir', 'cerrar' o cambiar horas. Envía SOLO los campos a cambiar.",
       parameters: {
         type: "object",
         properties: {
           weekly: {
             type: "object",
-            description: "Horario semanal. Llaves: sunday, monday, tuesday, wednesday, thursday, friday, saturday. Cada día: { isOpen: boolean, openTime: 'HH:MM', closeTime: 'HH:MM', note: 'opcional' }. Envía SOLO los días que se quieren modificar."
+            description: "Horario semanal por día (sunday, monday, etc). Formato: { isOpen: boolean, openTime: 'HH:MM', closeTime: 'HH:MM' }. ¡IMPORTANTE! Usa SIEMPRE formato 24 horas (ej. 21:00 para 9 PM)."
           },
           specialDates: {
             type: "object",
-            description: "Excepciones por fecha específica. Llave = fecha 'YYYY-MM-DD', valor = { isOpen: boolean, openTime: 'HH:MM', closeTime: 'HH:MM', note: 'razón' }. Ej: { '2026-06-10': { isOpen: false, note: 'Cerrado por fumigación' } }"
+            description: "Excepciones por fecha específica. Llave = fecha 'YYYY-MM-DD', valor = { isOpen: boolean, openTime: 'HH:MM', closeTime: 'HH:MM', note: 'razón' }. ¡IMPORTANTE! Usa SIEMPRE formato 24 horas (ej. 21:00 para 9 PM)."
           },
           dateRanges: {
             type: "array",
@@ -70,8 +70,8 @@ export const AI_TOOLS = [
                 start: { type: "string", description: "Fecha inicio YYYY-MM-DD" },
                 end: { type: "string", description: "Fecha fin YYYY-MM-DD" },
                 isOpen: { type: "boolean" },
-                openTime: { type: "string", description: "HH:MM" },
-                closeTime: { type: "string", description: "HH:MM" },
+                openTime: { type: "string", description: "HH:MM (24h)" },
+                closeTime: { type: "string", description: "HH:MM (24h)" },
                 note: { type: "string" }
               }
             }
