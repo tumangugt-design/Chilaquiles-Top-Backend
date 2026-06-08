@@ -106,13 +106,13 @@ export const handleWhatsAppWebhook = async (req, res) => {
                 orderTotal: `Q${order.total.toFixed(2)}`
               };
               
-              if (order.status === 'RECIBIDO') {
+              if (order.status === 'recibido') {
                 const result = await sendOrderReceivedMessage(`+${phone}`, data, true);
                 order.set('whatsappMessages.orderReceived', { sent: result.sent, sentAt: new Date(), method: result.method, error: result.error });
-              } else if (order.status === 'EN_CAMINO') {
+              } else if (order.status === 'en_camino') {
                 const result = await sendOrderEnRouteMessage(`+${phone}`, data, true);
                 order.set('whatsappMessages.orderOnTheWay', { sent: result.sent, sentAt: new Date(), method: result.method, error: result.error });
-              } else if (order.status === 'ENTREGADO') {
+              } else if (order.status === 'entregado') {
                 const result = await sendOrderDeliveredMessage(`+${phone}`, data, true);
                 order.set('whatsappMessages.orderDelivered', { sent: result.sent, sentAt: new Date(), method: result.method, error: result.error });
               }
