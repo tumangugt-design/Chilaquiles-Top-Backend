@@ -149,9 +149,9 @@ export const sendOrderEnRouteMessage = async (to, data, forceTemplate = false) =
 };
 
 export const sendOrderDeliveredMessage = async (to, data, forceTemplate = false) => {
-  const { orderNumber, orderSummary } = data;
+  const { orderNumber } = data;
 
-  const text = `¡Pedido entregado! 🌶️\n\nOrden #${orderNumber}\n\nEsperamos que disfrutes:\n\n${orderSummary}\n\nPara disfrutar mejor tus chilaquiles:\n\n🔥 Instrucciones para calentarla\n\n• Coloca los recipientes de salsa en el microondas con la tapa puesta.\n• Calienta durante 2 minutos a potencia máxima.\n• Cuando quede aproximadamente 1 minuto, retira la proteína.\n• Continúa calentando únicamente la salsa hasta completar el tiempo.\n• Retira la salsa y agrégala sobre los chilaquiles antes de servir.\n\nTambién puedes calentar la salsa en una olla pequeña a fuego bajo.\n\n¡Buen provecho! 🌶️`;
+  const text = `¡Pedido entregado! 📦🥡\nOrden #${orderNumber}\n\nPara que disfrutes de la mejor experiencia, te compartimos las instrucciones para calentar:\n\n• Toma los recipientes de salsa y proteína de un solo plato y colócalos en el microondas con la tapa puesta.\n• Calienta durante 2 minutos a potencia máxima.\n• Cuando quede aproximadamente 1 minuto, retira la proteína.\n• Continúa calentando únicamente la salsa hasta completar el tiempo.\n• Retira la salsa y agrégala sobre los chilaquiles antes de servir.\n• Repite este mismo proceso para cada plato en tu orden.\n\nCon esto garantizamos que la salsa esté lo suficientemente caliente para derretir el queso a la perfección y que tu proteína quede en su punto exacto 😮💨🤩\n\n¡Buen provecho! 👨🏼‍🍳`;
 
   try {
     if (forceTemplate) {
@@ -169,8 +169,7 @@ export const sendOrderDeliveredMessage = async (to, data, forceTemplate = false)
           {
             type: "body",
             parameters: [
-              { type: "text", text: String(orderNumber) },
-              { type: "text", text: String(orderSummary) }
+              { type: "text", text: String(orderNumber) }
             ]
           }
         ], 'en');
