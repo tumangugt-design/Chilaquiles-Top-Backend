@@ -407,7 +407,7 @@ export const updateOrderStatusRecord = async ({ orderId, nextStatus, actor }) =>
     }
     order.deliveredAt = new Date();
     order.surveyStatus = 'PENDING';
-    order.surveySendAt = new Date(Date.now() + 5 * 60000); // Temporarily 5 minutes for testing
+    order.surveySendAt = new Date(Date.now() + 35 * 60000); // 35 minutes delay
   }
 
   await order.save();

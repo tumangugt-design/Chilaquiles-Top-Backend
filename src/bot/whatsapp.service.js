@@ -204,16 +204,16 @@ export const sendSurveyFlowMessage = async (to, data) => {
         type: 'interactive',
         interactive: {
           type: 'flow',
-          header: { type: 'text', text: `Tus chilaquiles 🌶️` },
-          body: { text: `Esperamos que hayas disfrutado tu pedido #${orderNumber} 🌶️\n\nNos ayudaría mucho conocer tu opinión.\n\nPresiona el botón para responder una encuesta rápida.` },
-          footer: { text: 'Toma menos de 1 minuto.' },
+          header: { type: 'text', text: `Queremos conocer tu opinión` },
+          body: { text: `Esperamos que hayas disfrutado tus chilaquiles.\n\nNos ayudaría mucho que respondieras una encuesta rápida sobre tu pedido.\n\nSolo te tomará unos segundos.` },
+          footer: { text: 'Chilaquiles Top' },
           action: {
             name: 'flow',
             parameters: {
               flow_message_version: '3',
               flow_token: String(orderId),
               flow_id: flowId,
-              flow_cta: 'Responder Encuesta',
+              flow_cta: 'Responder encuesta',
               flow_action: 'navigate',
               flow_action_payload: {
                 screen: 'QUESTION_ONE',
