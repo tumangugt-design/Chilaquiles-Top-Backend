@@ -246,12 +246,6 @@ export const sendSurveyFlowMessage = async (to, data) => {
       try {
         await sendWhatsAppTemplate(to, 'encuesta_chilaquiles', [
           {
-            type: "body",
-            parameters: [
-              { type: "text", text: String(orderNumber) }
-            ]
-          },
-          {
             type: "button",
             sub_type: "flow",
             index: "0",
