@@ -97,6 +97,7 @@ export const handleWhatsAppWebhook = async (req, res) => {
           console.log(`[WhatsApp Webhook Recv] Intercepted async 131047 error for ${phone}. Triggering fallback...`);
           try {
             const order = await Order.findOne({ phone: `+${phone}` }).sort({ updatedAt: -1 });
+            console.log(`[WhatsApp Webhook Recv] Found order for fallback: ${order ? order.orderNumber : 'NULL'} with status: ${order?.status}`);
             if (order) {
               const summary = generateOrderSummary(order.items);
               const data = {
@@ -107,16 +108,20 @@ export const handleWhatsAppWebhook = async (req, res) => {
               };
               
               if (order.status === 'recibido') {
+                console.log(`[WhatsApp Webhook Recv] Triggering sendOrderReceivedMessage template...`);
                 const result = await sendOrderReceivedMessage(`+${phone}`, data, true);
                 order.set('whatsappMessages.orderReceived', { sent: result.sent, sentAt: new Date(), method: result.method, error: result.error });
               } else if (order.status === 'en_camino') {
+                console.log(`[WhatsApp Webhook Recv] Triggering sendOrderEnRouteMessage template...`);
                 const result = await sendOrderEnRouteMessage(`+${phone}`, data, true);
                 order.set('whatsappMessages.orderOnTheWay', { sent: result.sent, sentAt: new Date(), method: result.method, error: result.error });
               } else if (order.status === 'entregado') {
+                console.log(`[WhatsApp Webhook Recv] Triggering sendOrderDeliveredMessage template...`);
                 const result = await sendOrderDeliveredMessage(`+${phone}`, data, true);
                 order.set('whatsappMessages.orderDelivered', { sent: result.sent, sentAt: new Date(), method: result.method, error: result.error });
               }
               await order.save();
+              console.log(`[WhatsApp Webhook Recv] Fallback completed and order saved.`);
             }
           } catch (err) {
             console.error('[WhatsApp Webhook Recv] Error during async fallback:', err);
