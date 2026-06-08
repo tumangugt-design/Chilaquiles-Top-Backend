@@ -4,5 +4,5 @@ import { initTelegramBot } from './src/bots/telegram/telegram.bot.js';
 import { initSurveyCron } from './src/bot/survey.cron.js';
 
 initTelegramBot();
-initSurveyCron();
+// initSurveyCron(); // Disabled because Cloud Scheduler triggers this via API
 initServer();
