@@ -216,7 +216,7 @@ export const sendSurveyFlowMessage = async (to, data) => {
               flow_cta: 'Responder Encuesta',
               flow_action: 'navigate',
               flow_action_payload: {
-                screen: 'SURVEY',
+                screen: 'QUESTION_ONE',
                 data: {
                   order_id: String(orderId)
                 }
