@@ -305,3 +305,15 @@ export const handleIncomingMessage = async (req, res) => {
     res.status(200).send('EVENT_RECEIVED'); // Return 200 even on general error to stop Meta retries
   }
 };
+
+export const triggerSurveyCronJob = async (req, res) => {
+  try {
+    console.log('[API Cron Trigger] Running manual survey check...');
+    const { runSurveyCheck } = await import('./survey.cron.js');
+    await runSurveyCheck();
+    res.status(200).json({ success: true, message: 'Survey check executed successfully.' });
+  } catch (error) {
+    console.error('[API Cron Trigger] Error executing manual survey check:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+};

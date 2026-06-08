@@ -5,7 +5,8 @@ import {
   verifyWhatsAppWebhook,
   handleWhatsAppWebhook,
   verifyInstagramWebhook,
-  handleInstagramWebhook
+  handleInstagramWebhook,
+  triggerSurveyCronJob
 } from './bot.controller.js';
 import { getTelegramBotInstance } from '../bots/telegram/telegram.bot.js';
 
@@ -34,6 +35,10 @@ router.post('/whatsapp', verifyMetaSignature, handleWhatsAppWebhook);
 // Instagram Webhook
 router.get('/instagram', verifyInstagramWebhook);
 router.post('/instagram', verifyMetaSignature, handleInstagramWebhook);
+
+// Manual Cron Trigger Endpoint
+router.get('/cron-survey', triggerSurveyCronJob);
+router.post('/cron-survey', triggerSurveyCronJob);
 
 // ==========================================
 // UNIFIED/LEGACY ENDPOINT (BACKWARDS COMPAT)
