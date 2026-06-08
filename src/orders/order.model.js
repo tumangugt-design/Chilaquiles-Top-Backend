@@ -93,10 +93,10 @@ const orderSchema = new mongoose.Schema({
     respondedAt: { type: Date, default: null }
   },
   whatsappMessages: {
-    orderReceived: { sent: { type: Boolean, default: false }, sentAt: { type: Date }, method: { type: String, enum: ['normal', 'template'] }, error: { type: String } },
-    orderOnTheWay: { sent: { type: Boolean, default: false }, sentAt: { type: Date }, method: { type: String, enum: ['normal', 'template'] }, error: { type: String } },
-    orderDelivered: { sent: { type: Boolean, default: false }, sentAt: { type: Date }, method: { type: String, enum: ['normal', 'template'] }, error: { type: String } },
-    survey: { sent: { type: Boolean, default: false }, sentAt: { type: Date }, method: { type: String, enum: ['normal_flow', 'template_flow'] }, error: { type: String } }
+    orderReceived: { sent: { type: Boolean, default: false }, sentAt: { type: Date }, method: { type: String, enum: ['normal', 'template'] }, error: { type: String }, wamid: { type: String } },
+    orderOnTheWay: { sent: { type: Boolean, default: false }, sentAt: { type: Date }, method: { type: String, enum: ['normal', 'template'] }, error: { type: String }, wamid: { type: String } },
+    orderDelivered: { sent: { type: Boolean, default: false }, sentAt: { type: Date }, method: { type: String, enum: ['normal', 'template'] }, error: { type: String }, wamid: { type: String } },
+    survey: { sent: { type: Boolean, default: false }, sentAt: { type: Date }, method: { type: String, enum: ['normal_flow', 'template_flow'] }, error: { type: String }, wamid: { type: String } }
   }
 }, { timestamps: true });
 

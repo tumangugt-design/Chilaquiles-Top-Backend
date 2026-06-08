@@ -88,13 +88,13 @@ export const sendOrderReceivedMessage = async (to, data, forceTemplate = false) 
       err.code = 131047;
       throw err;
     }
-    await sendWhatsAppMessage(to, text);
-    return { sent: true, method: 'normal', error: null };
+    const result = await sendWhatsAppMessage(to, text);
+    return { sent: true, method: 'normal', error: null, wamid: result?.messages?.[0]?.id };
   } catch (error) {
     if (error.code === 131047) {
       console.log('[Fallback] 24h window closed, trying template pedido_recibido');
       try {
-        await sendWhatsAppTemplate(to, 'pedido_recibido', [
+        const result = await sendWhatsAppTemplate(to, 'pedido_recibido', [
           {
             type: "body",
             parameters: [
@@ -105,7 +105,7 @@ export const sendOrderReceivedMessage = async (to, data, forceTemplate = false) 
             ]
           }
         ]);
-        return { sent: true, method: 'template', error: null };
+        return { sent: true, method: 'template', error: null, wamid: result?.messages?.[0]?.id };
       } catch (templateError) {
         return { sent: false, method: 'template', error: templateError.message };
       }
@@ -125,13 +125,13 @@ export const sendOrderEnRouteMessage = async (to, data, forceTemplate = false) =
       err.code = 131047;
       throw err;
     }
-    await sendWhatsAppMessage(to, text);
-    return { sent: true, method: 'normal', error: null };
+    const result = await sendWhatsAppMessage(to, text);
+    return { sent: true, method: 'normal', error: null, wamid: result?.messages?.[0]?.id };
   } catch (error) {
     if (error.code === 131047) {
       console.log('[Fallback] 24h window closed, trying template pedido_en_camino');
       try {
-        await sendWhatsAppTemplate(to, 'pedido_en_camino', [
+        const result = await sendWhatsAppTemplate(to, 'pedido_en_camino', [
           {
             type: "body",
             parameters: [
@@ -139,7 +139,7 @@ export const sendOrderEnRouteMessage = async (to, data, forceTemplate = false) =
             ]
           }
         ]);
-        return { sent: true, method: 'template', error: null };
+        return { sent: true, method: 'template', error: null, wamid: result?.messages?.[0]?.id };
       } catch (templateError) {
         return { sent: false, method: 'template', error: templateError.message };
       }
@@ -159,13 +159,13 @@ export const sendOrderDeliveredMessage = async (to, data, forceTemplate = false)
       err.code = 131047;
       throw err;
     }
-    await sendWhatsAppMessage(to, text);
-    return { sent: true, method: 'normal', error: null };
+    const result = await sendWhatsAppMessage(to, text);
+    return { sent: true, method: 'normal', error: null, wamid: result?.messages?.[0]?.id };
   } catch (error) {
     if (error.code === 131047) {
       console.log('[Fallback] 24h window closed, trying template pedido_entregado');
       try {
-        await sendWhatsAppTemplate(to, 'pedido_entregado', [
+        const result = await sendWhatsAppTemplate(to, 'pedido_entregado', [
           {
             type: "body",
             parameters: [
@@ -173,7 +173,7 @@ export const sendOrderDeliveredMessage = async (to, data, forceTemplate = false)
             ]
           }
         ], 'en');
-        return { sent: true, method: 'template', error: null };
+        return { sent: true, method: 'template', error: null, wamid: result?.messages?.[0]?.id };
       } catch (templateError) {
         return { sent: false, method: 'template', error: templateError.message };
       }
@@ -238,13 +238,13 @@ export const sendSurveyFlowMessage = async (to, data) => {
 
   try {
     if (!flowId) throw new Error("No WHATSAPP_FLOW_ID defined");
-    await sendNormalFlow();
-    return { sent: true, method: 'normal_flow', error: null };
+    const result = await sendNormalFlow();
+    return { sent: true, method: 'normal_flow', error: null, wamid: result?.messages?.[0]?.id };
   } catch (error) {
     if (error.code === 131047) {
       console.log('[Fallback] 24h window closed, trying template encuesta_chilaquiles');
       try {
-        await sendWhatsAppTemplate(to, 'encuesta_chilaquiles', [
+        const result = await sendWhatsAppTemplate(to, 'encuesta_chilaquiles', [
           {
             type: "button",
             sub_type: "flow",
@@ -259,7 +259,7 @@ export const sendSurveyFlowMessage = async (to, data) => {
             ]
           }
         ]);
-        return { sent: true, method: 'template_flow', error: null };
+        return { sent: true, method: 'template_flow', error: null, wamid: result?.messages?.[0]?.id };
       } catch (templateError) {
         console.error('[Survey Fallback] Failed to send fallback template:', templateError.message);
         return { sent: false, method: 'template_flow', error: templateError.message };

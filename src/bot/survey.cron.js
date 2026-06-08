@@ -29,7 +29,7 @@ export const runSurveyCheck = async () => {
           orderNumber: order.orderNumber
         });
         
-        order.set('whatsappMessages.survey', { sent: result.sent, sentAt: new Date(), method: result.method, error: result.error });
+        order.set('whatsappMessages.survey', { sent: result.sent, sentAt: new Date(), method: result.method, error: result.error, wamid: result.wamid });
         order.surveyStatus = 'SENT';
       } catch (error) {
         console.error(`[Survey Cron] Failed to send survey to order ${order._id}:`, error.message);

@@ -1,7 +1,7 @@
 import { processIncomingMessage } from './bot.service.js';
 import Order from '../orders/order.model.js';
 import { generateOrderSummary } from '../orders/order.service.js';
-import { sendOrderReceivedMessage, sendOrderEnRouteMessage, sendOrderDeliveredMessage } from './whatsapp.service.js';
+import { sendOrderReceivedMessage, sendOrderEnRouteMessage, sendOrderDeliveredMessage, sendWhatsAppTemplate } from './whatsapp.service.js';
 
 // ==========================================
 // WHATSAPP WEBHOOK CONTROLLERS (DEDICATED)
@@ -94,34 +94,72 @@ export const handleWhatsAppWebhook = async (req, res) => {
         const statusObj = body.entry[0].changes[0].value.statuses[0];
         if (statusObj.status === 'failed' && statusObj.errors?.[0]?.code === 131047) {
           const phone = statusObj.recipient_id;
-          console.log(`[WhatsApp Webhook Recv] Intercepted async 131047 error for ${phone}. Triggering fallback...`);
+          const failedWamid = statusObj.id;
+          console.log(`[WhatsApp Webhook Recv] Intercepted async 131047 error for ${phone}. Failed wamid: ${failedWamid}. Triggering fallback...`);
           try {
-            const order = await Order.findOne({ phone: `+${phone}` }).sort({ updatedAt: -1 });
-            console.log(`[WhatsApp Webhook Recv] Found order for fallback: ${order ? order.orderNumber : 'NULL'} with status: ${order?.status}`);
-            if (order) {
-              const summary = generateOrderSummary(order.items);
-              const data = {
-                customerName: order.name,
-                orderNumber: order.orderNumber,
-                orderSummary: summary,
-                orderTotal: `Q${order.total.toFixed(2)}`
-              };
-              
-              if (order.status === 'recibido') {
-                console.log(`[WhatsApp Webhook Recv] Triggering sendOrderReceivedMessage template...`);
-                const result = await sendOrderReceivedMessage(`+${phone}`, data, true);
-                order.set('whatsappMessages.orderReceived', { sent: result.sent, sentAt: new Date(), method: result.method, error: result.error });
-              } else if (order.status === 'en_camino') {
-                console.log(`[WhatsApp Webhook Recv] Triggering sendOrderEnRouteMessage template...`);
-                const result = await sendOrderEnRouteMessage(`+${phone}`, data, true);
-                order.set('whatsappMessages.orderOnTheWay', { sent: result.sent, sentAt: new Date(), method: result.method, error: result.error });
-              } else if (order.status === 'entregado') {
-                console.log(`[WhatsApp Webhook Recv] Triggering sendOrderDeliveredMessage template...`);
-                const result = await sendOrderDeliveredMessage(`+${phone}`, data, true);
-                order.set('whatsappMessages.orderDelivered', { sent: result.sent, sentAt: new Date(), method: result.method, error: result.error });
+            // First check if this failed message was a survey flow
+            const surveyOrder = await Order.findOne({
+              phone: `+${phone}`,
+              'whatsappMessages.survey.wamid': failedWamid
+            });
+
+            if (surveyOrder) {
+              console.log(`[WhatsApp Webhook Recv] Failed message was SURVEY for order ${surveyOrder.orderNumber}. Triggering survey template fallback...`);
+              try {
+                const result = await sendWhatsAppTemplate(`+${phone}`, 'encuesta_chilaquiles', [
+                  {
+                    type: "button",
+                    sub_type: "flow",
+                    index: "0",
+                    parameters: [
+                      {
+                        type: "action",
+                        action: {
+                          flow_token: String(surveyOrder._id)
+                        }
+                      }
+                    ]
+                  }
+                ]);
+                surveyOrder.set('whatsappMessages.survey', { sent: true, sentAt: new Date(), method: 'template_flow', error: null, wamid: result?.messages?.[0]?.id });
+              } catch (templateError) {
+                console.error('[WhatsApp Webhook Recv] Survey template fallback failed:', templateError.message);
+                surveyOrder.set('whatsappMessages.survey', { sent: false, sentAt: new Date(), method: 'template_flow', error: templateError.message });
+                surveyOrder.surveyStatus = 'FAILED';
               }
-              await order.save();
-              console.log(`[WhatsApp Webhook Recv] Fallback completed and order saved.`);
+              await surveyOrder.save();
+              console.log(`[WhatsApp Webhook Recv] Survey fallback completed and order saved.`);
+            } else {
+              // Not a survey message, handle as regular order notification fallback
+              const order = await Order.findOne({ phone: `+${phone}` }).sort({ updatedAt: -1 });
+              console.log(`[WhatsApp Webhook Recv] Found order for fallback: ${order ? order.orderNumber : 'NULL'} with status: ${order?.status}`);
+              if (order) {
+                const summary = generateOrderSummary(order.items);
+                const data = {
+                  customerName: order.name,
+                  orderNumber: order.orderNumber,
+                  orderSummary: summary,
+                  orderTotal: `Q${order.total.toFixed(2)}`
+                };
+                
+                if (order.status === 'recibido') {
+                  console.log(`[WhatsApp Webhook Recv] Triggering sendOrderReceivedMessage template...`);
+                  const result = await sendOrderReceivedMessage(`+${phone}`, data, true);
+                  order.set('whatsappMessages.orderReceived', { sent: result.sent, sentAt: new Date(), method: result.method, error: result.error, wamid: result.wamid });
+                } else if (order.status === 'en_camino') {
+                  console.log(`[WhatsApp Webhook Recv] Triggering sendOrderEnRouteMessage template...`);
+                  const result = await sendOrderEnRouteMessage(`+${phone}`, data, true);
+                  order.set('whatsappMessages.orderOnTheWay', { sent: result.sent, sentAt: new Date(), method: result.method, error: result.error, wamid: result.wamid });
+                } else if (order.status === 'entregado' && !order.whatsappMessages?.orderDelivered?.sent) {
+                  console.log(`[WhatsApp Webhook Recv] Triggering sendOrderDeliveredMessage template...`);
+                  const result = await sendOrderDeliveredMessage(`+${phone}`, data, true);
+                  order.set('whatsappMessages.orderDelivered', { sent: result.sent, sentAt: new Date(), method: result.method, error: result.error, wamid: result.wamid });
+                } else if (order.status === 'entregado' && order.whatsappMessages?.orderDelivered?.sent) {
+                  console.log(`[WhatsApp Webhook Recv] Order ${order.orderNumber} already has delivered message sent. Skipping duplicate.`);
+                }
+                await order.save();
+                console.log(`[WhatsApp Webhook Recv] Fallback completed and order saved.`);
+              }
             }
           } catch (err) {
             console.error('[WhatsApp Webhook Recv] Error during async fallback:', err);
