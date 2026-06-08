@@ -6,12 +6,12 @@ export const initSurveyCron = () => {
   // Run every minute
   cron.schedule('* * * * *', async () => {
     try {
-      const thirtyFiveMinsAgo = new Date(Date.now() - 35 * 60000);
+      const now = new Date();
       
       const pendingOrders = await Order.find({
         status: 'entregado',
         surveyStatus: 'PENDING',
-        deliveredAt: { $lte: thirtyFiveMinsAgo, $ne: null }
+        surveySendAt: { $lte: now, $ne: null }
       });
 
       if (pendingOrders.length > 0) {
@@ -26,11 +26,22 @@ export const initSurveyCron = () => {
         }
 
         try {
-          await sendSurveyFlowMessage(order.phone, order._id);
+          const result = await sendSurveyFlowMessage(order.phone, {
+            orderId: order._id,
+            orderNumber: order.orderNumber
+          });
+          
+          order.whatsappMessages = {
+            ...order.whatsappMessages,
+            survey: { sent: result.sent, sentAt: new Date(), method: result.method, error: result.error }
+          };
           order.surveyStatus = 'SENT';
         } catch (error) {
           console.error(`[Survey Cron] Failed to send survey to order ${order._id}:`, error.message);
-          // Podemos marcar como FAILED o dejarlo en PENDING para reintentar (mejor FAILED para evitar spam)
+          order.whatsappMessages = {
+            ...order.whatsappMessages,
+            survey: { sent: false, sentAt: new Date(), method: 'unknown', error: error.message }
+          };
           order.surveyStatus = 'FAILED';
         }
         await order.save();

@@ -85,11 +85,18 @@ const orderSchema = new mongoose.Schema({
     enum: ['PENDING', 'SENT', 'COMPLETED', 'FAILED'],
     default: null
   },
+  surveySendAt: { type: Date, default: null },
   surveyResponses: {
-    orderOk: { type: String, enum: ['yes', 'no'], default: null },
-    foodRating: { type: String, enum: ['excellent', 'normal', 'bad'], default: null },
-    orderingExperience: { type: String, enum: ['easy', 'difficult'], default: null },
+    order_ok: { type: String, enum: ['yes', 'no'], default: null },
+    food_rating: { type: String, enum: ['excellent', 'normal', 'bad'], default: null },
+    ordering_experience: { type: String, enum: ['easy', 'difficult'], default: null },
     respondedAt: { type: Date, default: null }
+  },
+  whatsappMessages: {
+    orderReceived: { sent: { type: Boolean, default: false }, sentAt: { type: Date }, method: { type: String, enum: ['normal', 'template'] }, error: { type: String } },
+    orderOnTheWay: { sent: { type: Boolean, default: false }, sentAt: { type: Date }, method: { type: String, enum: ['normal', 'template'] }, error: { type: String } },
+    orderDelivered: { sent: { type: Boolean, default: false }, sentAt: { type: Date }, method: { type: String, enum: ['normal', 'template'] }, error: { type: String } },
+    survey: { sent: { type: Boolean, default: false }, sentAt: { type: Date }, method: { type: String, enum: ['normal_flow', 'template_flow'] }, error: { type: String } }
   }
 }, { timestamps: true });
 

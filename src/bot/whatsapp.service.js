@@ -9,76 +9,175 @@ export const sendWhatsAppMessage = async (to, text) => {
   console.log(`[WhatsApp Send] Target URL: ${url}`);
   console.log(`[WhatsApp Send] Recipient Phone: ${to}`);
 
-  try {
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`
-      },
-      body: JSON.stringify({
-        messaging_product: 'whatsapp',
-        to: to,
-        type: 'text',
-        text: { body: text }
-      })
-    });
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`
+    },
+    body: JSON.stringify({
+      messaging_product: 'whatsapp',
+      to: to,
+      type: 'text',
+      text: { body: text }
+    })
+  });
 
-    const data = await response.json();
+  const data = await response.json();
 
-    if (!response.ok) {
-      console.error('[WhatsApp Send] Meta API Error Response:', JSON.stringify(data, null, 2));
-      throw new Error(`Meta API returned status ${response.status}: ${data.error?.message || 'Unknown error'}`);
-    }
-
-    console.log('[WhatsApp Send] Message sent successfully:', JSON.stringify(data));
-    return data;
-  } catch (error) {
-    console.error('[WhatsApp Send] Exception while sending message:', error);
-    throw error;
+  if (!response.ok) {
+    const errorDetails = data.error?.error_data?.details || '';
+    const code = data.error?.code;
+    console.error('[WhatsApp Send] Meta API Error Response:', JSON.stringify(data, null, 2));
+    
+    const err = new Error(`Meta API returned status ${response.status}: ${data.error?.message || 'Unknown error'}`);
+    err.code = code;
+    throw err;
   }
+
+  console.log('[WhatsApp Send] Message sent successfully:', JSON.stringify(data));
+  return data;
 };
 
-export const sendOrderReceivedMessage = async (to) => {
-  const text = "¡Pedido recibido! ✅\n\nGracias por ordenar en Chilaquiles Top. Te avisaremos por este medio cuando tu pedido vaya en camino.";
-  return sendWhatsAppMessage(to, text).catch(err => console.error('Error enviando msj #1', err.message));
+export const sendWhatsAppTemplate = async (to, templateName, components = []) => {
+  const phoneId = process.env.WHATSAPP_PHONE_NUMBER_ID;
+  const url = `https://graph.facebook.com/v17.0/${phoneId}/messages`;
+  const token = process.env.WHATSAPP_TOKEN;
+
+  console.log(`[WhatsApp Template] Sending ${templateName} to ${to}`);
+
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`
+    },
+    body: JSON.stringify({
+      messaging_product: 'whatsapp',
+      to: to,
+      type: 'template',
+      template: {
+        name: templateName,
+        language: { code: 'es_MX' }, // Asumiendo Español México/Latam por defecto
+        components: components
+      }
+    })
+  });
+
+  const data = await response.json();
+
+  if (!response.ok) {
+    console.error('[WhatsApp Template] API Error:', JSON.stringify(data, null, 2));
+    const err = new Error(`Template API error: ${data.error?.message}`);
+    err.code = data.error?.code;
+    throw err;
+  }
+
+  console.log(`[WhatsApp Template] Sent successfully:`, JSON.stringify(data));
+  return data;
 };
 
-export const sendOrderEnRouteMessage = async (to) => {
-  const text = "Tu pedido ya va en camino 🛵\n\nPronto estaremos llegando con tus chilaquiles.";
-  return sendWhatsAppMessage(to, text).catch(err => console.error('Error enviando msj #2', err.message));
-};
-
-export const sendOrderDeliveredMessage = async (to, isCold = false) => {
-  let text = "¡Pedido entregado! 🌶️\n\nPara disfrutar mejor tus chilaquiles:\n\n";
-  text += "Instrucciones para calentar tu salsa de la mejor manera:\n";
-  text += "1️⃣ Mete los 3 botes de salsa y carne al microondas con la tapadera.\n";
-  text += "2️⃣ Coloca 2 minutos con la potencia al máximo.\n";
-  text += "3️⃣ Cuando quede 1 minuto, retira tu proteína.\n";
-  text += "4️⃣ Cierra de nuevo el microondas y dejas que termine la salsa.\n";
-  text += "5️⃣ Retira la salsa y aplica completamente sobre tus chilaquiles.";
+export const sendOrderReceivedMessage = async (to, data) => {
+  const { customerName, orderNumber, orderSummary, orderTotal } = data;
   
-  if (isCold) {
-    text += "\n\n(Tu pedido incluyó salsa fría. Por favor, asegúrate de calentarla muy bien siguiendo las instrucciones o en una ollita antes de servirla).";
-  }
+  const text = `¡Pedido recibido! ✅\n\nHola ${customerName},\n\nTu pedido #${orderNumber} fue recibido correctamente.\n\nPedido:\n${orderSummary}\n\nTotal: ${orderTotal}\n\nTe avisaremos por este medio cuando tu pedido vaya en camino.\n\n¡Gracias por elegir Chilaquiles Top! 🌶️`;
 
-  return sendWhatsAppMessage(to, text).catch(err => console.error('Error enviando msj #3', err.message));
+  try {
+    await sendWhatsAppMessage(to, text);
+    return { sent: true, method: 'normal', error: null };
+  } catch (error) {
+    if (error.code === 131047) {
+      console.log('[Fallback] 24h window closed, trying template pedido_recibido');
+      try {
+        await sendWhatsAppTemplate(to, 'pedido_recibido', [
+          {
+            type: "body",
+            parameters: [
+              { type: "text", text: String(customerName) },
+              { type: "text", text: String(orderNumber) },
+              { type: "text", text: String(orderSummary) },
+              { type: "text", text: String(orderTotal) }
+            ]
+          }
+        ]);
+        return { sent: true, method: 'template', error: null };
+      } catch (templateError) {
+        return { sent: false, method: 'template', error: templateError.message };
+      }
+    }
+    return { sent: false, method: 'normal', error: error.message };
+  }
 };
 
-export const sendSurveyFlowMessage = async (to, orderId) => {
+export const sendOrderEnRouteMessage = async (to, data) => {
+  const { orderNumber, orderSummary } = data;
+  
+  const text = `Tu pedido #${orderNumber} ya va en camino 🛵\n\nPedido:\n${orderSummary}\n\nPronto estaremos llegando.`;
+
+  try {
+    await sendWhatsAppMessage(to, text);
+    return { sent: true, method: 'normal', error: null };
+  } catch (error) {
+    if (error.code === 131047) {
+      console.log('[Fallback] 24h window closed, trying template pedido_en_camino');
+      try {
+        await sendWhatsAppTemplate(to, 'pedido_en_camino', [
+          {
+            type: "body",
+            parameters: [
+              { type: "text", text: String(orderNumber) },
+              { type: "text", text: String(orderSummary) }
+            ]
+          }
+        ]);
+        return { sent: true, method: 'template', error: null };
+      } catch (templateError) {
+        return { sent: false, method: 'template', error: templateError.message };
+      }
+    }
+    return { sent: false, method: 'normal', error: error.message };
+  }
+};
+
+export const sendOrderDeliveredMessage = async (to, data) => {
+  const { orderNumber, orderSummary } = data;
+
+  const text = `¡Pedido entregado! 🌶️\n\nOrden #${orderNumber}\n\nEsperamos que disfrutes:\n\n${orderSummary}\n\nPara disfrutar mejor tus chilaquiles:\n\n🔥 Instrucciones para calentarla\n\n• Coloca los recipientes de salsa en el microondas con la tapa puesta.\n• Calienta durante 2 minutos a potencia máxima.\n• Cuando quede aproximadamente 1 minuto, retira la proteína.\n• Continúa calentando únicamente la salsa hasta completar el tiempo.\n• Retira la salsa y agrégala sobre los chilaquiles antes de servir.\n\nTambién puedes calentar la salsa en una olla pequeña a fuego bajo.\n\n¡Buen provecho! 🌶️`;
+
+  try {
+    await sendWhatsAppMessage(to, text);
+    return { sent: true, method: 'normal', error: null };
+  } catch (error) {
+    if (error.code === 131047) {
+      console.log('[Fallback] 24h window closed, trying template pedido_entregado');
+      try {
+        await sendWhatsAppTemplate(to, 'pedido_entregado', [
+          {
+            type: "body",
+            parameters: [
+              { type: "text", text: String(orderNumber) },
+              { type: "text", text: String(orderSummary) }
+            ]
+          }
+        ]);
+        return { sent: true, method: 'template', error: null };
+      } catch (templateError) {
+        return { sent: false, method: 'template', error: templateError.message };
+      }
+    }
+    return { sent: false, method: 'normal', error: error.message };
+  }
+};
+
+export const sendSurveyFlowMessage = async (to, data) => {
+  const { orderId, orderNumber } = data;
   const flowId = process.env.WHATSAPP_FLOW_ID;
   const phoneId = process.env.WHATSAPP_PHONE_NUMBER_ID;
   const token = process.env.WHATSAPP_TOKEN;
 
-  if (!flowId) {
-    // Alternativa temporal si no hay flow
-    const text = "Esperamos que hayas disfrutado tus chilaquiles 🌶️\n\nQueremos hacerte 3 preguntas rápidas para ayudarnos a mejorar. Por favor, responde a este mensaje con 3 palabras, por ejemplo: 'Sí, Buenísima, Fácil'.\n\n1. ¿Todo estuvo bien con tu pedido? (Sí/No)\n2. ¿Cómo calificarías la comida? (Buenísima/Normal/Mala)\n3. ¿Cómo calificarías la forma en que realizaste tu pedido? (Fácil/Difícil)";
-    return sendWhatsAppMessage(to, text).catch(err => console.error('Error enviando msj #4 fallback', err.message));
-  }
-
-  const url = `https://graph.facebook.com/v17.0/${phoneId}/messages`;
-
-  try {
+  // Si enviamos dentro de la ventana de 24h, usamos mensaje interactivo estándar
+  const sendNormalFlow = async () => {
+    const url = `https://graph.facebook.com/v17.0/${phoneId}/messages`;
     const response = await fetch(url, {
       method: 'POST',
       headers: {
@@ -92,16 +191,9 @@ export const sendSurveyFlowMessage = async (to, orderId) => {
         type: 'interactive',
         interactive: {
           type: 'flow',
-          header: {
-            type: 'text',
-            text: 'Tus chilaquiles 🌶️'
-          },
-          body: {
-            text: 'Esperamos que hayas disfrutado tus chilaquiles. Queremos hacerte 3 rápidas preguntas para ayudarnos a mejorar.'
-          },
-          footer: {
-            text: 'Toma menos de 1 minuto.'
-          },
+          header: { type: 'text', text: `Tus chilaquiles 🌶️` },
+          body: { text: `Esperamos que hayas disfrutado tu pedido #${orderNumber} 🌶️\n\nNos ayudaría mucho conocer tu opinión.\n\nPresiona el botón para responder una encuesta rápida.` },
+          footer: { text: 'Toma menos de 1 minuto.' },
           action: {
             name: 'flow',
             parameters: {
@@ -111,7 +203,10 @@ export const sendSurveyFlowMessage = async (to, orderId) => {
               flow_cta: 'Responder Encuesta',
               flow_action: 'navigate',
               flow_action_payload: {
-                screen: 'SURVEY'
+                screen: 'SURVEY',
+                data: {
+                  order_id: String(orderId)
+                }
               }
             }
           }
@@ -119,15 +214,49 @@ export const sendSurveyFlowMessage = async (to, orderId) => {
       })
     });
 
-    const data = await response.json();
+    const respData = await response.json();
     if (!response.ok) {
-      console.error('[WhatsApp Send Flow] Meta API Error Response:', JSON.stringify(data, null, 2));
-      throw new Error(`Meta API returned status ${response.status}: ${data.error?.message}`);
+      const err = new Error(`Flow API returned status ${response.status}: ${respData.error?.message}`);
+      err.code = respData.error?.code;
+      throw err;
     }
-    console.log('[WhatsApp Send Flow] Flow Message sent successfully:', JSON.stringify(data));
-    return data;
+    return respData;
+  };
+
+  try {
+    if (!flowId) throw new Error("No WHATSAPP_FLOW_ID defined");
+    await sendNormalFlow();
+    return { sent: true, method: 'normal_flow', error: null };
   } catch (error) {
-    console.error('[WhatsApp Send Flow] Exception while sending flow:', error);
-    throw error;
+    if (error.code === 131047) {
+      console.log('[Fallback] 24h window closed, trying template encuesta_chilaquiles');
+      try {
+        await sendWhatsAppTemplate(to, 'encuesta_chilaquiles', [
+          {
+            type: "body",
+            parameters: [
+              { type: "text", text: String(orderNumber) }
+            ]
+          },
+          {
+            type: "button",
+            sub_type: "flow",
+            index: "0",
+            parameters: [
+              {
+                type: "action",
+                action: {
+                  flow_token: String(orderId)
+                }
+              }
+            ]
+          }
+        ]);
+        return { sent: true, method: 'template_flow', error: null };
+      } catch (templateError) {
+        return { sent: false, method: 'template_flow', error: templateError.message };
+      }
+    }
+    return { sent: false, method: 'normal_flow', error: error.message };
   }
 };

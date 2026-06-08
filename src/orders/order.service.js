@@ -265,7 +265,18 @@ export const createOrderRecord = async ({ user, customer, items, sauceTemperatur
     });
 
     if (order.phone) {
-      sendOrderReceivedMessage(order.phone);
+      const summary = generateOrderSummary(order.items);
+      const result = await sendOrderReceivedMessage(order.phone, {
+        customerName: order.name,
+        orderNumber: order.orderNumber,
+        orderSummary: summary,
+        orderTotal: `Q${order.total.toFixed(2)}`
+      });
+      order.whatsappMessages = {
+        ...order.whatsappMessages,
+        orderReceived: { sent: result.sent, sentAt: new Date(), method: result.method, error: result.error }
+      };
+      await order.save();
     }
 
     return order;
@@ -381,17 +392,54 @@ export const updateOrderStatusRecord = async ({ orderId, nextStatus, actor }) =>
 
   order.status = nextStatus;
   
-  if (nextStatus === ORDER_STATUS.EN_CAMINO) {
-    if (order.phone) sendOrderEnRouteMessage(order.phone);
+  if (nextStatus === ORDER_STATUS.EN_CAMINO && order.phone && !order.whatsappMessages?.orderOnTheWay?.sent) {
+    const summary = generateOrderSummary(order.items);
+    const result = await sendOrderEnRouteMessage(order.phone, {
+      orderNumber: order.orderNumber,
+      orderSummary: summary
+    });
+    order.whatsappMessages = {
+      ...order.whatsappMessages,
+      orderOnTheWay: { sent: result.sent, sentAt: new Date(), method: result.method, error: result.error }
+    };
   } else if (nextStatus === ORDER_STATUS.ENTREGADO) {
-    if (order.phone) sendOrderDeliveredMessage(order.phone, order.sauceTemperature === 'FRIO');
+    if (order.phone && !order.whatsappMessages?.orderDelivered?.sent) {
+      const summary = generateOrderSummary(order.items);
+      const result = await sendOrderDeliveredMessage(order.phone, {
+        orderNumber: order.orderNumber,
+        orderSummary: summary
+      });
+      order.whatsappMessages = {
+        ...order.whatsappMessages,
+        orderDelivered: { sent: result.sent, sentAt: new Date(), method: result.method, error: result.error }
+      };
+    }
     order.deliveredAt = new Date();
     order.surveyStatus = 'PENDING';
+    order.surveySendAt = new Date(Date.now() + 35 * 60000);
   }
 
   await order.save();
   await publishOrderRealtimeEvent(order);
   return order;
+};
+
+export const checkOperatingHoursRecord = async () => {
+  return await isOperatingNow();
+};
+
+const generateOrderSummary = (items) => {
+  return items.map((item, i) => {
+    let base = `${i + 1}. Chilaquiles (${item.sauce}, ${item.protein}, ${item.complement})`;
+    let without = [];
+    if (item.baseRecipe) {
+      if (item.baseRecipe.onion === false) without.push('Cebolla');
+      if (item.baseRecipe.cilantro === false) without.push('Cilantro');
+      if (item.baseRecipe.cream === false) without.push('Crema');
+    }
+    if (without.length > 0) base += ` [Sin: ${without.join(', ')}]`;
+    return base;
+  }).join('\n');
 };
 
 export const hideDeliveredOrdersRecord = async () => {

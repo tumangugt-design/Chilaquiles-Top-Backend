@@ -44,12 +44,19 @@ export const handleWhatsAppWebhook = async (req, res) => {
             console.log(`[WhatsApp Webhook Recv] Flow reply from ${from}: ${responseJson}`);
             const data = JSON.parse(responseJson);
 
-            const order = await Order.findOne({ phone: from, status: 'ENTREGADO', surveyStatus: 'SENT' }).sort({ deliveredAt: -1 });
+            let order = null;
+            if (data.order_id) {
+              order = await Order.findById(data.order_id);
+            }
+            if (!order) {
+              order = await Order.findOne({ phone: from, status: 'ENTREGADO', surveyStatus: { $ne: 'COMPLETED' } }).sort({ deliveredAt: -1 });
+            }
+            
             if (order) {
               order.surveyResponses = {
-                orderOk: data.order_ok || null,
-                foodRating: data.food_rating || null,
-                orderingExperience: data.ordering_experience || null,
+                order_ok: data.order_ok || null,
+                food_rating: data.food_rating || null,
+                ordering_experience: data.ordering_experience || null,
                 respondedAt: new Date()
               };
               order.surveyStatus = 'COMPLETED';
@@ -192,12 +199,20 @@ export const handleIncomingMessage = async (req, res) => {
           try {
             const responseJson = message.interactive.nfm_reply.response_json;
             const data = JSON.parse(responseJson);
-            const order = await Order.findOne({ phone: from, status: 'ENTREGADO', surveyStatus: 'SENT' }).sort({ deliveredAt: -1 });
+            
+            let order = null;
+            if (data.order_id) {
+              order = await Order.findById(data.order_id);
+            }
+            if (!order) {
+              order = await Order.findOne({ phone: from, status: 'ENTREGADO', surveyStatus: { $ne: 'COMPLETED' } }).sort({ deliveredAt: -1 });
+            }
+
             if (order) {
               order.surveyResponses = {
-                orderOk: data.order_ok || null,
-                foodRating: data.food_rating || null,
-                orderingExperience: data.ordering_experience || null,
+                order_ok: data.order_ok || null,
+                food_rating: data.food_rating || null,
+                ordering_experience: data.ordering_experience || null,
                 respondedAt: new Date()
               };
               order.surveyStatus = 'COMPLETED';
