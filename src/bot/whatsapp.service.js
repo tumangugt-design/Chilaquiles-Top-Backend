@@ -115,9 +115,9 @@ export const sendOrderReceivedMessage = async (to, data, forceTemplate = false) 
 };
 
 export const sendOrderEnRouteMessage = async (to, data, forceTemplate = false) => {
-  const { orderNumber, orderSummary } = data;
+  const { orderNumber } = data;
   
-  const text = `¡Tu pedido va en camino! 🛵💨\n\nTu pedido #${orderNumber} ya salió de nuestra cocina.\n\nResumen:\n${orderSummary}\n\n¡Prepárate para disfrutar! 🌶️`;
+  const text = `Tu pedido #${orderNumber} ya va en camino 🛵\n\nPronto estaremos llegando.`;
 
   try {
     if (forceTemplate) {
@@ -135,8 +135,7 @@ export const sendOrderEnRouteMessage = async (to, data, forceTemplate = false) =
           {
             type: "body",
             parameters: [
-              { type: "text", text: String(orderNumber) },
-              { type: "text", text: String(orderSummary) }
+              { type: "text", text: String(orderNumber) }
             ]
           }
         ]);
