@@ -39,7 +39,7 @@ export const sendWhatsAppMessage = async (to, text) => {
   return data;
 };
 
-export const sendWhatsAppTemplate = async (to, templateName, components = []) => {
+export const sendWhatsAppTemplate = async (to, templateName, components = [], language = 'es_MX') => {
   const phoneId = process.env.WHATSAPP_PHONE_NUMBER_ID;
   const url = `https://graph.facebook.com/v17.0/${phoneId}/messages`;
   const token = process.env.WHATSAPP_TOKEN;
@@ -58,7 +58,7 @@ export const sendWhatsAppTemplate = async (to, templateName, components = []) =>
       type: 'template',
       template: {
         name: templateName,
-        language: { code: 'es_MX' }, // Asumiendo Español México/Latam por defecto
+        language: { code: language },
         components: components
       }
     })
@@ -174,7 +174,7 @@ export const sendOrderDeliveredMessage = async (to, data, forceTemplate = false)
               { type: "text", text: String(orderSummary) }
             ]
           }
-        ]);
+        ], 'en');
         return { sent: true, method: 'template', error: null };
       } catch (templateError) {
         return { sent: false, method: 'template', error: templateError.message };
