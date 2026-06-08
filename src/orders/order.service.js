@@ -419,7 +419,7 @@ export const checkOperatingHoursRecord = async () => {
   return await isOperatingNow();
 };
 
-const generateOrderSummary = (items) => {
+export const generateOrderSummary = (items) => {
   return items.map((item, i) => {
     let base = `${i + 1}. Chilaquiles (${item.sauce}, ${item.protein}, ${item.complement})`;
     let without = [];

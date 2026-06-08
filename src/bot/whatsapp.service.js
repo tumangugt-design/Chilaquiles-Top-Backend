@@ -77,12 +77,17 @@ export const sendWhatsAppTemplate = async (to, templateName, components = []) =>
   return data;
 };
 
-export const sendOrderReceivedMessage = async (to, data) => {
+export const sendOrderReceivedMessage = async (to, data, forceTemplate = false) => {
   const { customerName, orderNumber, orderSummary, orderTotal } = data;
   
   const text = `¡Pedido recibido! ✅\n\nHola ${customerName},\n\nTu pedido #${orderNumber} fue recibido correctamente.\n\nPedido:\n${orderSummary}\n\nTotal: ${orderTotal}\n\nTe avisaremos por este medio cuando tu pedido vaya en camino.\n\n¡Gracias por elegir Chilaquiles Top! 🌶️`;
 
   try {
+    if (forceTemplate) {
+      const err = new Error('Forced template');
+      err.code = 131047;
+      throw err;
+    }
     await sendWhatsAppMessage(to, text);
     return { sent: true, method: 'normal', error: null };
   } catch (error) {
@@ -109,12 +114,17 @@ export const sendOrderReceivedMessage = async (to, data) => {
   }
 };
 
-export const sendOrderEnRouteMessage = async (to, data) => {
+export const sendOrderEnRouteMessage = async (to, data, forceTemplate = false) => {
   const { orderNumber, orderSummary } = data;
   
-  const text = `Tu pedido #${orderNumber} ya va en camino 🛵\n\nPedido:\n${orderSummary}\n\nPronto estaremos llegando.`;
+  const text = `¡Tu pedido va en camino! 🛵💨\n\nTu pedido #${orderNumber} ya salió de nuestra cocina.\n\nResumen:\n${orderSummary}\n\n¡Prepárate para disfrutar! 🌶️`;
 
   try {
+    if (forceTemplate) {
+      const err = new Error('Forced template');
+      err.code = 131047;
+      throw err;
+    }
     await sendWhatsAppMessage(to, text);
     return { sent: true, method: 'normal', error: null };
   } catch (error) {
@@ -139,12 +149,17 @@ export const sendOrderEnRouteMessage = async (to, data) => {
   }
 };
 
-export const sendOrderDeliveredMessage = async (to, data) => {
+export const sendOrderDeliveredMessage = async (to, data, forceTemplate = false) => {
   const { orderNumber, orderSummary } = data;
 
   const text = `¡Pedido entregado! 🌶️\n\nOrden #${orderNumber}\n\nEsperamos que disfrutes:\n\n${orderSummary}\n\nPara disfrutar mejor tus chilaquiles:\n\n🔥 Instrucciones para calentarla\n\n• Coloca los recipientes de salsa en el microondas con la tapa puesta.\n• Calienta durante 2 minutos a potencia máxima.\n• Cuando quede aproximadamente 1 minuto, retira la proteína.\n• Continúa calentando únicamente la salsa hasta completar el tiempo.\n• Retira la salsa y agrégala sobre los chilaquiles antes de servir.\n\nTambién puedes calentar la salsa en una olla pequeña a fuego bajo.\n\n¡Buen provecho! 🌶️`;
 
   try {
+    if (forceTemplate) {
+      const err = new Error('Forced template');
+      err.code = 131047;
+      throw err;
+    }
     await sendWhatsAppMessage(to, text);
     return { sent: true, method: 'normal', error: null };
   } catch (error) {

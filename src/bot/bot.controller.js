@@ -1,5 +1,7 @@
 import { processIncomingMessage } from './bot.service.js';
 import Order from '../orders/order.model.js';
+import { generateOrderSummary } from '../orders/order.service.js';
+import { sendOrderReceivedMessage, sendOrderEnRouteMessage, sendOrderDeliveredMessage } from './whatsapp.service.js';
 
 // ==========================================
 // WHATSAPP WEBHOOK CONTROLLERS (DEDICATED)
@@ -81,6 +83,43 @@ export const handleWhatsAppWebhook = async (req, res) => {
           }
           } else {
             console.log('[WhatsApp Webhook Recv] Message body is empty or non-text type event');
+          }
+        }
+      } else if (
+        body.entry &&
+        body.entry[0].changes &&
+        body.entry[0].changes[0].value.statuses &&
+        body.entry[0].changes[0].value.statuses[0]
+      ) {
+        const statusObj = body.entry[0].changes[0].value.statuses[0];
+        if (statusObj.status === 'failed' && statusObj.errors?.[0]?.code === 131047) {
+          const phone = statusObj.recipient_id;
+          console.log(`[WhatsApp Webhook Recv] Intercepted async 131047 error for ${phone}. Triggering fallback...`);
+          try {
+            const order = await Order.findOne({ phone: `+${phone}` }).sort({ updatedAt: -1 });
+            if (order) {
+              const summary = generateOrderSummary(order.items);
+              const data = {
+                customerName: order.name,
+                orderNumber: order.orderNumber,
+                orderSummary: summary,
+                orderTotal: `Q${order.total.toFixed(2)}`
+              };
+              
+              if (order.status === 'RECIBIDO') {
+                const result = await sendOrderReceivedMessage(`+${phone}`, data, true);
+                order.set('whatsappMessages.orderReceived', { sent: result.sent, sentAt: new Date(), method: result.method, error: result.error });
+              } else if (order.status === 'EN_CAMINO') {
+                const result = await sendOrderEnRouteMessage(`+${phone}`, data, true);
+                order.set('whatsappMessages.orderOnTheWay', { sent: result.sent, sentAt: new Date(), method: result.method, error: result.error });
+              } else if (order.status === 'ENTREGADO') {
+                const result = await sendOrderDeliveredMessage(`+${phone}`, data, true);
+                order.set('whatsappMessages.orderDelivered', { sent: result.sent, sentAt: new Date(), method: result.method, error: result.error });
+              }
+              await order.save();
+            }
+          } catch (err) {
+            console.error('[WhatsApp Webhook Recv] Error during async fallback:', err);
           }
         }
       } else {
