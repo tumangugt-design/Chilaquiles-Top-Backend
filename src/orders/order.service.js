@@ -272,10 +272,7 @@ export const createOrderRecord = async ({ user, customer, items, sauceTemperatur
         orderSummary: summary,
         orderTotal: `Q${order.total.toFixed(2)}`
       });
-      order.whatsappMessages = {
-        ...order.whatsappMessages,
-        orderReceived: { sent: result.sent, sentAt: new Date(), method: result.method, error: result.error }
-      };
+      order.set('whatsappMessages.orderReceived', { sent: result.sent, sentAt: new Date(), method: result.method, error: result.error });
       await order.save();
     }
 
@@ -398,10 +395,7 @@ export const updateOrderStatusRecord = async ({ orderId, nextStatus, actor }) =>
       orderNumber: order.orderNumber,
       orderSummary: summary
     });
-    order.whatsappMessages = {
-      ...order.whatsappMessages,
-      orderOnTheWay: { sent: result.sent, sentAt: new Date(), method: result.method, error: result.error }
-    };
+    order.set('whatsappMessages.orderOnTheWay', { sent: result.sent, sentAt: new Date(), method: result.method, error: result.error });
   } else if (nextStatus === ORDER_STATUS.ENTREGADO) {
     if (order.phone && !order.whatsappMessages?.orderDelivered?.sent) {
       const summary = generateOrderSummary(order.items);
@@ -409,10 +403,7 @@ export const updateOrderStatusRecord = async ({ orderId, nextStatus, actor }) =>
         orderNumber: order.orderNumber,
         orderSummary: summary
       });
-      order.whatsappMessages = {
-        ...order.whatsappMessages,
-        orderDelivered: { sent: result.sent, sentAt: new Date(), method: result.method, error: result.error }
-      };
+      order.set('whatsappMessages.orderDelivered', { sent: result.sent, sentAt: new Date(), method: result.method, error: result.error });
     }
     order.deliveredAt = new Date();
     order.surveyStatus = 'PENDING';

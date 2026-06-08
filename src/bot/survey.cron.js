@@ -31,17 +31,11 @@ export const initSurveyCron = () => {
             orderNumber: order.orderNumber
           });
           
-          order.whatsappMessages = {
-            ...order.whatsappMessages,
-            survey: { sent: result.sent, sentAt: new Date(), method: result.method, error: result.error }
-          };
+          order.set('whatsappMessages.survey', { sent: result.sent, sentAt: new Date(), method: result.method, error: result.error });
           order.surveyStatus = 'SENT';
         } catch (error) {
           console.error(`[Survey Cron] Failed to send survey to order ${order._id}:`, error.message);
-          order.whatsappMessages = {
-            ...order.whatsappMessages,
-            survey: { sent: false, sentAt: new Date(), method: 'unknown', error: error.message }
-          };
+          order.set('whatsappMessages.survey', { sent: false, sentAt: new Date(), method: 'unknown', error: error.message });
           order.surveyStatus = 'FAILED';
         }
         await order.save();
