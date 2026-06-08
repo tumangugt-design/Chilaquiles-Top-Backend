@@ -261,9 +261,11 @@ export const sendSurveyFlowMessage = async (to, data) => {
         ]);
         return { sent: true, method: 'template_flow', error: null };
       } catch (templateError) {
+        console.error('[Survey Fallback] Failed to send fallback template:', templateError.message);
         return { sent: false, method: 'template_flow', error: templateError.message };
       }
     }
+    console.error('[Survey Flow] Failed to send normal flow:', error.message);
     return { sent: false, method: 'normal_flow', error: error.message };
   }
 };
