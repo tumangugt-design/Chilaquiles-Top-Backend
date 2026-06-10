@@ -17,11 +17,12 @@ import financeRoutes from '../src/finances/finances.routes.js';
 const middlewares = (app) => {
   app.use(cors());
   app.use(express.json({
+    limit: '10mb',
     verify: (req, res, buf) => {
       req.rawBody = buf;
     }
   }));
-  app.use(express.urlencoded({ extended: false }));
+  app.use(express.urlencoded({ extended: false, limit: '10mb' }));
   app.use(helmet());
   app.use(morgan('dev'));
 };
