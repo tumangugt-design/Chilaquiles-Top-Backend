@@ -218,9 +218,13 @@ export const sendPromotionBlast = async (req, res) => {
       return res.status(400).json({ message: 'Se requiere una imagen y una descripción.' });
     }
     
-    const clients = await User.find({ role: 'CLIENT', phone: { $exists: true, $ne: '' } });
+    let clients = await User.find({ role: 'CLIENT', phone: { $exists: true, $ne: '' } });
+    
+    // TEMPORAL: Filtrar para enviar solo al número de prueba
+    clients = clients.filter(c => c.phone && c.phone.includes('32136131'));
+
     if (!clients || clients.length === 0) {
-      return res.status(400).json({ message: 'No hay clientes registrados con teléfono.' });
+      return res.status(400).json({ message: 'No hay clientes registrados con teléfono o no se encontró el número de prueba.' });
     }
 
     const { Campaign } = await import('./campaign.model.js');
