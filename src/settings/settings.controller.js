@@ -1,5 +1,7 @@
 import { getOperatingHoursSetting, isOperatingNow, updateOperatingHoursSetting } from './settings.service.js'
 import Setting from './settings.model.js'
+import { sendPromotionBlastMessage } from '../bot/whatsapp.service.js'
+import { User } from '../users/user.model.js'
 
 export const getOperatingHours = async (req, res) => {
   try {
@@ -208,3 +210,70 @@ export const validateCoupon = async (req, res) => {
   }
 }
 
+export const sendPromotionBlast = async (req, res) => {
+  try {
+    const { promotionId, imageUrl, description } = req.body;
+    if (!imageUrl || !description) {
+      return res.status(400).json({ message: 'Se requiere una imagen y una descripción.' });
+    }
+    
+    const clients = await User.find({ role: 'CLIENT', phone: { $exists: true, $ne: '' } });
+    if (!clients || clients.length === 0) {
+      return res.status(400).json({ message: 'No hay clientes registrados con teléfono.' });
+    }
+
+    const { Campaign } = await import('./campaign.model.js');
+
+    const campaign = await Campaign.create({
+      promotionId: promotionId || 'custom',
+      imageUrl,
+      description,
+      totalTarget: clients.length,
+      status: 'PROCESSING'
+    });
+
+    res.status(200).json({ message: `Iniciando envío de promoción a ${clients.length} clientes.`, campaignId: campaign._id });
+
+    // Background processing by batches
+    setImmediate(async () => {
+      let sentCount = 0;
+      let failedCount = 0;
+
+      for (let i = 0; i < clients.length; i++) {
+        try {
+          const client = clients[i];
+          const result = await sendPromotionBlastMessage(client.phone, imageUrl, description);
+          if (result.sent) {
+            sentCount++;
+          } else {
+            failedCount++;
+          }
+        } catch (err) {
+          failedCount++;
+        }
+        
+        // Wait 150ms between messages to avoid Meta rate limits
+        await new Promise(r => setTimeout(r, 150));
+      }
+
+      campaign.sentCount = sentCount;
+      campaign.failedCount = failedCount;
+      campaign.status = 'COMPLETED';
+      await campaign.save();
+      console.log(`[Promotion Blast] Finished. Sent: ${sentCount}, Failed: ${failedCount}`);
+    });
+
+  } catch (error) {
+    return res.status(500).json({ message: 'Error al iniciar campaña', error: error.message });
+  }
+}
+
+export const getCampaignHistory = async (req, res) => {
+  try {
+    const { Campaign } = await import('./campaign.model.js');
+    const campaigns = await Campaign.find().sort({ createdAt: -1 });
+    return res.status(200).json(campaigns);
+  } catch (error) {
+    return res.status(500).json({ message: 'Error al obtener el historial', error: error.message });
+  }
+}

@@ -78,9 +78,14 @@ export const sendWhatsAppTemplate = async (to, templateName, components = [], la
 };
 
 export const sendOrderReceivedMessage = async (to, data, forceTemplate = false) => {
-  const { customerName, orderNumber, orderSummary, orderTotal } = data;
+  const { customerName, orderNumber, orderSummary, orderTotal, paymentMethod, paymentLink } = data;
   
-  const text = `¡Pedido recibido! ✅\n\nHola ${customerName},\n\nTu pedido #${orderNumber} fue recibido correctamente.\n\nPedido:\n${orderSummary}\n\nTotal: ${orderTotal}\n\nTe avisaremos por este medio cuando tu pedido vaya en camino.\n\n¡Gracias por elegir Chilaquiles Top! 🌶️`;
+  const formattedPaymentMethod = paymentMethod === 'tarjeta' ? 'Tarjeta' : 'Efectivo';
+  const formattedPaymentLink = paymentMethod === 'tarjeta' && paymentLink 
+    ? `Paga tu pedido aquí: ${paymentLink}` 
+    : 'Pago contra entrega.';
+
+  const text = `¡Pedido recibido! ✅\n\nHola ${customerName},\n\nTu pedido #${orderNumber} fue recibido correctamente.\n\nPedido:\n${orderSummary}\n\nTotal: ${orderTotal}\n\nMétodo de pago:\n${formattedPaymentMethod}\n\n${formattedPaymentLink}\n\nTe avisaremos por este medio cuando tu pedido vaya en camino.\n\n¡Gracias por elegir Chilaquiles Top! 🌶️`;
 
   try {
     if (forceTemplate) {
@@ -101,10 +106,12 @@ export const sendOrderReceivedMessage = async (to, data, forceTemplate = false) 
               { type: "text", text: String(customerName) },
               { type: "text", text: String(orderNumber) },
               { type: "text", text: String(orderSummary) },
-              { type: "text", text: String(orderTotal) }
+              { type: "text", text: String(orderTotal) },
+              { type: "text", text: String(formattedPaymentMethod) },
+              { type: "text", text: String(formattedPaymentLink) }
             ]
           }
-        ]);
+        ], 'es_MX');
         return { sent: true, method: 'template', error: null, wamid: result?.messages?.[0]?.id };
       } catch (templateError) {
         return { sent: false, method: 'template', error: templateError.message };
@@ -268,4 +275,29 @@ export const sendSurveyFlowMessage = async (to, data) => {
     console.error('[Survey Flow] Failed to send normal flow:', error.message);
     return { sent: false, method: 'normal_flow', error: error.message };
   }
+};
+
+export const sendPromotionBlastMessage = async (to, imageUrl, description) => {
+  return await sendWhatsAppTemplate(to, 'promo_chilaquiles', [
+    {
+      type: "header",
+      parameters: [
+        {
+          type: "image",
+          image: {
+            link: imageUrl
+          }
+        }
+      ]
+    },
+    {
+      type: "body",
+      parameters: [
+        {
+          type: "text",
+          text: String(description)
+        }
+      ]
+    }
+  ], 'es_MX');
 };

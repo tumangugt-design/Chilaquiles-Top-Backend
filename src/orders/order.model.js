@@ -65,6 +65,12 @@ const orderSchema = new mongoose.Schema({
   couponCode: { type: String, default: null },
   couponDiscount: { type: Number, default: 0 },
   total: { type: Number, required: true },
+  paymentMethod: {
+    type: String,
+    enum: ['efectivo', 'tarjeta'],
+    default: 'efectivo'
+  },
+  paymentLink: { type: String, default: null },
   status: {
     type: String,
     enum: Object.values(ORDER_STATUS),

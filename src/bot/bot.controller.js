@@ -114,7 +114,9 @@ export const handleWhatsAppWebhook = async (req, res) => {
                 customerName: exactOrder.name,
                 orderNumber: exactOrder.orderNumber,
                 orderSummary: summary,
-                orderTotal: `Q${exactOrder.total.toFixed(2)}`
+                orderTotal: `Q${exactOrder.total.toFixed(2)}`,
+                paymentMethod: exactOrder.paymentMethod,
+                paymentLink: exactOrder.paymentLink
               };
 
               if (exactOrder.whatsappMessages?.survey?.wamid === failedWamid) {
@@ -151,8 +153,12 @@ export const handleWhatsAppWebhook = async (req, res) => {
               if (order) {
                 const summary = generateOrderSummary(order.items);
                 const data = {
-                  customerName: order.name, orderNumber: order.orderNumber,
-                  orderSummary: summary, orderTotal: `Q${order.total.toFixed(2)}`
+                  customerName: order.name, 
+                  orderNumber: order.orderNumber,
+                  orderSummary: summary, 
+                  orderTotal: `Q${order.total.toFixed(2)}`,
+                  paymentMethod: order.paymentMethod,
+                  paymentLink: order.paymentLink
                 };
                 
                 // Check which message was sent 'normal' and might have failed

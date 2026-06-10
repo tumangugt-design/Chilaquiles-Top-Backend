@@ -8,6 +8,7 @@ import { publishOrderRealtimeEvent } from '../realtime/realtime.service.js';
 import { getGuatemalaOrderDatePrefix, getGuatemalaParts } from '../helpers/timezone.helper.js';
 import { notifyAdminNewOrder } from '../helpers/email.helper.js';
 import { sendOrderReceivedMessage, sendOrderEnRouteMessage, sendOrderDeliveredMessage } from '../bot/whatsapp.service.js';
+import { createPaymentLink } from '../finances/paggo.service.js';
 
 
 const normalizeSelection = (value = '') => String(value || '').trim().toUpperCase().replace(/\s+/g, '_');
@@ -175,7 +176,7 @@ const baseHistoryQuery = () => Order.find()
   .populate('chefId', 'name phone email photoUrl role status')
   .populate('repartidorId', 'name phone email photoUrl role status');
 
-export const createOrderRecord = async ({ user, customer, items, sauceTemperature, appliedPromo, couponCode }) => {
+export const createOrderRecord = async ({ user, customer, items, sauceTemperature, appliedPromo, couponCode, paymentMethod = 'efectivo' }) => {
   let orderItems = Array.isArray(items) ? items.map(cloneOrderItem) : [];
   const resolvedPromo = await resolveAppliedPromotion({ requestedPromo: appliedPromo, items: orderItems });
   if (resolvedPromo) {
@@ -237,6 +238,18 @@ export const createOrderRecord = async ({ user, customer, items, sauceTemperatur
     throw error;
   }
 
+  let paymentLink = null;
+  if (paymentMethod === 'tarjeta') {
+    try {
+      paymentLink = await createPaymentLink({ amount: total, description: `Pago Orden #${orderNumber}`, orderNumber });
+    } catch (e) {
+      console.error('[createOrderRecord] Failed to create payment link', e);
+      const err = new Error('No se pudo generar el link de pago con Paggo. Por favor intenta con efectivo o más tarde.');
+      err.statusCode = 502;
+      throw err;
+    }
+  }
+
   let order = null;
 
   try {
@@ -255,6 +268,8 @@ export const createOrderRecord = async ({ user, customer, items, sauceTemperatur
       couponCode: cleanCouponCode,
       couponDiscount,
       total,
+      paymentMethod,
+      paymentLink,
       status: ORDER_STATUS.RECIBIDO
     });
 
@@ -270,7 +285,9 @@ export const createOrderRecord = async ({ user, customer, items, sauceTemperatur
         customerName: order.name,
         orderNumber: order.orderNumber,
         orderSummary: summary,
-        orderTotal: `Q${order.total.toFixed(2)}`
+        orderTotal: `Q${order.total.toFixed(2)}`,
+        paymentMethod: order.paymentMethod,
+        paymentLink: order.paymentLink
       });
       order.set('whatsappMessages.orderReceived', { sent: result.sent, sentAt: new Date(), method: result.method, error: result.error, wamid: result.wamid });
       await order.save();
