@@ -296,24 +296,27 @@ export const sendPromotionBlastMessage = async (to, imageUrl, description) => {
         parameters: [
           {
             type: "text",
-            text: String(description)
+            text: String(description || '')
+              .replace(/[\n\r\t]+/g, ' ')
+              .replace(/\s{2,}/g, ' ')
+              .trim()
           }
         ]
       }
-    ], 'es_MX');
+    ], 'es_MX')
 
     return {
       sent: true,
       method: 'template',
       error: null,
       wamid: result?.messages?.[0]?.id
-    };
+    }
   } catch (error) {
-    console.error('[Promotion Blast] Failed to send WhatsApp template:', error.message);
     return {
       sent: false,
       method: 'template',
       error: error.message
-    };
+    }
   }
 };
+
