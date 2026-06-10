@@ -278,26 +278,42 @@ export const sendSurveyFlowMessage = async (to, data) => {
 };
 
 export const sendPromotionBlastMessage = async (to, imageUrl, description) => {
-  return await sendWhatsAppTemplate(to, 'promo_chilaquiles', [
-    {
-      type: "header",
-      parameters: [
-        {
-          type: "image",
-          image: {
-            link: imageUrl
+  try {
+    const result = await sendWhatsAppTemplate(to, 'promo_chilaquiles', [
+      {
+        type: "header",
+        parameters: [
+          {
+            type: "image",
+            image: {
+              link: imageUrl
+            }
           }
-        }
-      ]
-    },
-    {
-      type: "body",
-      parameters: [
-        {
-          type: "text",
-          text: String(description)
-        }
-      ]
-    }
-  ], 'es_MX');
+        ]
+      },
+      {
+        type: "body",
+        parameters: [
+          {
+            type: "text",
+            text: String(description)
+          }
+        ]
+      }
+    ], 'es_MX');
+
+    return {
+      sent: true,
+      method: 'template',
+      error: null,
+      wamid: result?.messages?.[0]?.id
+    };
+  } catch (error) {
+    console.error('[Promotion Blast] Failed to send WhatsApp template:', error.message);
+    return {
+      sent: false,
+      method: 'template',
+      error: error.message
+    };
+  }
 };

@@ -4,6 +4,23 @@ import { sendPromotionBlastMessage } from '../bot/whatsapp.service.js'
 import User from '../users/user.model.js'
 import { Campaign } from './campaign.model.js'
 
+const ALLOWED_PROMOTION_IMAGE_MIME_TYPES = ['image/jpeg', 'image/png', 'image/webp']
+
+const validatePublicImageUrl = async (imageUrl) => {
+  try {
+    const response = await fetch(imageUrl, { method: 'HEAD', redirect: 'follow' })
+    const contentType = response.headers.get('content-type') || ''
+
+    return (
+      response.ok &&
+      ALLOWED_PROMOTION_IMAGE_MIME_TYPES.some(type => contentType.toLowerCase().includes(type))
+    )
+  } catch (error) {
+    console.error('[Promotion Blast] Invalid image URL:', error.message)
+    return false
+  }
+}
+
 export const getOperatingHours = async (req, res) => {
   try {
     const settings = await getOperatingHoursSetting()
@@ -217,6 +234,13 @@ export const sendPromotionBlast = async (req, res) => {
     if (!imageUrl || !description) {
       return res.status(400).json({ message: 'Se requiere una imagen y una descripción.' });
     }
+
+    const isValidImage = await validatePublicImageUrl(imageUrl);
+    if (!isValidImage) {
+      return res.status(400).json({
+        message: 'La URL de imagen no es válida. Debe ser pública y devolver image/jpeg, image/png o image/webp.'
+      });
+    }
     
     let clients = await User.find({ role: 'CLIENT', phone: { $exists: true, $ne: '' } });
     
@@ -226,8 +250,6 @@ export const sendPromotionBlast = async (req, res) => {
     if (!clients || clients.length === 0) {
       return res.status(400).json({ message: 'No hay clientes registrados con teléfono o no se encontró el número de prueba.' });
     }
-
-    const { Campaign } = await import('./campaign.model.js');
 
     const campaign = await Campaign.create({
       promotionId: promotionId || 'custom',
@@ -275,7 +297,6 @@ export const sendPromotionBlast = async (req, res) => {
 
 export const getCampaignHistory = async (req, res) => {
   try {
-    const { Campaign } = await import('./campaign.model.js');
     const campaigns = await Campaign.find().sort({ createdAt: -1 });
     return res.status(200).json(campaigns);
   } catch (error) {
