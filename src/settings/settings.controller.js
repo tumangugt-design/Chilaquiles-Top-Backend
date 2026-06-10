@@ -1,7 +1,8 @@
 import { getOperatingHoursSetting, isOperatingNow, updateOperatingHoursSetting } from './settings.service.js'
 import Setting from './settings.model.js'
 import { sendPromotionBlastMessage } from '../bot/whatsapp.service.js'
-import { User } from '../users/user.model.js'
+import User from '../users/user.model.js'
+import { Campaign } from './campaign.model.js'
 
 export const getOperatingHours = async (req, res) => {
   try {
