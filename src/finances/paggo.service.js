@@ -26,7 +26,7 @@ export const createPaymentLink = async ({ amount, description, orderNumber }) =>
 
     // Assuming response.data.url or response.data.link contains the payment link
     console.log('[Paggo Service] Link generated:', response.data);
-    return response.data?.url || response.data?.link || response.data?.data?.url;
+    return response.data?.result?.link || response.data?.url || response.data?.link || response.data?.data?.url;
   } catch (error) {
     console.error('[Paggo Service] Error generating link:', error?.response?.data || error.message);
     throw new Error('No se pudo generar el link de pago');
