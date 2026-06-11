@@ -3,6 +3,7 @@ import Setting from './settings.model.js'
 import { sendPromotionBlastMessage } from '../bot/whatsapp.service.js'
 import User from '../users/user.model.js'
 import { Campaign } from './campaign.model.js'
+import { generateMarketingMessage } from '../bot/ai.service.js'
 
 const ALLOWED_PROMOTION_IMAGE_MIME_TYPES = ['image/jpeg', 'image/png', 'image/webp']
 
@@ -230,9 +231,10 @@ export const validateCoupon = async (req, res) => {
 
 export const sendPromotionBlast = async (req, res) => {
   try {
-    const { promotionId, imageUrl, description } = req.body;
-    if (!imageUrl || !description) {
-      return res.status(400).json({ message: 'Se requiere una imagen y una descripción.' });
+    const { promotionId, promoName, description, price, validUntil, marketingMessage, imageUrl } = req.body;
+    
+    if (!promoName || !description || !price || !validUntil || !marketingMessage || !imageUrl) {
+      return res.status(400).json({ message: 'Todos los campos son obligatorios (nombre, descripción, precio, vigencia, mensaje de marketing e imagen).' });
     }
 
     const isValidImage = await validatePublicImageUrl(imageUrl);
@@ -254,7 +256,7 @@ export const sendPromotionBlast = async (req, res) => {
     const campaign = await Campaign.create({
       promotionId: promotionId || 'custom',
       imageUrl,
-      description,
+      description: marketingMessage, // Guardamos el mensaje de marketing como descripción de la campaña para referencia
       totalTarget: clients.length,
       status: 'PROCESSING'
     });
@@ -269,7 +271,14 @@ export const sendPromotionBlast = async (req, res) => {
       for (let i = 0; i < clients.length; i++) {
         try {
           const client = clients[i];
-          const result = await sendPromotionBlastMessage(client.phone, imageUrl, description);
+          const result = await sendPromotionBlastMessage(client.phone, {
+            promoName,
+            description,
+            price,
+            validUntil,
+            marketingMessage,
+            imageUrl
+          });
           if (result.sent) {
             sentCount++;
           } else {
@@ -292,6 +301,20 @@ export const sendPromotionBlast = async (req, res) => {
 
   } catch (error) {
     return res.status(500).json({ message: 'Error al iniciar campaña', error: error.message });
+  }
+}
+
+export const generateMarketing = async (req, res) => {
+  try {
+    const promoData = req.body;
+    if (!promoData.promoName || !promoData.description || !promoData.price || !promoData.validUntil) {
+      return res.status(400).json({ message: 'Faltan datos de la promoción para generar el mensaje.' });
+    }
+
+    const marketingMessage = await generateMarketingMessage(promoData);
+    return res.status(200).json({ marketingMessage });
+  } catch (error) {
+    return res.status(500).json({ message: 'Error al generar el mensaje de marketing', error: error.message });
   }
 }
 

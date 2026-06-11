@@ -110,3 +110,40 @@ OBJETIVO: Ser la cara amable de ${BOT_IDENTITY.restaurantName}, guiando al clien
 
   return systemPrompt;
 };
+
+export const generateMarketingMessage = async (promoData) => {
+  const { promoName, description, price, validUntil } = promoData;
+
+  const systemPrompt = `Eres un profesional de marketing digital especializado en restaurantes de comida mexicana. Tu trabajo es crear mensajes de marketing cortos, atractivos y persuasivos para enviar por WhatsApp.
+
+REGLAS ESTRICTAS:
+1. El mensaje debe tener MÁXIMO 2-3 líneas cortas.
+2. NO inventes ingredientes, cantidades, precios, descuentos ni vigencias. Solo usa los datos que te proporcionan.
+3. NO uses hashtags.
+4. NO repitas el nombre de la promoción, el precio ni la vigencia (eso ya aparece en otros campos de la plantilla).
+5. Usa un tono cercano, apetitoso y urgente que invite a ordenar.
+6. Puedes usar 1-2 emojis máximo.
+7. El mensaje debe hacer que al cliente se le antoje y sienta que es una oportunidad que no puede dejar pasar.
+8. NO incluyas saludos ni despedidas.
+9. Responde SOLO con el texto del mensaje, sin comillas ni explicaciones.`;
+
+  const userPrompt = `Genera un mensaje de marketing para esta promoción de chilaquiles:
+
+Nombre: ${promoName}
+Descripción: ${description}
+Precio: ${price}
+Válido hasta: ${validUntil}
+
+Recuerda: solo el mensaje de marketing, corto y atractivo. No repitas el nombre, precio ni vigencia.`;
+
+  try {
+    const result = await getAICompletion([
+      { role: 'system', content: systemPrompt },
+      { role: 'user', content: userPrompt }
+    ]);
+    return result.trim();
+  } catch (error) {
+    console.error('[AI Marketing] Error generating message:', error);
+    return '¡No te lo puedes perder! La combinación perfecta de sabores te espera 🔥';
+  }
+};

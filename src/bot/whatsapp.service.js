@@ -277,7 +277,9 @@ export const sendSurveyFlowMessage = async (to, data) => {
   }
 };
 
-export const sendPromotionBlastMessage = async (to, imageUrl, description) => {
+export const sendPromotionBlastMessage = async (to, { promoName, description, price, validUntil, marketingMessage, imageUrl }) => {
+  const sanitize = (val) => String(val || '').replace(/[\n\r\t]+/g, ' ').replace(/\s{2,}/g, ' ').trim();
+
   try {
     const result = await sendWhatsAppTemplate(to, 'promo_chilaquiles', [
       {
@@ -294,13 +296,11 @@ export const sendPromotionBlastMessage = async (to, imageUrl, description) => {
       {
         type: "body",
         parameters: [
-          {
-            type: "text",
-            text: String(description || '')
-              .replace(/[\n\r\t]+/g, ' ')
-              .replace(/\s{2,}/g, ' ')
-              .trim()
-          }
+          { type: "text", text: sanitize(promoName) },
+          { type: "text", text: sanitize(description) },
+          { type: "text", text: sanitize(price) },
+          { type: "text", text: sanitize(validUntil) },
+          { type: "text", text: sanitize(marketingMessage) }
         ]
       }
     ], 'es_MX')
@@ -319,4 +319,5 @@ export const sendPromotionBlastMessage = async (to, imageUrl, description) => {
     }
   }
 };
+
 
