@@ -135,7 +135,12 @@ export const generateImageWithOpenRouter = async (promptText) => {
     const data = await response.json();
     if (data.choices && data.choices.length > 0) {
       // The image might be in a markdown image url, a direct url, or base64. Let's extract any URL or base64.
-      const content = data.choices[0].message.content;
+      const content = data.choices[0].message?.content;
+      
+      if (!content) {
+        console.error('OpenRouter returned empty content:', JSON.stringify(data));
+        return null;
+      }
       
       // Try to match a markdown image url
       const urlMatch = content.match(/!\[.*?\]\((https?:\/\/.*?)\)/);
@@ -147,6 +152,7 @@ export const generateImageWithOpenRouter = async (promptText) => {
       
       return null;
     }
+    console.error('OpenRouter returned invalid choices:', JSON.stringify(data));
     return null;
   } catch (error) {
     console.error('Error generating image via OpenRouter:', error);
