@@ -14,6 +14,7 @@ import settingsRoutes from '../src/settings/settings.routes.js';
 import botRoutes from '../src/bot/bot.routes.js';
 import financeRoutes from '../src/finances/finances.routes.js';
 import contentRoutes from '../src/content/routes/content.routes.js';
+import canvaRoutes from '../src/content/routes/canva.routes.js';
 
 const middlewares = (app) => {
   app.use(cors());
@@ -41,6 +42,7 @@ const routes = (app) => {
   app.use('/api/bot', botRoutes);
   app.use('/api/finances', financeRoutes);
   app.use('/api/content', contentRoutes);
+  app.use('/api/canva', canvaRoutes);
 };
 
 const connectDependencies = async () => {
