@@ -73,6 +73,11 @@ export const getFirebaseFirestore = () => {
   return app ? admin.firestore() : null;
 };
 
+export const getFirebaseStorage = () => {
+  const app = getFirebaseAdmin();
+  return app ? admin.storage() : null;
+};
+
 export const isFirebaseEnabled = () => {
   if (!firebaseInitialized) {
     initFirebaseAdmin();

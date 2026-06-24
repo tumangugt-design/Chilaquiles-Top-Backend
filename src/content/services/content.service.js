@@ -1,31 +1,39 @@
 import { ContentDraft } from '../models/ContentDraft.model.js';
 import { generateContentFromIdea } from './content-ai.service.js';
 import { renderHtmlToPng } from './content-html-render.service.js';
+import { getFirebaseStorage } from '../../../configs/firebase.js';
 
 export const createDraftFromIdea = async (ideaData, userId) => {
   const generated = await generateContentFromIdea(ideaData);
   const data = generated.data;
 
   // Render Image via HTML
-  const artProvider = process.env.CONTENT_ART_PROVIDER || 'html';
+  const artProvider = 'html'; // Forced to HTML as requested
   let imageUrl = null;
   let htmlSnapshot = null;
   
   if (artProvider === 'html' && data.designSpec) {
     try {
-      // In a real app we'd upload the buffer to Firebase Storage here and get a URL.
-      // For MVP, we might store it locally or just pass the base64/url depending on infrastructure.
-      // Since the user said "No guardés la imagen como base64... La imagen final debe ir a Storage",
-      // I will add a mock Storage upload or assume there is an upload service.
       const renderResult = await renderHtmlToPng(data.designSpec, ideaData.promotionData?.imageUrl);
-      
-      // MOCK UPLOAD TO STORAGE:
-      // In reality, we'd use Firebase Admin: bucket.file(...).save(renderResult.buffer)
-      // For this test, let's pretend we uploaded it and got a URL or use a local static route if needed.
-      // To satisfy "No base64", I'll save to local /public/uploads/ for this step if it's acceptable.
-      // Let's assume there's an upload tool or just fake the URL for now until we add Firebase storage logic.
-      imageUrl = 'https://chilaquiles-top.web.app/assets/generated-mock.png';
       htmlSnapshot = renderResult.htmlSnapshot;
+      
+      const storage = getFirebaseStorage();
+      if (storage) {
+        const bucket = storage.bucket(process.env.FIREBASE_STORAGE_BUCKET || 'chilaquiles-top.appspot.com');
+        const filename = `content/drafts/${Date.now()}_${Math.random().toString(36).substring(7)}.png`;
+        const file = bucket.file(filename);
+        
+        await file.save(renderResult.buffer, {
+          metadata: { contentType: 'image/png' },
+          public: true
+        });
+        
+        // Obtenemos URL publica (depende de config de bucket, pero esta url es standard)
+        imageUrl = `https://storage.googleapis.com/${bucket.name}/${filename}`;
+      } else {
+        // Fallback mock if no storage configured
+        imageUrl = 'https://chilaquiles-top.web.app/assets/menu_chilaquiles_top-DmJU2W6e.png';
+      }
     } catch (e) {
       console.error('Error rendering HTML to PNG:', e);
     }
