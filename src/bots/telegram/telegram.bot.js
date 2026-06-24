@@ -49,16 +49,24 @@ export const initTelegramBot = () => {
     if (!isAuthorized(msg)) return;
 
     const chatId = msg.chat.id;
-    const text = msg.text;
+    const text = msg.text.trim();
 
     try {
-      // Opcional: Mostrar indicador de escribiendo
       await bot.sendChatAction(chatId, 'typing');
-
       console.log(`[Telegram Bot] Recibido mensaje de texto: "${text}"`);
+
+      // 1. Manejo de Comandos Explícitos
+      if (text.startsWith('/generar')) {
+        return bot.sendMessage(chatId, 'Comando /generar recibido. (En desarrollo para Content Studio)');
+      } else if (text.startsWith('/promos')) {
+        return bot.sendMessage(chatId, 'Comando /promos recibido. (En desarrollo para Content Studio)');
+      } else if (text.startsWith('/contenido')) {
+        return bot.sendMessage(chatId, 'Comando /contenido recibido. (En desarrollo para Content Studio)');
+      }
+
+      // 2. Lógica de Agente AI (default)
       const response = await processAdminMessage(text, chatId);
       
-      // Intentar enviar con Markdown; si Telegram lo rechaza por formato inválido, reenviar como texto plano
       try {
         await bot.sendMessage(chatId, response, { parse_mode: 'Markdown' });
       } catch (markdownError) {
