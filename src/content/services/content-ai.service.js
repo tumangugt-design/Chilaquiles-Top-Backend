@@ -42,13 +42,16 @@ Formato de salida REQUERIDO (JSON puro, sin markdown ni explicaciones):
     "cta": "Llamado a la acción",
     "whatsappText": "Texto adaptado para WhatsApp"
   },
-  "visualBrief": {
-    "headline": "Texto grande en el arte",
-    "subheadline": "Texto secundario en el arte",
-    "priceText": "Ej. Q55",
-    "ctaText": "Ej. Pide Ya",
-    "layout": "Sugerencia visual",
-    "notes": "Notas adicionales para el diseñador"
+  "designSpec": {
+    "format": "instagram_feed",
+    "width": 1080,
+    "height": 1080,
+    "layout": "promo_product_left",
+    "headline": "TITULAR PRINCIPAL CORTA",
+    "subheadline": "Texto secundario",
+    "price": "Q00",
+    "cta": "Llamado a la acción",
+    "theme": "hot_promo"
   }
 }`;
 

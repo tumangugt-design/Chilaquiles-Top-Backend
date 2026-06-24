@@ -33,7 +33,10 @@ const contentDraftSchema = new mongoose.Schema({
     imageUrl: { type: String },
     videoUrl: { type: String },
     templateId: { type: String },
-    renderConfig: { type: mongoose.Schema.Types.Mixed }
+    renderConfig: { type: mongoose.Schema.Types.Mixed },
+    designSpec: { type: mongoose.Schema.Types.Mixed },
+    artProvider: { type: String },
+    htmlSnapshot: { type: String }
   },
   ai: {
     model: { type: String },
