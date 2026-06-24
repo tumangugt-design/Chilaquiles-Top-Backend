@@ -1,5 +1,4 @@
 import crypto from 'crypto';
-import fetch from 'node-fetch';
 import { encryptText, decryptText } from './crypto.service.js';
 import { IntegrationToken } from '../models/IntegrationToken.model.js';
 
