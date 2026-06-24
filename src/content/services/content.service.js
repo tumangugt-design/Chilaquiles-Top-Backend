@@ -7,48 +7,23 @@ export const createDraftFromIdea = async (ideaData, userId) => {
   const generated = await generateContentFromIdea(ideaData);
   const data = generated.data;
 
-  // Render Image via HTML
-  let artProvider = 'html'; 
+  // Render Image via OpenRouter
+  let artProvider = 'openrouter'; 
   let imageUrl = null;
-  let htmlSnapshot = null;
+  let htmlSnapshot = null; // No longer using HTML
   
-  if (data.designSpec) {
-    try {
-      const renderResult = await renderHtmlToPng(data.designSpec, ideaData.promotionData?.imageUrl);
-      htmlSnapshot = renderResult.htmlSnapshot;
-      
-      const storage = getFirebaseStorage();
-      if (storage) {
-        const bucket = storage.bucket(process.env.FIREBASE_STORAGE_BUCKET || 'chilaquiles-top.appspot.com');
-        const filename = `content/drafts/${Date.now()}_${Math.random().toString(36).substring(7)}.png`;
-        const file = bucket.file(filename);
-        
-        await file.save(renderResult.buffer, {
-          metadata: { contentType: 'image/png' },
-          public: true
-        });
-        
-        imageUrl = `https://storage.googleapis.com/${bucket.name}/${filename}`;
-      } else {
-        imageUrl = 'https://chilaquiles-top.web.app/assets/menu_chilaquiles_top-DmJU2W6e.png';
-      }
-    } catch (e) {
-      console.error('Error rendering HTML to PNG, attempting OpenRouter fallback...', e.message);
+  console.log('Using OpenRouter as primary image generator');
+  try {
+    const openRouterUrl = await generateImageWithOpenRouter(data.title || ideaData.topic || 'promoción de comida');
+    if (openRouterUrl) {
+      imageUrl = openRouterUrl;
+    } else {
+      console.error('OpenRouter returned null image URL. Using fallback mock image.');
+      imageUrl = 'https://chilaquiles-top.web.app/assets/menu_chilaquiles_top-DmJU2W6e.png';
     }
-  }
-
-  // Fallback to OpenRouter if image is still null (due to Puppeteer failing or missing)
-  if (!imageUrl) {
-    console.log('Using OpenRouter as image generator fallback');
-    try {
-      const openRouterUrl = await generateImageWithOpenRouter(data.title || ideaData.topic || 'promoción de comida');
-      if (openRouterUrl) {
-        imageUrl = openRouterUrl;
-        artProvider = 'openrouter';
-      }
-    } catch (fallbackError) {
-      console.error('OpenRouter fallback also failed:', fallbackError.message);
-    }
+  } catch (fallbackError) {
+    console.error('OpenRouter generation failed:', fallbackError.message);
+    imageUrl = 'https://chilaquiles-top.web.app/assets/menu_chilaquiles_top-DmJU2W6e.png';
   }
 
   const draft = new ContentDraft({
