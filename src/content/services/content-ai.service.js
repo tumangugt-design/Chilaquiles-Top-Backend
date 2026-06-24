@@ -1,6 +1,7 @@
 import { getAICompletion } from '../../bot/ai.service.js';
 import { BrandKnowledge } from '../models/BrandKnowledge.model.js';
 import { ContentStandard } from '../models/ContentStandard.model.js';
+import { buildImagePrompt } from '../config/brand.config.js';
 
 export const generateContentFromIdea = async (ideaData) => {
   const { topic, objective, platforms, formats, tone, promotionData } = ideaData;
@@ -113,11 +114,15 @@ Devuelve EXCLUSIVAMENTE un JSON con:
   }
 };
 
-export const generateImageWithOpenRouter = async (promptText) => {
+export const generateImageWithOpenRouter = async (promptText, designSpec = null, promotionData = null) => {
   const apiKey = process.env.OPEN_ROUTER_APIKEY;
-  const imageModel = process.env.OPENROUTER_MODEL_IMAGES || 'google/gemini-2.0-flash-exp';
+  const imageModel = process.env.OPENROUTER_MODEL_IMAGES || 'google/gemini-3.1-flash-image';
   
   try {
+    // Use brand-spec prompt builder if designSpec provided, otherwise use basic prompt
+    const imagePrompt = buildImagePrompt(designSpec, promotionData) + 
+      (promptText ? `\n\nADDITIONAL CONTEXT: ${promptText}` : '');
+
     console.log(`[OpenRouter] Generating image with model: ${imageModel}`);
     const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
       method: 'POST',
@@ -129,10 +134,7 @@ export const generateImageWithOpenRouter = async (promptText) => {
       },
       body: JSON.stringify({
         model: imageModel,
-        messages: [{
-          role: 'user',
-          content: `Generate a vibrant promotional social media image for a Mexican food restaurant called "Chilaquiles Top" in Guatemala. Use the brand colors: bright orange (#FF6B00), deep navy blue (#0000CD), and white. The promotion: ${promptText}. Make it visually striking, appetizing, and professional.`
-        }]
+        messages: [{ role: 'user', content: imagePrompt }]
       })
     });
 
