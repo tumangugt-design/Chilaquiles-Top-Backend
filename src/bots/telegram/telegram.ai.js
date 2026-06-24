@@ -132,6 +132,23 @@ export const AI_TOOLS = [
         }
       }
     }
+  },
+  {
+    type: "function",
+    function: {
+      name: "generateContentDraft",
+      description: "Genera un borrador de contenido (post/arte visual) para redes sociales.",
+      parameters: {
+        type: "object",
+        properties: {
+          topic: { type: "string", description: "De qué trata la publicación" },
+          objective: { type: "string", description: "Objetivo: sales, awareness, etc." },
+          platforms: { type: "array", items: { type: "string" }, description: "Ej: ['instagram', 'facebook']" },
+          formats: { type: "array", items: { type: "string" }, description: "Ej: ['feed', 'story']" }
+        },
+        required: ["topic"]
+      }
+    }
   }
 ];
 

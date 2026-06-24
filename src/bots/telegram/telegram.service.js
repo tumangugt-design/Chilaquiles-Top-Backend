@@ -8,6 +8,7 @@ import { isOperatingNow, getOperatingHoursSetting, updateOperatingHoursSetting }
 import { getAdminAICompletion, prepareAdminBotContext } from './telegram.ai.js';
 import TelegramBotMemory from './bot_memory.model.js';
 import { getFinancialSummary } from '../../finances/finances.service.js';
+import { createDraftFromIdea } from '../../content/services/content.service.js';
 
 const fetchContextData = async () => {
   try {
@@ -204,6 +205,23 @@ const executeTool = async (toolCall) => {
         date: l.createdAt
       }));
       return JSON.stringify(compact);
+    }
+
+    else if (name === 'generateContentDraft') {
+      const draft = await createDraftFromIdea({
+        topic: args.topic,
+        objective: args.objective || 'sales',
+        platforms: args.platforms || ['instagram', 'facebook'],
+        formats: args.formats || ['feed']
+      }, null);
+      
+      return JSON.stringify({
+        message: "¡Borrador generado con éxito! El arte visual y los textos están listos en el panel de Estudio de Contenido.",
+        draftId: draft._id,
+        title: draft.title,
+        copy: draft.copy.main || draft.copy.caption,
+        imageUrl: draft.visual?.imageUrl || 'No se generó imagen'
+      });
     }
 
     else {
