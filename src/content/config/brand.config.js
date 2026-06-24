@@ -4,6 +4,19 @@
 // Estos assets siempre se componen sobre la imagen generada.
 // ============================================================
 
+// ⚠️ DATOS REALES DE CONTACTO — NO INVENTAR, SIEMPRE USAR ESTOS
+export const BRAND_CONTACT = {
+  whatsapp: '+502 3301 9938',
+  whatsappClean: '50233019938', // Para links wa.me/
+  whatsappLink: 'https://wa.me/50233019938',
+  orderUrl: 'https://chilaquiles-top.web.app/order',
+  landingUrl: 'https://chilaquiles-top.web.app',
+  location: 'Villa Nueva, Guatemala',
+  deliveryArea: 'Solo entregamos en Villa Nueva',
+  instagram: '@chilaquilestop',
+  hashtags: ['#chilaquiles', '#top', '#gt', '#MantenteTOP', '#VillaNueva'],
+};
+
 export const BRAND_ASSETS = {
   // Logo oficial - versión azul sobre blanco
   logoBlueOnWhite: process.env.BRAND_LOGO_URL || 'https://chilaquiles-top.web.app/logos/logo_blue.png',
@@ -63,6 +76,16 @@ DESIGN RULES:
 - Card elements: border-radius 24px, soft shadow
 - NO random colors. NO gradients as main backgrounds (only as thin accent lines)
 - Feel: technological, clean, close to the customer
+
+⚠️ REAL CONTACT DATA - ALWAYS USE EXACTLY THESE, NEVER INVENT:
+- WhatsApp: ${BRAND_CONTACT.whatsapp}
+- Order link: ${BRAND_CONTACT.orderUrl}
+- Website: ${BRAND_CONTACT.landingUrl}
+- Location: ${BRAND_CONTACT.location}
+- Delivery: ${BRAND_CONTACT.deliveryArea}
+- Instagram: ${BRAND_CONTACT.instagram}
+- Hashtags: ${BRAND_CONTACT.hashtags.join(' ')}
+If the design includes a QR code, phone number, URL, or any contact detail — use ONLY the data above, never invent it.
 `;
 
   const contentBlock = `
@@ -71,10 +94,11 @@ ${promoName ? `- Promotion: ${promoName}` : ''}
 ${promoPrice ? `- Price: ${promoPrice} (show in blue circle, very visible)` : ''}
 ${headline ? `- Headline: "${headline}"` : ''}
 ${subheadline ? `- Subheadline: "${subheadline}"` : ''}
-${cta ? `- CTA button text: "${cta}"` : '- CTA button: "ORDENAR AHORA →"'}
+${cta ? `- CTA button text: "${cta}"` : `- CTA button: "ORDENAR AHORA →" linking to ${BRAND_CONTACT.orderUrl}`}
+- WhatsApp for orders: ${BRAND_CONTACT.whatsapp}
 ${useTopIA ? '- Include space for TopIA mascot character (friendly cartoon robot/food character) on the right side' : ''}
 - Include chilaquiles food photography style elements (warm tones, appetizing)
-- Bottom: hashtags #chilaquiles #top #VillaNueva #MantenteTOP (small, subtle)
+- Bottom: hashtags ${BRAND_CONTACT.hashtags.join(' ')} (small, subtle)
 `;
 
   const formatBlock = layout === 'instagram_story' || layout === 'story_cta'
