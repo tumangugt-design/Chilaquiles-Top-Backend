@@ -115,9 +115,10 @@ Devuelve EXCLUSIVAMENTE un JSON con:
 
 export const generateImageWithOpenRouter = async (promptText) => {
   const apiKey = process.env.OPEN_ROUTER_APIKEY;
-  const imageModel = process.env.OPENROUTER_MODEL_IMAGES || 'google/gemini-3.1-flash-image';
+  const imageModel = process.env.OPENROUTER_MODEL_IMAGES || 'google/gemini-2.0-flash-exp';
   
   try {
+    console.log(`[OpenRouter] Generating image with model: ${imageModel}`);
     const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
       method: 'POST',
       headers: {
@@ -128,34 +129,67 @@ export const generateImageWithOpenRouter = async (promptText) => {
       },
       body: JSON.stringify({
         model: imageModel,
-        messages: [{ role: 'user', content: `Genera una imagen publicitaria sin mucho texto para redes sociales. Tema: ${promptText}. Recuerda usar colores corporativos naranja, azul marino y blanco.` }]
+        messages: [{
+          role: 'user',
+          content: `Generate a vibrant promotional social media image for a Mexican food restaurant called "Chilaquiles Top" in Guatemala. Use the brand colors: bright orange (#FF6B00), deep navy blue (#0000CD), and white. The promotion: ${promptText}. Make it visually striking, appetizing, and professional.`
+        }]
       })
     });
 
     const data = await response.json();
-    if (data.choices && data.choices.length > 0) {
-      // The image might be in a markdown image url, a direct url, or base64. Let's extract any URL or base64.
-      const content = data.choices[0].message?.content;
-      
-      if (!content) {
-        console.error('OpenRouter returned empty content:', JSON.stringify(data));
-        return null;
-      }
-      
-      // Try to match a markdown image url
-      const urlMatch = content.match(/!\[.*?\]\((https?:\/\/.*?)\)/);
-      if (urlMatch) return urlMatch[1];
-      
-      // Try to match a direct url
-      const httpMatch = content.match(/https?:\/\/[^\s"'()]+/);
-      if (httpMatch) return httpMatch[0];
-      
+    console.log('[OpenRouter] Raw response status:', response.status);
+
+    if (!data.choices || data.choices.length === 0) {
+      console.error('[OpenRouter] No choices in response:', JSON.stringify(data).substring(0, 500));
       return null;
     }
-    console.error('OpenRouter returned invalid choices:', JSON.stringify(data));
+
+    const message = data.choices[0].message;
+    const content = message?.content;
+    
+    console.log('[OpenRouter] Content type:', typeof content, 'Is array:', Array.isArray(content));
+
+    // Case 1: content is an array (multimodal response with image parts)
+    if (Array.isArray(content)) {
+      for (const part of content) {
+        // image_url part
+        if (part.type === 'image_url' && part.image_url?.url) {
+          console.log('[OpenRouter] Found image_url part');
+          return part.image_url.url; // Could be a data: URL or https URL
+        }
+        // image part with base64
+        if (part.type === 'image' && part.source?.data) {
+          console.log('[OpenRouter] Found base64 image part');
+          return `data:${part.source.media_type || 'image/png'};base64,${part.source.data}`;
+        }
+        // text part with URL
+        if (part.type === 'text' && part.text) {
+          const urlMatch = part.text.match(/https?:\/\/[^\s"'()]+/);
+          if (urlMatch) return urlMatch[0];
+        }
+      }
+    }
+
+    // Case 2: content is a string
+    if (typeof content === 'string' && content) {
+      // Markdown image
+      const mdMatch = content.match(/!\[.*?\]\((https?:\/\/.*?)\)/);
+      if (mdMatch) return mdMatch[1];
+      // Direct URL
+      const httpMatch = content.match(/https?:\/\/[^\s"'()]+/);
+      if (httpMatch) return httpMatch[0];
+      // Base64 data URL
+      if (content.startsWith('data:image')) return content;
+    }
+
+    // Case 3: content is null but there might be tool_calls or other fields
+    console.error('[OpenRouter] Could not extract image from response. Content:', 
+      JSON.stringify(content).substring(0, 200),
+      'Message keys:', Object.keys(message || {}));
     return null;
+
   } catch (error) {
-    console.error('Error generating image via OpenRouter:', error);
+    console.error('[OpenRouter] Error generating image:', error.message);
     return null;
   }
 };
