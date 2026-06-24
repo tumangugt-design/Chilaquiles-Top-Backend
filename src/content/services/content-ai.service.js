@@ -21,6 +21,7 @@ Reglas del negocio:
 - No inventes promociones que no te pasemos.
 - No inventes precios ni horarios.
 - El tono debe ser: ${tone || 'antojable, claro, juvenil y confiable'}.
+- REGLA VISUAL OBLIGATORIA: Los colores del arte (en el tema/diseño) SIEMPRE deben ser los colores corporativos de Chilaquiles Top: Naranja Brillante, Azul Profundo, Blanco y detalles en Gris oscuro.
 
 Base de Conocimiento de Marca:
 ${rulesText}
@@ -55,10 +56,16 @@ Formato de salida REQUERIDO (JSON puro, sin markdown ni explicaciones):
   }
 }`;
 
-  let userPrompt = `Necesito contenido para el siguiente tema/idea: "${topic}"\nObjetivo: ${objective}\nPlataformas: ${platforms.join(', ')}\nFormatos: ${formats.join(', ')}\n`;
+  let userPrompt = `Objetivo: ${objective}\nPlataformas: ${platforms.join(', ')}\nFormatos: ${formats.join(', ')}\n`;
+
+  if (topic) {
+    userPrompt += `Instrucciones adicionales del usuario: "${topic}"\n`;
+  } else {
+    userPrompt += `Instrucciones: Genera libremente una excelente publicación atractiva basada en los datos proporcionados.\n`;
+  }
 
   if (promotionData) {
-    userPrompt += `\nUsa esta promoción obligatoriamente:\nNombre: ${promotionData.name}\nDescripción: ${promotionData.description}\nPrecio: ${promotionData.price}\n`;
+    userPrompt += `\nUsa esta promoción obligatoriamente para generar el contenido:\nNombre: ${promotionData.name}\nDescripción: ${promotionData.description}\nPrecio: Q${promotionData.price}\n`;
   }
 
   try {
