@@ -139,20 +139,20 @@ const getTemplateHTML = (designSpec, assetUrl) => {
         }
 
         /* Layout específico para historias */
-        ${format === 'instagram_story' ? \`
+        ${format === 'instagram_story' ? `
           body { padding: 120px 80px; justify-content: flex-start; }
           .content { max-width: 100%; text-align: center; align-items: center; }
           .product-image { right: auto; left: 50%; transform: translateX(-50%); bottom: 300px; width: 850px; }
           .cta { left: 50%; bottom: 120px; transform: translateX(-50%); width: 80%; text-align: center; }
-        \` : ''}
+        ` : ''}
 
         /* WhatsApp: Texto más grande al centro */
-        ${format === 'whatsapp_image' ? \`
+        ${format === 'whatsapp_image' ? `
           .content { max-width: 100%; text-align: center; align-items: center; margin-top: 50px; }
           .product-image { right: auto; left: 50%; transform: translateX(-50%); bottom: 150px; width: 600px; }
           .cta { left: 50%; bottom: 40px; transform: translateX(-50%); }
           .price-tag { margin-top: 20px; }
-        \` : ''}
+        ` : ''}
       </style>
     </head>
     <body>
