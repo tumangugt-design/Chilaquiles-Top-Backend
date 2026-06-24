@@ -1,5 +1,5 @@
 import { ContentDraft } from '../models/ContentDraft.model.js';
-import { generateContentFromIdea } from './content-ai.service.js';
+import { generateContentFromIdea, generateImageWithOpenRouter } from './content-ai.service.js';
 import { renderHtmlToPng } from './content-html-render.service.js';
 import { getFirebaseStorage } from '../../../configs/firebase.js';
 
@@ -8,11 +8,11 @@ export const createDraftFromIdea = async (ideaData, userId) => {
   const data = generated.data;
 
   // Render Image via HTML
-  const artProvider = 'html'; // Forced to HTML as requested
+  let artProvider = 'html'; 
   let imageUrl = null;
   let htmlSnapshot = null;
   
-  if (artProvider === 'html' && data.designSpec) {
+  if (data.designSpec) {
     try {
       const renderResult = await renderHtmlToPng(data.designSpec, ideaData.promotionData?.imageUrl);
       htmlSnapshot = renderResult.htmlSnapshot;
@@ -28,14 +28,26 @@ export const createDraftFromIdea = async (ideaData, userId) => {
           public: true
         });
         
-        // Obtenemos URL publica (depende de config de bucket, pero esta url es standard)
         imageUrl = `https://storage.googleapis.com/${bucket.name}/${filename}`;
       } else {
-        // Fallback mock if no storage configured
         imageUrl = 'https://chilaquiles-top.web.app/assets/menu_chilaquiles_top-DmJU2W6e.png';
       }
     } catch (e) {
-      console.error('Error rendering HTML to PNG:', e);
+      console.error('Error rendering HTML to PNG, attempting OpenRouter fallback...', e.message);
+    }
+  }
+
+  // Fallback to OpenRouter if image is still null (due to Puppeteer failing or missing)
+  if (!imageUrl) {
+    console.log('Using OpenRouter as image generator fallback');
+    try {
+      const openRouterUrl = await generateImageWithOpenRouter(data.title || ideaData.topic || 'promoción de comida');
+      if (openRouterUrl) {
+        imageUrl = openRouterUrl;
+        artProvider = 'openrouter';
+      }
+    } catch (fallbackError) {
+      console.error('OpenRouter fallback also failed:', fallbackError.message);
     }
   }
 
@@ -85,5 +97,11 @@ export const approveDraft = async (id, userId) => {
   draft.status = 'approved';
   draft.approvedBy = userId;
   await draft.save();
+  return draft;
+};
+
+export const deleteDraft = async (id) => {
+  const draft = await ContentDraft.findByIdAndDelete(id);
+  if (!draft) throw new Error('Borrador no encontrado');
   return draft;
 };

@@ -1,4 +1,4 @@
-import { createDraftFromIdea, getDrafts, approveDraft } from '../services/content.service.js';
+import { createDraftFromIdea, getDrafts, approveDraft, deleteDraft } from '../services/content.service.js';
 import { runScheduler, schedulePublication } from '../services/content-calendar.service.js';
 
 export const generateContent = async (req, res) => {
@@ -42,6 +42,15 @@ export const runContentScheduler = async (req, res) => {
   try {
     const result = await runScheduler();
     res.json({ success: true, result });
+  } catch (e) {
+    res.status(500).json({ success: false, message: e.message });
+  }
+};
+
+export const deleteContentDraft = async (req, res) => {
+  try {
+    const draft = await deleteDraft(req.params.id);
+    res.json({ success: true, draft });
   } catch (e) {
     res.status(500).json({ success: false, message: e.message });
   }

@@ -112,3 +112,44 @@ Devuelve EXCLUSIVAMENTE un JSON con:
     return { shouldSave: false };
   }
 };
+
+export const generateImageWithOpenRouter = async (promptText) => {
+  const apiKey = process.env.OPEN_ROUTER_APIKEY;
+  const imageModel = process.env.OPENROUTER_MODEL_IMAGES || 'google/gemini-3.1-flash-image';
+  
+  try {
+    const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'HTTP-Referer': 'https://chilaquilestop.com',
+        'X-Title': 'Chilaquiles Top Backend',
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        model: imageModel,
+        messages: [{ role: 'user', content: `Genera una imagen publicitaria sin mucho texto para redes sociales. Tema: ${promptText}. Recuerda usar colores corporativos naranja, azul marino y blanco.` }]
+      })
+    });
+
+    const data = await response.json();
+    if (data.choices && data.choices.length > 0) {
+      // The image might be in a markdown image url, a direct url, or base64. Let's extract any URL or base64.
+      const content = data.choices[0].message.content;
+      
+      // Try to match a markdown image url
+      const urlMatch = content.match(/!\[.*?\]\((https?:\/\/.*?)\)/);
+      if (urlMatch) return urlMatch[1];
+      
+      // Try to match a direct url
+      const httpMatch = content.match(/https?:\/\/[^\s"'()]+/);
+      if (httpMatch) return httpMatch[0];
+      
+      return null;
+    }
+    return null;
+  } catch (error) {
+    console.error('Error generating image via OpenRouter:', error);
+    return null;
+  }
+};
