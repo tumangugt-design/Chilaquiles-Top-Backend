@@ -148,21 +148,30 @@ export const generateImageWithOpenRouter = async (promptText) => {
     const content = message?.content;
     
     console.log('[OpenRouter] Content type:', typeof content, 'Is array:', Array.isArray(content));
+    console.log('[OpenRouter] Message keys:', Object.keys(message || {}));
+
+    // *** PRIMARY: Gemini image model returns image in message.images ***
+    if (message?.images && Array.isArray(message.images) && message.images.length > 0) {
+      const img = message.images[0];
+      console.log('[OpenRouter] Found image in message.images, type:', img.type || 'unknown');
+      // Could be a URL string or an object with url/base64
+      if (typeof img === 'string') return img;
+      if (img.url) return img.url;
+      if (img.b64_json) return `data:image/png;base64,${img.b64_json}`;
+      if (img.data) return `data:${img.media_type || 'image/png'};base64,${img.data}`;
+    }
 
     // Case 1: content is an array (multimodal response with image parts)
     if (Array.isArray(content)) {
       for (const part of content) {
-        // image_url part
         if (part.type === 'image_url' && part.image_url?.url) {
           console.log('[OpenRouter] Found image_url part');
-          return part.image_url.url; // Could be a data: URL or https URL
+          return part.image_url.url;
         }
-        // image part with base64
         if (part.type === 'image' && part.source?.data) {
           console.log('[OpenRouter] Found base64 image part');
           return `data:${part.source.media_type || 'image/png'};base64,${part.source.data}`;
         }
-        // text part with URL
         if (part.type === 'text' && part.text) {
           const urlMatch = part.text.match(/https?:\/\/[^\s"'()]+/);
           if (urlMatch) return urlMatch[0];
@@ -172,20 +181,14 @@ export const generateImageWithOpenRouter = async (promptText) => {
 
     // Case 2: content is a string
     if (typeof content === 'string' && content) {
-      // Markdown image
       const mdMatch = content.match(/!\[.*?\]\((https?:\/\/.*?)\)/);
       if (mdMatch) return mdMatch[1];
-      // Direct URL
       const httpMatch = content.match(/https?:\/\/[^\s"'()]+/);
       if (httpMatch) return httpMatch[0];
-      // Base64 data URL
       if (content.startsWith('data:image')) return content;
     }
 
-    // Case 3: content is null but there might be tool_calls or other fields
-    console.error('[OpenRouter] Could not extract image from response. Content:', 
-      JSON.stringify(content).substring(0, 200),
-      'Message keys:', Object.keys(message || {}));
+    console.error('[OpenRouter] Could not extract image. Full message:', JSON.stringify(message).substring(0, 500));
     return null;
 
   } catch (error) {
