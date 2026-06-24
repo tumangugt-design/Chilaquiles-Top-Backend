@@ -153,12 +153,18 @@ export const generateImageWithOpenRouter = async (promptText) => {
     // *** PRIMARY: Gemini image model returns image in message.images ***
     if (message?.images && Array.isArray(message.images) && message.images.length > 0) {
       const img = message.images[0];
-      console.log('[OpenRouter] Found image in message.images, type:', img.type || 'unknown');
-      // Could be a URL string or an object with url/base64
-      if (typeof img === 'string') return img;
+      console.log('[OpenRouter] Found image in message.images, type:', img.type || 'unknown', 'keys:', Object.keys(img));
+      // type: "image_url" -> img.image_url.url
+      if (img.type === 'image_url' && img.image_url?.url) return img.image_url.url;
+      // Direct url on the object
       if (img.url) return img.url;
+      // base64 in b64_json
       if (img.b64_json) return `data:image/png;base64,${img.b64_json}`;
+      // base64 in data
       if (img.data) return `data:${img.media_type || 'image/png'};base64,${img.data}`;
+      // Could be a plain URL string
+      if (typeof img === 'string') return img;
+      console.error('[OpenRouter] Unknown image object format:', JSON.stringify(img).substring(0, 300));
     }
 
     // Case 1: content is an array (multimodal response with image parts)
