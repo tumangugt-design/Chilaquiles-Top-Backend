@@ -19,7 +19,7 @@ const contentDraftSchema = new mongoose.Schema({
     default: 'draft'
   },
   platforms: [{ type: String, enum: ['instagram', 'facebook', 'whatsapp', 'tiktok'] }],
-  formats: [{ type: String, enum: ['feed', 'story', 'reel', 'whatsapp_message', 'whatsapp_export', 'instagram_feed', 'instagram_story', 'whatsapp_image', 'facebook_cover', 'tiktok_video_cover'] }],
+  formats: [{ type: String, enum: ['post', 'historia', 'feed', 'story', 'reel', 'whatsapp_message', 'whatsapp_export', 'instagram_feed', 'instagram_story', 'whatsapp_image', 'facebook_cover', 'tiktok_video_cover'] }],
   copy: {
     main: { type: String },
     short: { type: String },
