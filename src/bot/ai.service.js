@@ -1,11 +1,20 @@
 import { INVENTORY_CATALOG, ORDER_PRICING } from '../helpers/constants.js';
 import { BOT_IDENTITY } from './bot.identity.js';
 
-export const getAICompletion = async (messages) => {
+export const getAICompletion = async (messages, options = {}) => {
   const apiKey = process.env.OPEN_ROUTER_APIKEY;
   const model = process.env.OPEN_ROUTER_MODEL || 'google/gemini-2.0-flash-001';
 
   try {
+    const payload = {
+      model: model,
+      messages: messages
+    };
+    
+    if (options.response_format) {
+      payload.response_format = options.response_format;
+    }
+
     const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
       method: 'POST',
       headers: {
@@ -14,10 +23,7 @@ export const getAICompletion = async (messages) => {
         'X-Title': 'Chilaquiles Top Bot',
         'Content-Type': 'application/json'
       },
-      body: JSON.stringify({
-        model: model,
-        messages: messages
-      })
+      body: JSON.stringify(payload)
     });
 
     const data = await response.json();

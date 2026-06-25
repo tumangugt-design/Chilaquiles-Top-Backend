@@ -60,71 +60,72 @@ export const buildImagePrompt = (designSpec, promotionData) => {
   const { headline, subheadline, price, cta, layout, includeTopIA, includePlate } = designSpec || {};
   const promoName = promotionData?.name || '';
   const promoPrice = promotionData?.price ? `Q${promotionData.price}` : (price || '');
-  // Map format to exact canvas and layout instructions
-  const FORMAT_SPECS = {
-    instagram_feed:     { w: 1080, h: 1080, label: 'Post cuadrado (1080×1080 px)',    layout: 'Diseño cuadrado balanceado. Logo arriba izquierda, headline grande al centro, precio visible, CTA naranja abajo.' },
-    instagram_story:    { w: 1080, h: 1920, label: 'Historia vertical (1080×1920 px)', layout: 'Diseño VERTICAL como pantalla de teléfono (9:16). Logo y texto en la zona superior, elemento visual al centro, botón CTA grande en el tercio inferior. TODO el contenido debe estar DENTRO del área vertical, nada cortado.' },
-    whatsapp_image:     { w: 1080, h: 1080, label: 'Imagen WhatsApp (1080×1080 px)',  layout: 'Diseño cuadrado con CTA muy grande y número de WhatsApp prominente.' },
-    facebook_cover:     { w: 1640, h: 624,  label: 'Portada Facebook (1640×624 px)',  layout: 'Diseño HORIZONTAL apaisado (banner). Texto a la izquierda, imagen a la derecha. Muy amplio y panorámico.' },
-    tiktok_video_cover: { w: 1080, h: 1920, label: 'Portada TikTok (1080×1920 px)',  layout: 'Diseño VERTICAL (9:16). Impactante, juvenil, con headline muy grande y llamativo.' },
-  };
-  const fmtSpec = FORMAT_SPECS[layout] || FORMAT_SPECS.instagram_feed;
+  
+  // Base configuration
+  const format = layout?.includes('story') ? 'historia' : 'post';
+  const w = format === 'historia' ? 1080 : 1080;
+  const h = format === 'historia' ? 1920 : 1080;
 
-  const topiaInstructions = includeTopIA
-    ? `MASCOTA TopIA (primera imagen de referencia enviada):
-La primera imagen es nuestra mascota oficial TopIA. DEBES integrarla de forma natural al arte — que parezca que siempre fue parte del diseño, no pegada encima. Puede estar presentando la promoción, señalando el precio, o al lado de la comida. Escala y posición apropiadas para que se vea integrada.`
-    : `NO incluyas ninguna mascota, personaje animado ni ilustración de personaje.`;
+  return `Eres el Director de Arte de "Chilaquiles TOP", un restaurante premium en Guatemala.
+Tu tarea es diseñar un arte promocional devolviendo ÚNICAMENTE un objeto JSON estructurado (DesignSpec).
+No generes HTML ni texto libre. 
 
-  const plateInstructions = includePlate
-    ? `FOTO REAL DE PLATO (imagen de referencia enviada):
-Una de las imágenes de referencia muestra una foto real de nuestros chilaquiles. Intégrala de forma natural al diseño como el elemento visual principal de comida. Mézclala con los colores de la marca de forma apetitosa y estética.`
-    : `Este es un diseño TIPOGRÁFICO y GRÁFICO — NO dibujes ni ilustres ningún plato, tazón ni comida. Enfócate en texto, formas geométricas e identidad de marca.`;
+FORMATO SOLICITADO: ${format} (${w}x${h} px).
 
-  return `Eres un diseñador experto de marketing para la marca "Chilaquiles TOP", restaurante en Villa Nueva, Guatemala.
+OBJETIVO DE LA PUBLICACIÓN: ${promoName ? 'Promoción de ventas' : 'Comunicado / Branding'}
 
-IDIOMA: Todo el texto del arte debe estar en ESPAÑOL CORRECTO. Sin abreviaciones, sin anglicismos innecesarios, sin faltas de ortografía. Revisa cada palabra antes de incluirla.
+CATÁLOGO DE COMPONENTES DISPONIBLES:
+- Backgrounds: "ct-bg--1" (Fondo gris claro), "ct-bg--2" (Azul oscuro premium), "ct-bg--3" (Degradado dinámico naranja/azul)
+- Headers: "ct-header--1" (Azul completo con logo blanco y glow), "ct-header--2" (Minimalista blanco con línea naranja), "ct-header--3" (Faja degradé superior)
+- Footers: "ct-footer--1" (Limpio con contacto), "ct-footer--2" (Negro sólido)
 
-FORMATO DEL ARTE: ${fmtSpec.label}
-DIMENSIONES EXACTAS: ${fmtSpec.w} × ${fmtSpec.h} píxeles. El arte DEBE llenar exactamente este espacio, sin cortes, sin bordes negros, sin contenido fuera del área.
-COMPOSICIÓN: ${fmtSpec.layout}
+REGLAS DE DISEÑO:
+1. El diseño se armará mediante componentes HTML predefinidos. Elige el background, header y footer que mejor combinen.
+2. Si la publicación es una PROMOCIÓN (tiene precio o promo), incluye el objeto de comida ("chilaquiles_1" a "chilaquiles_6").
+3. Si la publicación NO ES UNA PROMOCIÓN, NO incluyas un objeto de comida por defecto. Privilegia texto y la mascota ("topia_avatar").
+4. El objeto de comida (si aplica) debe tener 'role: "hero"'.
+5. Crea un 'copy' persuasivo en español perfecto.
 
-COLORES OBLIGATORIOS DE LA MARCA:
-- Azul puro (identidad principal): fondos fuertes, círculos de precio, elementos de marca
-- Blanco: áreas de respiración, tarjetas, texto sobre azul
-- Negro oscuro: texto principal sobre fondos blancos
-- Naranja (acento, máximo 10%): ÚNICAMENTE para el botón de acción (CTA)
-- Lavanda claro: fondos secundarios suaves
-- Dorado/amarillo maíz: acento decorativo de comida
-Regla de proporción: 60% azul o blanco · 30% contenido · 10% naranja
+DEBES DEVOLVER UN JSON EXACTAMENTE CON ESTA ESTRUCTURA (rellena los valores según tu criterio creativo):
 
-${topiaInstructions}
+{
+  "format": "${format}",
+  "width": ${w},
+  "height": ${h},
+  "type": "${promoName ? 'promocion' : 'comunicado'}",
+  "objective": "venta",
+  "selectedComponents": {
+    "background": "ct-bg--1",
+    "header": "ct-header--1",
+    "footer": "ct-footer--1"
+  },
+  "copy": {
+    "badge": "OFERTA",
+    "headline": "${headline || 'TÍTULO CORTO Y FUERTE'}",
+    "subheadline": "${subheadline || 'Subtítulo persuasivo en español'}",
+    "price": "${promoPrice || ''}",
+    "validUntil": "",
+    "cta": "${cta || 'ORDENAR AHORA'}"
+  },
+  "objects": [
+    {
+      "id": "hero_product",
+      "type": "product",
+      "assetId": "chilaquiles_1", // O usa topia_avatar si corresponde
+      "role": "hero",
+      "position": { "x": 540, "y": 600 }, // Coordenadas centrales, ajústalas
+      "size": { "width": 500 }, // Ajusta el tamaño proporcionalmente
+      "layer": 5,
+      "effects": { "shadow": "plate", "rotation": 0 }
+    }
+  ],
+  "caption": {
+    "instagram": "Escribe un copy vendedor para Instagram.",
+    "facebook": "Copy para Facebook.",
+    "whatsapp": "Mensaje directo para WhatsApp."
+  },
+  "hashtags": ["#chilaquiles", "#top", "#gt", "#MantenteTOP", "#VillaNueva"]
+}
 
-${plateInstructions}
-
-REFERENCIAS DE ESTILO (imágenes enviadas):
-Las imágenes enviadas incluyen ejemplos de promociones reales de "Chilaquiles TOP". Usa estas imágenes EXCLUSIVAMENTE como guía de estilo, iluminación, texturas de fondo y composición visual (nota que los fondos suelen ser blancos/claros con acentos dinámicos, no todo azul sólido). NO copies el texto de esas imágenes, usa el texto indicado abajo.
-
-ESPACIO PARA LOGO (IMPORTANTE):
-Deja un espacio COMPLETAMENTE VACÍO en la esquina superior izquierda. NO dibujes ningún logo, texto o forma ahí. El logo real se agregará después mediante código.
-
-CONTENIDO DE LA PROMOCIÓN:
-${promoName ? `- Nombre: ${promoName}` : ''}
-${promoPrice ? `- Precio: ${promoPrice} — dentro de un círculo azul sólido, grande y bien legible` : ''}
-${headline ? `- Titular principal: "${headline}"` : '- Crea un titular corto en español para esta promoción (máximo 4 palabras, en negritas)'}
-${subheadline ? `- Texto secundario: "${subheadline}"` : ''}
-- Botón de acción (naranja, forma de pastilla redondeada): "${cta || 'ORDENAR AHORA'}"
-- Pide en nuestra página: ${BRAND_CONTACT.landingUrl}
-- Hashtags pequeños al pie: ${BRAND_CONTACT.hashtags.join(' ')}
-
-ESTÁNDARES DE CALIDAD:
-- TIPOGRAFÍA CONSISTENTE: Usa la misma familia tipográfica (sans-serif moderna y gruesa, estilo Montserrat o Poppins) en TODO el diseño. No mezcles múltiples tipos de letra.
-- Diseño premium y profesional, como si lo hiciera una agencia de diseño reconocida.
-- Jerarquía tipográfica clara: titular dominante, precio muy visible, CTA legible.
-- Formas geométricas permitidas: círculos, rectángulos redondeados, líneas de acento.
-- Línea delgada degradado azul→naranja como separador visual (uso moderado).
-- Sin fondos de foto de stock. Usa colores sólidos o patrones geométricos sutiles.
-- Sin códigos QR.
-- Sin números de teléfono, URLs ni datos inventados.
-- Sin texto técnico, sin código, sin términos en inglés innecesarios.
-- El resultado debe sentirse tecnológico, limpio, vibrante y reconociblemente "Chilaquiles TOP".`;
+RECUERDA: Devuelve SOLO JSON válido. No incluyas comentarios ni markdown (\`\`\`json).`;
 };

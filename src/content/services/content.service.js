@@ -1,5 +1,5 @@
 import { ContentDraft } from '../models/ContentDraft.model.js';
-import { generateContentFromIdea, generateImageWithOpenRouter } from './content-ai.service.js';
+import { generateContentFromIdea, generateDesignSpecWithAI } from './content-ai.service.js';
 import { getFirebaseStorage } from '../../../configs/firebase.js';
 import sharp from 'sharp';
 import { BRAND_ASSETS } from '../config/brand.config.js';
@@ -20,89 +20,20 @@ const fetchImageBuffer = async (url) => {
   return Buffer.from(await res.arrayBuffer());
 };
 
-// Composite logo (and optionally plate photo + TopIA) on the generated image, then upload to Firebase Storage
-const compositeLogoAndUpload = async (generatedImageUrl, designSpec) => {
-  try {
-    if (!generatedImageUrl) throw new Error('generatedImageUrl is undefined');
-
-    // Canvas sizes per format — never crop, always contain with brand white background
-    const FORMAT_CANVAS = {
-      instagram_feed:     { width: 1080, height: 1080, bg: { r: 255, g: 255, b: 255 } },
-      instagram_story:    { width: 1080, height: 1920, bg: { r: 0,   g: 0,   b: 255 } }, // blue bg for stories
-      whatsapp_image:     { width: 1080, height: 1080, bg: { r: 255, g: 255, b: 255 } },
-      facebook_cover:     { width: 1640, height: 624,  bg: { r: 255, g: 255, b: 255 } },
-      tiktok_video_cover: { width: 1080, height: 1920, bg: { r: 0,   g: 0,   b: 255 } },
-    };
-    const canvasSize = FORMAT_CANVAS[designSpec?.format] || FORMAT_CANVAS.instagram_feed;
-
-    // Load base image (AI has already integrated TopIA and plates natively via multimodal input)
-    const baseBuffer = await fetchImageBuffer(generatedImageUrl);
-    let compositeImage = sharp(baseBuffer).resize(canvasSize.width, canvasSize.height, {
-      fit: 'contain',
-      background: { r: canvasSize.bg.r, g: canvasSize.bg.g, b: canvasSize.bg.b, alpha: 1 }
-    });
-
-    const composites = [];
-
-    // Logo only — composited on top-left to guarantee it's always the real official logo
-    // (AI already placed the logo in the design but we overwrite with the real one for brand accuracy)
-    try {
-      const logoBuffer = await fetchImageBuffer(BRAND_ASSETS.logo);
-      const logoSize = Math.floor(canvasSize.width * 0.16);
-      const logoResized = await sharp(logoBuffer)
-        .resize(logoSize, logoSize, { fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 0 } })
-        .toBuffer();
-      composites.push({ input: logoResized, top: 28, left: 28, blend: 'over' });
-      console.log('[Brand] Official logo composited on top-left');
-    } catch (err) {
-      console.warn('[Brand] Logo composite failed:', err.message);
-    }
-
-    if (composites.length > 0) {
-      compositeImage = compositeImage.composite(composites);
-    }
-
-
-    const finalBuffer = await compositeImage.png({ quality: 92 }).toBuffer();
-
-    // Try to upload to Firebase Storage, fall back to base64 data URL
-    try {
-      const storage = getFirebaseStorage();
-      if (storage) {
-        const bucket = storage.bucket(process.env.FIREBASE_STORAGE_BUCKET || 'chilaquiles-top.appspot.com');
-        const filename = `content/drafts/${Date.now()}_${Math.random().toString(36).substring(7)}.png`;
-        const file = bucket.file(filename);
-        await file.save(finalBuffer, { metadata: { contentType: 'image/png' }, public: true });
-        const uploadedUrl = `https://storage.googleapis.com/${bucket.name}/${filename}`;
-        console.log('[Brand] Image uploaded to Storage:', uploadedUrl);
-        return uploadedUrl;
-      }
-    } catch (storageErr) {
-      console.warn('[Brand] Firebase Storage upload failed, using data URL:', storageErr.message);
-    }
-
-    // Fallback: return as base64 data URL (works, just large)
-    return `data:image/png;base64,${finalBuffer.toString('base64')}`;
-
-  } catch (err) {
-    console.error('[Brand] compositeLogoAndUpload failed:', err.message);
-    return generatedImageUrl; // return original if all else fails
-  }
-};
-
+import { renderImageFromSpec } from './render.engine.js';
+import { uploadGeneratedImageToGitHub } from './github-storage.service.js';
 
 export const createDraftFromIdea = async (ideaData, userId) => {
   const generated = await generateContentFromIdea(ideaData);
   const data = generated.data;
 
-  // Render Image via OpenRouter
-  let artProvider = 'openrouter'; 
+  let artProvider = 'html_components'; 
   let imageUrl = null;
-  let htmlSnapshot = null; // No longer using HTML
+  let githubPath = null;
+  let finalDesignSpec = null;
   
-  console.log('Using OpenRouter as primary image generator');
+  console.log('[Content Service] Generating DesignSpec via AI Art Director');
   try {
-    // Merge user's visual options into designSpec
     const compositeSpec = {
       ...(data.designSpec || {}),
       format: (ideaData.formats || [])[0] || 'instagram_feed',
@@ -111,20 +42,27 @@ export const createDraftFromIdea = async (ideaData, userId) => {
       includeTopIA: ideaData.includeTopIA || false,
     };
 
-    const openRouterUrl = await generateImageWithOpenRouter(
+    finalDesignSpec = await generateDesignSpecWithAI(
       data.title || ideaData.topic || 'promoción de comida',
       compositeSpec,
       ideaData.promotionData || null
     );
-    if (openRouterUrl) {
-      imageUrl = await compositeLogoAndUpload(openRouterUrl, compositeSpec);
+
+    if (finalDesignSpec) {
+      console.log('[Content Service] Rendering PNG via Puppeteer');
+      const pngBuffer = await renderImageFromSpec(finalDesignSpec);
+
+      console.log('[Content Service] Uploading to GitHub');
+      const filename = `post_${Date.now()}_${Math.random().toString(36).substring(7)}.png`;
+      const uploadResult = await uploadGeneratedImageToGitHub(pngBuffer, filename);
+      
+      imageUrl = uploadResult.rawUrl;
+      githubPath = uploadResult.githubPath;
     } else {
-      console.error('OpenRouter returned null image URL. Using fallback mock image.');
-      imageUrl = 'https://raw.githubusercontent.com/tumangugt-design/Imagenes-chilaquiles/main/Fotos%20de%20Platos%20Reales%20Sin%20Fondo/Plato%202.png';
+      console.error('[Content Service] Failed to generate DesignSpec');
     }
-  } catch (fallbackError) {
-    console.error('OpenRouter generation failed:', fallbackError.message);
-    imageUrl = 'https://raw.githubusercontent.com/tumangugt-design/Imagenes-chilaquiles/main/Fotos%20de%20Platos%20Reales%20Sin%20Fondo/Plato%202.png';
+  } catch (err) {
+    console.error('[Content Service] Pipeline failed:', err.message);
   }
 
   const draft = new ContentDraft({
@@ -138,10 +76,10 @@ export const createDraftFromIdea = async (ideaData, userId) => {
     formats: data.formats || ideaData.formats,
     copy: data.copy,
     visual: {
-      designSpec: data.designSpec,
+      designSpec: finalDesignSpec || data.designSpec,
       artProvider,
       imageUrl,
-      htmlSnapshot
+      githubPath
     },
     ai: {
       model: 'openrouter',

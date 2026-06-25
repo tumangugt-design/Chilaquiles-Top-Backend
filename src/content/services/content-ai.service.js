@@ -114,132 +114,31 @@ Devuelve EXCLUSIVAMENTE un JSON con:
   }
 };
 
-export const generateImageWithOpenRouter = async (promptText, designSpec = null, promotionData = null) => {
-  const apiKey = process.env.OPEN_ROUTER_APIKEY;
-  const imageModel = process.env.OPENROUTER_MODEL_IMAGES || 'google/gemini-3-pro-image';
-  
+export const generateDesignSpecWithAI = async (promptText, designSpec = null, promotionData = null) => {
   try {
-    // Build the brand-compliant prompt
-    const imagePrompt = buildImagePrompt(designSpec, promotionData) + 
-      (promptText ? `\n\nADDITIONAL CONTEXT: ${promptText}` : '');
+    const systemPrompt = buildImagePrompt(designSpec, promotionData);
+    const userPrompt = promptText ? `INSTRUCCIONES ADICIONALES DEL USUARIO: ${promptText}` : 'Genera el DesignSpec basado en las instrucciones del sistema.';
 
-    // Build multimodal message content
-    // If TopIA or plate photos are requested, send them as reference images so the AI integrates them natively
-    const messageContent = [];
-
-    // Add reference images first (multimodal input to Gemini)
-    if (designSpec?.includeTopIA && BRAND_ASSETS.topIA) {
-      messageContent.push({
-        type: 'image_url',
-        image_url: { url: BRAND_ASSETS.topIA }
-      });
-      console.log('[OpenRouter] Sending TopIA as reference image for native integration');
-    }
-
-    if (designSpec?.includePlate) {
-      const plateUrl = designSpec.selectedPlate || 
-        BRAND_ASSETS.plates[Math.floor(Math.random() * BRAND_ASSETS.plates.length)];
-      messageContent.push({
-        type: 'image_url',
-        image_url: { url: plateUrl }
-      });
-      console.log('[OpenRouter] Sending plate photo as reference image:', plateUrl);
-    }
-
-    // Add style reference images instead of the logo
-    // These guide the AI on the exact aesthetic and background styles used by the brand
-    messageContent.push({
-      type: 'image_url',
-      image_url: { url: 'https://raw.githubusercontent.com/tumangugt-design/Imagenes-chilaquiles/main/Promociones-Anuncios/Promo%202x1%20Pollo.png' }
-    });
-    messageContent.push({
-      type: 'image_url',
-      image_url: { url: 'https://raw.githubusercontent.com/tumangugt-design/Imagenes-chilaquiles/main/Promociones-Anuncios/Promo%20Pumkin%20Cobanero.png' }
-    });
-
-    // Add the text prompt last
-    messageContent.push({ type: 'text', text: imagePrompt });
-
-    console.log(`[OpenRouter] Generating image with model: ${imageModel}, ${messageContent.length - 1} reference images`);
+    console.log('[Content AI] Generating DesignSpec...');
     
-    const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${apiKey}`,
-        'HTTP-Referer': 'https://chilaquilestop.com',
-        'X-Title': 'Chilaquiles Top Backend',
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        model: imageModel,
-        messages: [{ role: 'user', content: messageContent }]
-      })
+    const aiResponse = await getAICompletion([
+      { role: 'system', content: systemPrompt },
+      { role: 'user', content: userPrompt }
+    ], {
+      response_format: { type: 'json_object' }
     });
 
-
-    const data = await response.json();
-    console.log('[OpenRouter] Raw response status:', response.status);
-
-    if (!data.choices || data.choices.length === 0) {
-      console.error('[OpenRouter] No choices in response:', JSON.stringify(data).substring(0, 500));
-      return null;
-    }
-
-    const message = data.choices[0].message;
-    const content = message?.content;
+    const cleanJsonStr = aiResponse.replace(/```json/g, '').replace(/```/g, '').trim();
+    const resultJson = JSON.parse(cleanJsonStr);
     
-    console.log('[OpenRouter] Content type:', typeof content, 'Is array:', Array.isArray(content));
-    console.log('[OpenRouter] Message keys:', Object.keys(message || {}));
-
-    // *** PRIMARY: Gemini image model returns image in message.images ***
-    if (message?.images && Array.isArray(message.images) && message.images.length > 0) {
-      const img = message.images[0];
-      console.log('[OpenRouter] Found image in message.images, type:', img.type || 'unknown', 'keys:', Object.keys(img));
-      // type: "image_url" -> img.image_url.url
-      if (img.type === 'image_url' && img.image_url?.url) return img.image_url.url;
-      // Direct url on the object
-      if (img.url) return img.url;
-      // base64 in b64_json
-      if (img.b64_json) return `data:image/png;base64,${img.b64_json}`;
-      // base64 in data
-      if (img.data) return `data:${img.media_type || 'image/png'};base64,${img.data}`;
-      // Could be a plain URL string
-      if (typeof img === 'string') return img;
-      console.error('[OpenRouter] Unknown image object format:', JSON.stringify(img).substring(0, 300));
+    // Safety check: if no promotion, remove product object if present
+    if (resultJson.type !== 'promocion' && !designSpec?.includePlate && resultJson.objects) {
+      resultJson.objects = resultJson.objects.filter(obj => obj.type !== 'product');
     }
 
-    // Case 1: content is an array (multimodal response with image parts)
-    if (Array.isArray(content)) {
-      for (const part of content) {
-        if (part.type === 'image_url' && part.image_url?.url) {
-          console.log('[OpenRouter] Found image_url part');
-          return part.image_url.url;
-        }
-        if (part.type === 'image' && part.source?.data) {
-          console.log('[OpenRouter] Found base64 image part');
-          return `data:${part.source.media_type || 'image/png'};base64,${part.source.data}`;
-        }
-        if (part.type === 'text' && part.text) {
-          const urlMatch = part.text.match(/https?:\/\/[^\s"'()]+/);
-          if (urlMatch) return urlMatch[0];
-        }
-      }
-    }
-
-    // Case 2: content is a string
-    if (typeof content === 'string' && content) {
-      const mdMatch = content.match(/!\[.*?\]\((https?:\/\/.*?)\)/);
-      if (mdMatch) return mdMatch[1];
-      const httpMatch = content.match(/https?:\/\/[^\s"'()]+/);
-      if (httpMatch) return httpMatch[0];
-      if (content.startsWith('data:image')) return content;
-    }
-
-    console.error('[OpenRouter] Could not extract image. Full message:', JSON.stringify(message).substring(0, 500));
-    return null;
-
+    return resultJson;
   } catch (error) {
-    console.error('[OpenRouter] Error generating image:', error.message);
+    console.error('[Content AI] Error generating DesignSpec:', error);
     return null;
   }
 };

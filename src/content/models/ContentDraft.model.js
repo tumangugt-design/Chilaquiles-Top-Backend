@@ -36,7 +36,8 @@ const contentDraftSchema = new mongoose.Schema({
     renderConfig: { type: mongoose.Schema.Types.Mixed },
     designSpec: { type: mongoose.Schema.Types.Mixed },
     artProvider: { type: String },
-    htmlSnapshot: { type: String }
+    htmlSnapshot: { type: String },
+    githubPath: { type: String }
   },
   ai: {
     model: { type: String },
