@@ -18,8 +18,8 @@ const contentDraftSchema = new mongoose.Schema({
     enum: ['draft', 'needs_review', 'approved', 'scheduled', 'published', 'failed', 'archived'],
     default: 'draft'
   },
-  platforms: [{ type: String, enum: ['instagram', 'facebook', 'whatsapp'] }],
-  formats: [{ type: String, enum: ['feed', 'story', 'reel', 'whatsapp_message', 'whatsapp_export'] }],
+  platforms: [{ type: String, enum: ['instagram', 'facebook', 'whatsapp', 'tiktok'] }],
+  formats: [{ type: String, enum: ['feed', 'story', 'reel', 'whatsapp_message', 'whatsapp_export', 'instagram_feed', 'instagram_story', 'whatsapp_image', 'facebook_cover', 'tiktok_video_cover'] }],
   copy: {
     main: { type: String },
     short: { type: String },
