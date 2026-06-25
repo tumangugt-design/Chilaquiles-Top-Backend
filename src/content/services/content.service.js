@@ -1,90 +1,77 @@
 import { ContentDraft } from '../models/ContentDraft.model.js';
 import { generateContentFromIdea, generateDesignSpecWithAI } from './content-ai.service.js';
-import { getFirebaseStorage } from '../../../configs/firebase.js';
-import sharp from 'sharp';
-import { BRAND_ASSETS } from '../config/brand.config.js';
-
-// Fetch an image buffer from a URL (supports https:// and data: URLs)
-const fetchImageBuffer = async (url) => {
-  if (!url) throw new Error('fetchImageBuffer: URL is undefined');
-  
-  // Handle base64 data URLs (e.g. data:image/png;base64,...)
-  if (url.startsWith('data:')) {
-    const commaIdx = url.indexOf(',');
-    if (commaIdx === -1) throw new Error('Invalid data URL format');
-    return Buffer.from(url.slice(commaIdx + 1), 'base64');
-  }
-  
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`HTTP ${res.status} fetching: ${url}`);
-  return Buffer.from(await res.arrayBuffer());
-};
-
 import { renderImageFromSpec } from './render.engine.js';
 import { uploadGeneratedImageToGitHub } from './github-storage.service.js';
 
 export const createDraftFromIdea = async (ideaData, userId) => {
-  const generated = await generateContentFromIdea(ideaData);
-  const data = generated.data;
+  const { topic, format, formats, platforms, objective, promotionData, includePlate, includeTopIA } = ideaData;
 
-  let artProvider = 'html_components'; 
-  let imageUrl = null;
-  let githubPath = null;
-  let finalDesignSpec = null;
-  
-  console.log('[Content Service] Generating DesignSpec via AI Art Director');
+  // Determinar formato final
+  const finalFormat = format || (formats && formats[0]) || 'post';
+
+  // 1. Generar copy con IA (texto para captions, hashtags, etc.)
+  let contentData = null;
   try {
-    const compositeSpec = {
-      ...(data.designSpec || {}),
-      format: (ideaData.formats || [])[0] || 'instagram_feed',
-      includePlate: ideaData.includePlate || false,
-      selectedPlate: ideaData.selectedPlate || null,
-      includeTopIA: ideaData.includeTopIA || false,
-    };
-
-    finalDesignSpec = await generateDesignSpecWithAI(
-      data.title || ideaData.topic || 'promoción de comida',
-      compositeSpec,
-      ideaData.promotionData || null
-    );
-
-    if (finalDesignSpec) {
-      console.log('[Content Service] Rendering PNG via Puppeteer');
-      const pngBuffer = await renderImageFromSpec(finalDesignSpec);
-
-      console.log('[Content Service] Uploading to GitHub');
-      const filename = `post_${Date.now()}_${Math.random().toString(36).substring(7)}.png`;
-      const uploadResult = await uploadGeneratedImageToGitHub(pngBuffer, filename);
-      
-      imageUrl = uploadResult.rawUrl;
-      githubPath = uploadResult.githubPath;
-    } else {
-      console.error('[Content Service] Failed to generate DesignSpec');
-    }
-  } catch (err) {
-    console.error('[Content Service] Pipeline failed:', err.message);
+    const generated = await generateContentFromIdea(ideaData);
+    contentData = generated.data;
+  } catch (e) {
+    console.error('[Content Service] generateContentFromIdea failed, using defaults:', e.message);
   }
 
+  // 2. Generar DesignSpec con IA (Director de Arte)
+  console.log('[Content Service] Requesting DesignSpec from AI Art Director...');
+  const designSpec = await generateDesignSpecWithAI({
+    topic,
+    format: finalFormat,
+    promotionData,
+    includePlate: includePlate || !!promotionData, // si es promo, incluir plato por defecto
+    includeTopIA: includeTopIA || false
+  });
+
+  // 3. Renderizar el HTML con Puppeteer → PNG
+  let imageUrl = null;
+  let githubPath = null;
+
+  try {
+    console.log('[Content Service] Rendering PNG with Puppeteer...');
+    const pngBuffer = await renderImageFromSpec(designSpec);
+
+    // 4. Subir a GitHub
+    console.log('[Content Service] Uploading PNG to GitHub...');
+    const timestamp = Date.now();
+    const filename = `${finalFormat}_${timestamp}.png`;
+    const uploadResult = await uploadGeneratedImageToGitHub(pngBuffer, filename);
+
+    imageUrl = uploadResult.rawUrl;
+    githubPath = uploadResult.githubPath;
+    console.log('[Content Service] Image saved:', imageUrl);
+
+  } catch (renderErr) {
+    console.error('[Content Service] Render/Upload failed:', renderErr.message);
+    // imageUrl queda null — el frontend debe manejar este caso
+  }
+
+  // 5. Guardar el borrador en MongoDB
   const draft = new ContentDraft({
-    title: data.title || ideaData.topic,
-    topic: ideaData.topic,
-    objective: ideaData.objective || data.objective,
+    title: contentData?.title || topic || 'Arte Chilaquiles TOP',
+    topic: topic || '',
+    objective: objective || contentData?.objective || 'sales',
     source: 'admin',
-    promotionId: ideaData.promotionData ? ideaData.promotionData.id : null,
+    promotionId: promotionData?.id || null,
     status: 'draft',
-    platforms: data.platforms || ideaData.platforms,
-    formats: data.formats || ideaData.formats,
-    copy: data.copy,
+    platforms: platforms || contentData?.platforms || ['instagram'],
+    formats: [finalFormat],
+    copy: contentData?.copy || {},
     visual: {
-      designSpec: finalDesignSpec || data.designSpec,
-      artProvider,
+      designSpec,
+      artProvider: 'html_components',
       imageUrl,
       githubPath
     },
     ai: {
-      model: 'openrouter',
-      prompt: ideaData.topic,
-      contextUsed: generated.rawContext
+      model: process.env.OPEN_ROUTER_MODEL || 'openrouter',
+      prompt: topic || '',
+      contextUsed: {}
     },
     createdBy: userId
   });
