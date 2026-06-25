@@ -146,10 +146,15 @@ export const generateImageWithOpenRouter = async (promptText, designSpec = null,
       console.log('[OpenRouter] Sending plate photo as reference image:', plateUrl);
     }
 
-    // Add the logo as reference
+    // Add style reference images instead of the logo
+    // These guide the AI on the exact aesthetic and background styles used by the brand
     messageContent.push({
       type: 'image_url',
-      image_url: { url: BRAND_ASSETS.logo }
+      image_url: { url: 'https://raw.githubusercontent.com/tumangugt-design/Imagenes-chilaquiles/main/Promociones-Anuncios/Promo%202x1%20Pollo.png' }
+    });
+    messageContent.push({
+      type: 'image_url',
+      image_url: { url: 'https://raw.githubusercontent.com/tumangugt-design/Imagenes-chilaquiles/main/Promociones-Anuncios/Promo%20Pumkin%20Cobanero.png' }
     });
 
     // Add the text prompt last

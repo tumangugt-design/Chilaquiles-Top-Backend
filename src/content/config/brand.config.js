@@ -101,7 +101,11 @@ ${topiaInstructions}
 
 ${plateInstructions}
 
-LOGO: La última imagen de referencia es el logo oficial. Colócalo en la esquina superior izquierda. Usa exactamente ese logo sin modificarlo.
+REFERENCIAS DE ESTILO (imágenes enviadas):
+Las imágenes enviadas incluyen ejemplos de promociones reales de "Chilaquiles TOP". Usa estas imágenes EXCLUSIVAMENTE como guía de estilo, iluminación, texturas de fondo y composición visual (nota que los fondos suelen ser blancos/claros con acentos dinámicos, no todo azul sólido). NO copies el texto de esas imágenes, usa el texto indicado abajo.
+
+ESPACIO PARA LOGO (IMPORTANTE):
+Deja un espacio COMPLETAMENTE VACÍO en la esquina superior izquierda. NO dibujes ningún logo, texto o forma ahí. El logo real se agregará después mediante código.
 
 CONTENIDO DE LA PROMOCIÓN:
 ${promoName ? `- Nombre: ${promoName}` : ''}
@@ -113,6 +117,7 @@ ${subheadline ? `- Texto secundario: "${subheadline}"` : ''}
 - Hashtags pequeños al pie: ${BRAND_CONTACT.hashtags.join(' ')}
 
 ESTÁNDARES DE CALIDAD:
+- TIPOGRAFÍA CONSISTENTE: Usa la misma familia tipográfica (sans-serif moderna y gruesa, estilo Montserrat o Poppins) en TODO el diseño. No mezcles múltiples tipos de letra.
 - Diseño premium y profesional, como si lo hiciera una agencia de diseño reconocida.
 - Jerarquía tipográfica clara: titular dominante, precio muy visible, CTA legible.
 - Formas geométricas permitidas: círculos, rectángulos redondeados, líneas de acento.
