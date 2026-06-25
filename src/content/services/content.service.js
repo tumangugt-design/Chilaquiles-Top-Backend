@@ -25,12 +25,22 @@ const compositeLogoAndUpload = async (generatedImageUrl, designSpec) => {
   try {
     if (!generatedImageUrl) throw new Error('generatedImageUrl is undefined');
 
-    const isStory = designSpec?.format === 'instagram_story';
-    const canvasSize = isStory ? { width: 1080, height: 1920 } : { width: 1080, height: 1080 };
+    // Canvas sizes per format — never crop, always contain with brand white background
+    const FORMAT_CANVAS = {
+      instagram_feed:     { width: 1080, height: 1080, bg: { r: 255, g: 255, b: 255 } },
+      instagram_story:    { width: 1080, height: 1920, bg: { r: 0,   g: 0,   b: 255 } }, // blue bg for stories
+      whatsapp_image:     { width: 1080, height: 1080, bg: { r: 255, g: 255, b: 255 } },
+      facebook_cover:     { width: 1640, height: 624,  bg: { r: 255, g: 255, b: 255 } },
+      tiktok_video_cover: { width: 1080, height: 1920, bg: { r: 0,   g: 0,   b: 255 } },
+    };
+    const canvasSize = FORMAT_CANVAS[designSpec?.format] || FORMAT_CANVAS.instagram_feed;
 
     // Load base image (AI has already integrated TopIA and plates natively via multimodal input)
     const baseBuffer = await fetchImageBuffer(generatedImageUrl);
-    let compositeImage = sharp(baseBuffer).resize(canvasSize.width, canvasSize.height, { fit: 'contain', background: { r: 255, g: 255, b: 255 } });
+    let compositeImage = sharp(baseBuffer).resize(canvasSize.width, canvasSize.height, {
+      fit: 'contain',
+      background: { r: canvasSize.bg.r, g: canvasSize.bg.g, b: canvasSize.bg.b, alpha: 1 }
+    });
 
     const composites = [];
 
