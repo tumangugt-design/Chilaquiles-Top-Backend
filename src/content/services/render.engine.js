@@ -1,4 +1,5 @@
-import puppeteer from 'puppeteer';
+import puppeteer from 'puppeteer-core';
+import chromium from '@sparticuz/chromium';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -282,15 +283,12 @@ export const buildHtmlFromSpec = (spec) => {
 export const renderImageFromSpec = async (spec) => {
   const html = buildHtmlFromSpec(spec);
 
+  const executablePath = await chromium.executablePath();
+  
   const browser = await puppeteer.launch({
-    headless: 'new',
-    executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || '/usr/bin/google-chrome-stable',
-    args: [
-      '--no-sandbox',
-      '--disable-setuid-sandbox',
-      '--disable-dev-shm-usage',
-      '--disable-gpu'
-    ]
+    headless: chromium.headless,
+    executablePath,
+    args: [...chromium.args, '--disable-gpu']
   });
 
   try {
