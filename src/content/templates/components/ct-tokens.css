@@ -1,0 +1,31 @@
+/* ============================================================
+   CHILAQUILES TOP — Design Tokens
+   Prefijo: --ct-
+   Uso: importar en cada componente o en la hoja global.
+   ============================================================ */
+:root {
+  /* COLORES */
+  --ct-azul:      #0000FF;
+  --ct-azul2:     #2A2BFF;
+  --ct-naranja:   #FF6B00;
+  --ct-verde:     #25D366;
+  --ct-lavanda:   #E5E6FC;
+  --ct-negro:     #0B0B12;
+  --ct-blanco:    #FFFFFF;
+  --ct-gris-bg:   #FAFAFF;
+
+  /* TIPOGRAFÍA */
+  --ct-font:      'Poppins', 'Montserrat', Arial, sans-serif;
+
+  /* BORDER-RADIUS */
+  --ct-r-sm:      12px;
+  --ct-r-md:      24px;
+  --ct-r-lg:      40px;
+  --ct-r-pill:    999px;
+
+  /* SOMBRAS */
+  --ct-sh-azul:   0 16px 40px rgba(0, 0, 255, .22);
+  --ct-sh-nrj:    0 8px  22px rgba(255, 107, 0, .32);
+  --ct-sh-plate:  0 28px 36px rgba(11, 11, 18, .30);
+  --ct-sh-verde:  0 14px 32px rgba(37, 211, 102, .38);
+}
