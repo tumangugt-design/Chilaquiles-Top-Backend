@@ -28,46 +28,22 @@ const compositeLogoAndUpload = async (generatedImageUrl, designSpec) => {
     const isStory = designSpec?.format === 'instagram_story';
     const canvasSize = isStory ? { width: 1080, height: 1920 } : { width: 1080, height: 1080 };
 
-    // Load base image
+    // Load base image (AI has already integrated TopIA and plates natively via multimodal input)
     const baseBuffer = await fetchImageBuffer(generatedImageUrl);
-    let compositeImage = sharp(baseBuffer).resize(canvasSize.width, canvasSize.height, { fit: 'cover' });
+    let compositeImage = sharp(baseBuffer).resize(canvasSize.width, canvasSize.height, { fit: 'contain', background: { r: 255, g: 255, b: 255 } });
 
     const composites = [];
 
-    // 1. Plate photo (bottom-left, if requested)
-    const plateUrl = designSpec?.selectedPlate || (designSpec?.includePlate ? BRAND_ASSETS.plates[Math.floor(Math.random() * BRAND_ASSETS.plates.length)] : null);
-    if (plateUrl) {
-      try {
-        const plateBuffer = await fetchImageBuffer(plateUrl);
-        const plateSize = Math.floor(canvasSize.width * 0.45);
-        const plateResized = await sharp(plateBuffer).resize(plateSize, plateSize, { fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 0 } }).toBuffer();
-        composites.push({ input: plateResized, gravity: 'southwest', blend: 'over' });
-        console.log('[Brand] Plate composited from:', plateUrl);
-      } catch (err) {
-        console.warn('[Brand] Plate composite failed:', err.message);
-      }
-    }
-
-    // 2. TopIA character (bottom-right, if requested)
-    if (designSpec?.includeTopIA) {
-      try {
-        const topiaBuffer = await fetchImageBuffer(BRAND_ASSETS.topIA);
-        const topiaSize = Math.floor(canvasSize.height * 0.38);
-        const topiaResized = await sharp(topiaBuffer).resize(null, topiaSize, { fit: 'inside' }).toBuffer();
-        composites.push({ input: topiaResized, gravity: 'southeast', blend: 'over' });
-        console.log('[Brand] TopIA composited');
-      } catch (err) {
-        console.warn('[Brand] TopIA composite failed:', err.message);
-      }
-    }
-
-    // 3. Logo (top-left, always — using round blue logo that's visible on any background)
+    // Logo only — composited on top-left to guarantee it's always the real official logo
+    // (AI already placed the logo in the design but we overwrite with the real one for brand accuracy)
     try {
       const logoBuffer = await fetchImageBuffer(BRAND_ASSETS.logo);
-      const logoWidth = Math.floor(canvasSize.width * 0.18);
-      const logoResized = await sharp(logoBuffer).resize(logoWidth, logoWidth, { fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 0 } }).toBuffer();
-      composites.push({ input: logoResized, top: 30, left: 30, blend: 'over' });
-      console.log('[Brand] Logo composited');
+      const logoSize = Math.floor(canvasSize.width * 0.16);
+      const logoResized = await sharp(logoBuffer)
+        .resize(logoSize, logoSize, { fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 0 } })
+        .toBuffer();
+      composites.push({ input: logoResized, top: 28, left: 28, blend: 'over' });
+      console.log('[Brand] Official logo composited on top-left');
     } catch (err) {
       console.warn('[Brand] Logo composite failed:', err.message);
     }
@@ -75,6 +51,7 @@ const compositeLogoAndUpload = async (generatedImageUrl, designSpec) => {
     if (composites.length > 0) {
       compositeImage = compositeImage.composite(composites);
     }
+
 
     const finalBuffer = await compositeImage.png({ quality: 92 }).toBuffer();
 

@@ -1,7 +1,7 @@
 import { getAICompletion } from '../../bot/ai.service.js';
 import { BrandKnowledge } from '../models/BrandKnowledge.model.js';
 import { ContentStandard } from '../models/ContentStandard.model.js';
-import { buildImagePrompt } from '../config/brand.config.js';
+import { buildImagePrompt, BRAND_ASSETS } from '../config/brand.config.js';
 
 export const generateContentFromIdea = async (ideaData) => {
   const { topic, objective, platforms, formats, tone, promotionData } = ideaData;
@@ -119,11 +119,44 @@ export const generateImageWithOpenRouter = async (promptText, designSpec = null,
   const imageModel = process.env.OPENROUTER_MODEL_IMAGES || 'google/gemini-3.1-flash-image';
   
   try {
-    // Use brand-spec prompt builder if designSpec provided, otherwise use basic prompt
+    // Build the brand-compliant prompt
     const imagePrompt = buildImagePrompt(designSpec, promotionData) + 
       (promptText ? `\n\nADDITIONAL CONTEXT: ${promptText}` : '');
 
-    console.log(`[OpenRouter] Generating image with model: ${imageModel}`);
+    // Build multimodal message content
+    // If TopIA or plate photos are requested, send them as reference images so the AI integrates them natively
+    const messageContent = [];
+
+    // Add reference images first (multimodal input to Gemini)
+    if (designSpec?.includeTopIA && BRAND_ASSETS.topIA) {
+      messageContent.push({
+        type: 'image_url',
+        image_url: { url: BRAND_ASSETS.topIA }
+      });
+      console.log('[OpenRouter] Sending TopIA as reference image for native integration');
+    }
+
+    if (designSpec?.includePlate) {
+      const plateUrl = designSpec.selectedPlate || 
+        BRAND_ASSETS.plates[Math.floor(Math.random() * BRAND_ASSETS.plates.length)];
+      messageContent.push({
+        type: 'image_url',
+        image_url: { url: plateUrl }
+      });
+      console.log('[OpenRouter] Sending plate photo as reference image:', plateUrl);
+    }
+
+    // Add the logo as reference
+    messageContent.push({
+      type: 'image_url',
+      image_url: { url: BRAND_ASSETS.logo }
+    });
+
+    // Add the text prompt last
+    messageContent.push({ type: 'text', text: imagePrompt });
+
+    console.log(`[OpenRouter] Generating image with model: ${imageModel}, ${messageContent.length - 1} reference images`);
+    
     const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
       method: 'POST',
       headers: {
@@ -134,9 +167,10 @@ export const generateImageWithOpenRouter = async (promptText, designSpec = null,
       },
       body: JSON.stringify({
         model: imageModel,
-        messages: [{ role: 'user', content: imagePrompt }]
+        messages: [{ role: 'user', content: messageContent }]
       })
     });
+
 
     const data = await response.json();
     console.log('[OpenRouter] Raw response status:', response.status);
