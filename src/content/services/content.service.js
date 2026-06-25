@@ -1,7 +1,6 @@
 import { ContentDraft } from '../models/ContentDraft.model.js';
 import { generateContentFromIdea, generateDesignSpecWithAI } from './content-ai.service.js';
 import { renderImageFromSpec } from './render.engine.js';
-import { uploadGeneratedImageToGitHub } from './github-storage.service.js';
 
 export const createDraftFromIdea = async (ideaData, userId) => {
   const { topic, format, formats, platforms, objective, promotionData, includePlate, includeTopIA } = ideaData;
@@ -24,34 +23,23 @@ export const createDraftFromIdea = async (ideaData, userId) => {
     topic,
     format: finalFormat,
     promotionData,
-    includePlate: includePlate || !!promotionData, // si es promo, incluir plato por defecto
+    includePlate: includePlate || !!promotionData,
     includeTopIA: includeTopIA || false
   });
 
-  // 3. Renderizar el HTML con Puppeteer → PNG
+  // 3. Renderizar PNG con Sharp
   let imageUrl = null;
-  let githubPath = null;
 
   try {
-    console.log('[Content Service] Rendering PNG with Puppeteer...');
+    console.log('[Content Service] Rendering PNG with Sharp...');
     const pngBuffer = await renderImageFromSpec(designSpec);
-
-    // 4. Subir a GitHub
-    console.log('[Content Service] Uploading PNG to GitHub...');
-    const timestamp = Date.now();
-    const filename = `${finalFormat}_${timestamp}.png`;
-    const uploadResult = await uploadGeneratedImageToGitHub(pngBuffer, filename);
-
-    imageUrl = uploadResult.rawUrl;
-    githubPath = uploadResult.githubPath;
-    console.log('[Content Service] Image saved:', imageUrl);
-
+    imageUrl = `data:image/png;base64,${pngBuffer.toString('base64')}`;
+    console.log('[Content Service] Image rendered OK');
   } catch (renderErr) {
-    console.error('[Content Service] Render/Upload failed:', renderErr.message);
-    // imageUrl queda null — el frontend debe manejar este caso
+    console.error('[Content Service] Render failed:', renderErr.message);
   }
 
-  // 5. Guardar el borrador en MongoDB
+  // 4. Guardar el borrador en MongoDB
   const draft = new ContentDraft({
     title: contentData?.title || topic || 'Arte Chilaquiles TOP',
     topic: topic || '',
@@ -64,9 +52,9 @@ export const createDraftFromIdea = async (ideaData, userId) => {
     copy: contentData?.copy || {},
     visual: {
       designSpec,
-      artProvider: 'html_components',
+      artProvider: 'sharp_svg',
       imageUrl,
-      githubPath
+      githubPath: null
     },
     ai: {
       model: process.env.OPEN_ROUTER_MODEL || 'openrouter',
