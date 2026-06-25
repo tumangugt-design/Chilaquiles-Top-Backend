@@ -92,7 +92,7 @@ const getPortionQtyInBaseUnit = (name, portionMap, inventoryMap) => {
   }
 }
 
-const getConsumptionForItem = (item, portionMap, inventoryMap) => {
+const getConsumptionForItem = (item, portionMap, inventoryMap, sauceTemperature = 'CALIENTE') => {
   const sauce = normalizeOptionValue(item.sauce)
   const protein = normalizeOptionValue(item.protein)
   const complement = normalizeComplementValue(item.complement)
@@ -104,24 +104,42 @@ const getConsumptionForItem = (item, portionMap, inventoryMap) => {
     queso: getQty('queso'),
   }
 
-  if (sauce === 'ROJA') {
-    consumption['salsa roja'] = getQty('salsa roja')
-    consumption['plato de 8 onz'] = getQty('plato de 8 onz')
-    consumption['tapadera de 8 onz'] = getQty('tapadera de 8 onz')
-  } else if (sauce === 'VERDE') {
-    consumption['salsa verde'] = getQty('salsa verde')
-    consumption['plato de 8 onz'] = getQty('plato de 8 onz')
-    consumption['tapadera de 8 onz'] = getQty('tapadera de 8 onz')
-  } else if (sauce === 'DIVORCIADOS') {
-    consumption['salsa roja'] = round(getQty('salsa roja') / 2)
-    consumption['salsa verde'] = round(getQty('salsa verde') / 2)
-    consumption['plato de 4 onz'] = getQty('plato de 4 onz')
-    consumption['tapadera de 4 onz'] = getQty('tapadera de 4 onz')
-  } else if (sauce) {
-    const dbSauceName = sauce.toLowerCase().replace(/_/g, ' ')
-    consumption[dbSauceName] = getQty(dbSauceName)
-    consumption['plato de 8 onz'] = getQty('plato de 8 onz')
-    consumption['tapadera de 8 onz'] = getQty('tapadera de 8 onz')
+  const isFrio = sauceTemperature === 'FRIO'
+
+  if (isFrio) {
+    if (sauce === 'ROJA') {
+      consumption['salsa roja'] = getQty('salsa roja')
+    } else if (sauce === 'VERDE') {
+      consumption['salsa verde'] = getQty('salsa verde')
+    } else if (sauce === 'DIVORCIADOS') {
+      consumption['salsa roja'] = round(getQty('salsa roja') / 2)
+      consumption['salsa verde'] = round(getQty('salsa verde') / 2)
+    } else if (sauce) {
+      const dbSauceName = sauce.toLowerCase().replace(/_/g, ' ')
+      consumption[dbSauceName] = getQty(dbSauceName)
+    }
+    consumption['plato de 4 onz'] = getQty('plato de 4 onz') * 3
+    consumption['tapadera de 4 onz'] = getQty('tapadera de 4 onz') * 3
+  } else {
+    if (sauce === 'ROJA') {
+      consumption['salsa roja'] = getQty('salsa roja')
+      consumption['plato de 8 onz'] = getQty('plato de 8 onz')
+      consumption['tapadera de 8 onz'] = getQty('tapadera de 8 onz')
+    } else if (sauce === 'VERDE') {
+      consumption['salsa verde'] = getQty('salsa verde')
+      consumption['plato de 8 onz'] = getQty('plato de 8 onz')
+      consumption['tapadera de 8 onz'] = getQty('tapadera de 8 onz')
+    } else if (sauce === 'DIVORCIADOS') {
+      consumption['salsa roja'] = round(getQty('salsa roja') / 2)
+      consumption['salsa verde'] = round(getQty('salsa verde') / 2)
+      consumption['plato de 4 onz'] = getQty('plato de 4 onz')
+      consumption['tapadera de 4 onz'] = getQty('tapadera de 4 onz')
+    } else if (sauce) {
+      const dbSauceName = sauce.toLowerCase().replace(/_/g, ' ')
+      consumption[dbSauceName] = getQty(dbSauceName)
+      consumption['plato de 8 onz'] = getQty('plato de 8 onz')
+      consumption['tapadera de 8 onz'] = getQty('tapadera de 8 onz')
+    }
   }
 
   const hardcodedProteins = { STEAK: 'steak', POLLO: 'pollo', CHORIZO: 'chorizo' }
@@ -186,7 +204,7 @@ const getConsumptionForItem = (item, portionMap, inventoryMap) => {
   return consumption
 }
 
-export const getAggregatedConsumption = async (items = []) => {
+export const getAggregatedConsumption = async (items = [], sauceTemperature = 'CALIENTE') => {
   const portions = await Portion.find({})
   const portionMap = Object.fromEntries(portions.map(p => [p.name, p]))
   const inventoryItems = await Inventory.find({})
@@ -194,7 +212,7 @@ export const getAggregatedConsumption = async (items = []) => {
 
   const aggregated = {}
   items.forEach((item) => {
-    const consumption = getConsumptionForItem(item, portionMap, inventoryMap)
+    const consumption = getConsumptionForItem(item, portionMap, inventoryMap, sauceTemperature)
     Object.entries(consumption).forEach(([name, qty]) => {
       aggregated[name] = round((aggregated[name] || 0) + qty)
     })
@@ -202,8 +220,8 @@ export const getAggregatedConsumption = async (items = []) => {
   return aggregated
 }
 
-export const validateInventoryAvailability = async (items = []) => {
-  const aggregated = await getAggregatedConsumption(items)
+export const validateInventoryAvailability = async (items = [], sauceTemperature = 'CALIENTE') => {
+  const aggregated = await getAggregatedConsumption(items, sauceTemperature)
   const names = Object.keys(aggregated).map(normalizeName)
   const inventoryItems = await Inventory.find({ name: { $in: names } })
 
@@ -228,14 +246,15 @@ export const validateInventoryAvailability = async (items = []) => {
   return { ok: shortages.length === 0, shortages, consumption: aggregated }
 }
 
-export const discountInventoryForOrder = async (items = [], orderId, actor) => {
-  const { ok, shortages, consumption } = await validateInventoryAvailability(items)
+export const discountInventoryForOrder = async (items = [], orderId, actor, sauceTemperature = 'CALIENTE') => {
+  const { ok, shortages, consumption } = await validateInventoryAvailability(items, sauceTemperature)
   if (!ok) {
     const error = new Error('Inventory shortage detected')
     error.statusCode = 409
     error.details = shortages
     throw error
   }
+
 
   const logs = []
 

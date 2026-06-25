@@ -262,7 +262,7 @@ export const createOrderRecord = async ({ user, customer, items, sauceTemperatur
   const navigationLinks = buildNavigationLinks(customer.location);
   const orderNumber = await generateOrderNumber();
 
-  const availability = await validateInventoryAvailability(orderItems);
+  const availability = await validateInventoryAvailability(orderItems, sauceTemperature);
 
   if (!availability.ok) {
     const firstShortage = availability.shortages?.[0];
@@ -314,7 +314,7 @@ export const createOrderRecord = async ({ user, customer, items, sauceTemperatur
       status: ORDER_STATUS.RECIBIDO
     });
 
-    await discountInventoryForOrder(orderItems, order._id, user);
+    await discountInventoryForOrder(orderItems, order._id, user, sauceTemperature);
     await publishOrderRealtimeEvent(order);
     notifyAdminNewOrder(order).catch((emailError) => {
       console.error('No se pudo enviar correo de nuevo pedido:', emailError.message);
