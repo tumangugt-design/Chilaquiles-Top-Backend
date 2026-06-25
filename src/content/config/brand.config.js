@@ -113,7 +113,7 @@ ${promoPrice ? `- Precio: ${promoPrice} — dentro de un círculo azul sólido, 
 ${headline ? `- Titular principal: "${headline}"` : '- Crea un titular corto en español para esta promoción (máximo 4 palabras, en negritas)'}
 ${subheadline ? `- Texto secundario: "${subheadline}"` : ''}
 - Botón de acción (naranja, forma de pastilla redondeada): "${cta || 'ORDENAR AHORA'}"
-- WhatsApp para pedidos: ${BRAND_CONTACT.whatsapp}
+- Pide en nuestra página: ${BRAND_CONTACT.landingUrl}
 - Hashtags pequeños al pie: ${BRAND_CONTACT.hashtags.join(' ')}
 
 ESTÁNDARES DE CALIDAD:

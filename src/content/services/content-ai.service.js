@@ -116,7 +116,7 @@ Devuelve EXCLUSIVAMENTE un JSON con:
 
 export const generateImageWithOpenRouter = async (promptText, designSpec = null, promotionData = null) => {
   const apiKey = process.env.OPEN_ROUTER_APIKEY;
-  const imageModel = process.env.OPENROUTER_MODEL_IMAGES || 'google/gemini-3.1-flash-image';
+  const imageModel = process.env.OPENROUTER_MODEL_IMAGES || 'google/gemini-3-pro-image';
   
   try {
     // Build the brand-compliant prompt
