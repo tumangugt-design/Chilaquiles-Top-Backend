@@ -9,11 +9,12 @@ export const BRAND_CONTACT = {
   whatsapp: '+502 3301 9938',
   whatsappClean: '50233019938', // Para links wa.me/
   whatsappLink: 'https://wa.me/50233019938',
-  orderUrl: 'https://chilaquiles-top.web.app/order',
-  landingUrl: 'https://chilaquiles-top.web.app',
+  orderUrl: 'https://pedidos.chilaquilestop.com/clientes',
+  landingUrl: 'https://chilaquilestop.com',
   location: 'Villa Nueva, Guatemala',
   deliveryArea: 'Solo entregamos en Villa Nueva',
-  instagram: '@chilaquilestop',
+  instagram: '@Chilaquiles_Top',
+  instagramUrl: 'https://instagram.com/Chilaquiles_Top',
   hashtags: ['#chilaquiles', '#top', '#gt', '#MantenteTOP', '#VillaNueva'],
 };
 

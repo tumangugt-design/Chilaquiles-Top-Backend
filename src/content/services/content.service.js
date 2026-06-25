@@ -4,94 +4,102 @@ import { getFirebaseStorage } from '../../../configs/firebase.js';
 import sharp from 'sharp';
 import { BRAND_ASSETS } from '../config/brand.config.js';
 
-// Fetch an image from a URL and return its buffer
+// Fetch an image buffer from a URL (supports https:// and data: URLs)
 const fetchImageBuffer = async (url) => {
+  if (!url) throw new Error('fetchImageBuffer: URL is undefined');
+  
+  // Handle base64 data URLs (e.g. data:image/png;base64,...)
+  if (url.startsWith('data:')) {
+    const commaIdx = url.indexOf(',');
+    if (commaIdx === -1) throw new Error('Invalid data URL format');
+    return Buffer.from(url.slice(commaIdx + 1), 'base64');
+  }
+  
   const res = await fetch(url);
-  if (!res.ok) throw new Error(`Failed to fetch image: ${url} (${res.status})`);
+  if (!res.ok) throw new Error(`HTTP ${res.status} fetching: ${url}`);
   return Buffer.from(await res.arrayBuffer());
 };
 
-// Composite logo onto the generated image and upload to Firebase Storage
+// Composite logo (and optionally plate photo + TopIA) on the generated image, then upload to Firebase Storage
 const compositeLogoAndUpload = async (generatedImageUrl, designSpec) => {
   try {
+    if (!generatedImageUrl) throw new Error('generatedImageUrl is undefined');
+
     const isStory = designSpec?.format === 'instagram_story';
     const canvasSize = isStory ? { width: 1080, height: 1920 } : { width: 1080, height: 1080 };
 
-    // Fetch the generated image (could be data URL or https URL)
-    let baseBuffer;
-    if (generatedImageUrl.startsWith('data:')) {
-      const base64 = generatedImageUrl.split(',')[1];
-      baseBuffer = Buffer.from(base64, 'base64');
-    } else {
-      baseBuffer = await fetchImageBuffer(generatedImageUrl);
-    }
-
-    // Resize base image to canvas size
+    // Load base image
+    const baseBuffer = await fetchImageBuffer(generatedImageUrl);
     let compositeImage = sharp(baseBuffer).resize(canvasSize.width, canvasSize.height, { fit: 'cover' });
 
     const composites = [];
 
-    // 1. Prepare TopIA if needed
-    if (designSpec?.useTopIA && BRAND_ASSETS.topIA) {
+    // 1. Plate photo (bottom-left, if requested)
+    const plateUrl = designSpec?.selectedPlate || (designSpec?.includePlate ? BRAND_ASSETS.plates[Math.floor(Math.random() * BRAND_ASSETS.plates.length)] : null);
+    if (plateUrl) {
+      try {
+        const plateBuffer = await fetchImageBuffer(plateUrl);
+        const plateSize = Math.floor(canvasSize.width * 0.45);
+        const plateResized = await sharp(plateBuffer).resize(plateSize, plateSize, { fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 0 } }).toBuffer();
+        composites.push({ input: plateResized, gravity: 'southwest', blend: 'over' });
+        console.log('[Brand] Plate composited from:', plateUrl);
+      } catch (err) {
+        console.warn('[Brand] Plate composite failed:', err.message);
+      }
+    }
+
+    // 2. TopIA character (bottom-right, if requested)
+    if (designSpec?.includeTopIA) {
       try {
         const topiaBuffer = await fetchImageBuffer(BRAND_ASSETS.topIA);
-        const topiaHeight = Math.floor(canvasSize.height * 0.4); // 40% of height
-        const topiaResized = await sharp(topiaBuffer).resize(null, topiaHeight, { fit: 'inside' }).toBuffer();
-        
-        // Position at bottom right
-        composites.push({
-          input: topiaResized,
-          gravity: 'southeast',
-          blend: 'over'
-        });
+        const topiaSize = Math.floor(canvasSize.height * 0.38);
+        const topiaResized = await sharp(topiaBuffer).resize(null, topiaSize, { fit: 'inside' }).toBuffer();
+        composites.push({ input: topiaResized, gravity: 'southeast', blend: 'over' });
+        console.log('[Brand] TopIA composited');
       } catch (err) {
-        console.warn('[Brand] Could not composite TopIA, skipping:', err.message);
+        console.warn('[Brand] TopIA composite failed:', err.message);
       }
     }
 
-    // 2. Prepare Logo
+    // 3. Logo (top-left, always)
     try {
-      const logoUrl = BRAND_ASSETS.logoWhiteOnBlue;
-      if (logoUrl && !logoUrl.includes('placeholder')) {
-        const logoBuffer = await fetchImageBuffer(logoUrl);
-        const logoWidth = Math.floor(canvasSize.width * 0.25); // 25% of width
-        const logoResized = await sharp(logoBuffer).resize(logoWidth, null, { fit: 'inside' }).toBuffer();
-        
-        // Position at top left with padding
-        composites.push({
-          input: logoResized,
-          top: 40,
-          left: 40,
-          blend: 'over'
-        });
-      }
-    } catch (logoErr) {
-      console.warn('[Brand] Could not composite logo, skipping:', logoErr.message);
+      const logoBuffer = await fetchImageBuffer(BRAND_ASSETS.logoWhiteOnBlue);
+      const logoWidth = Math.floor(canvasSize.width * 0.22);
+      const logoResized = await sharp(logoBuffer).resize(logoWidth, null, { fit: 'inside' }).toBuffer();
+      composites.push({ input: logoResized, top: 36, left: 36, blend: 'over' });
+      console.log('[Brand] Logo composited');
+    } catch (err) {
+      console.warn('[Brand] Logo composite failed:', err.message);
     }
 
-    // Apply composites
     if (composites.length > 0) {
       compositeImage = compositeImage.composite(composites);
     }
 
-    const finalBuffer = await compositeImage.png({ quality: 90 }).toBuffer();
+    const finalBuffer = await compositeImage.png({ quality: 92 }).toBuffer();
 
-    // Upload to Firebase Storage
-    const storage = getFirebaseStorage();
-    if (storage) {
-      const bucket = storage.bucket(process.env.FIREBASE_STORAGE_BUCKET || 'chilaquiles-top.appspot.com');
-      const filename = `content/drafts/${Date.now()}_${Math.random().toString(36).substring(7)}.png`;
-      const file = bucket.file(filename);
-      await file.save(finalBuffer, { metadata: { contentType: 'image/png' }, public: true });
-      const uploadedUrl = `https://storage.googleapis.com/${bucket.name}/${filename}`;
-      console.log('[Brand] Image composited and uploaded to Storage:', uploadedUrl);
-      return uploadedUrl;
+    // Try to upload to Firebase Storage, fall back to base64 data URL
+    try {
+      const storage = getFirebaseStorage();
+      if (storage) {
+        const bucket = storage.bucket(process.env.FIREBASE_STORAGE_BUCKET || 'chilaquiles-top.appspot.com');
+        const filename = `content/drafts/${Date.now()}_${Math.random().toString(36).substring(7)}.png`;
+        const file = bucket.file(filename);
+        await file.save(finalBuffer, { metadata: { contentType: 'image/png' }, public: true });
+        const uploadedUrl = `https://storage.googleapis.com/${bucket.name}/${filename}`;
+        console.log('[Brand] Image uploaded to Storage:', uploadedUrl);
+        return uploadedUrl;
+      }
+    } catch (storageErr) {
+      console.warn('[Brand] Firebase Storage upload failed, using data URL:', storageErr.message);
     }
-    // If no storage, return original URL
-    return generatedImageUrl;
+
+    // Fallback: return as base64 data URL (works, just large)
+    return `data:image/png;base64,${finalBuffer.toString('base64')}`;
+
   } catch (err) {
-    console.error('[Brand] compositeLogoAndUpload failed, returning original URL:', err.message);
-    return generatedImageUrl;
+    console.error('[Brand] compositeLogoAndUpload failed:', err.message);
+    return generatedImageUrl; // return original if all else fails
   }
 };
 
@@ -107,21 +115,29 @@ export const createDraftFromIdea = async (ideaData, userId) => {
   
   console.log('Using OpenRouter as primary image generator');
   try {
+    // Merge user's visual options into designSpec
+    const compositeSpec = {
+      ...(data.designSpec || {}),
+      format: (ideaData.formats || [])[0] || 'instagram_feed',
+      includePlate: ideaData.includePlate || false,
+      selectedPlate: ideaData.selectedPlate || null,
+      includeTopIA: ideaData.includeTopIA || false,
+    };
+
     const openRouterUrl = await generateImageWithOpenRouter(
       data.title || ideaData.topic || 'promoción de comida',
-      data.designSpec || null,
+      compositeSpec,
       ideaData.promotionData || null
     );
     if (openRouterUrl) {
-      // Post-process: composite logo on top of generated image, then save to Firebase Storage
-      imageUrl = await compositeLogoAndUpload(openRouterUrl, data.designSpec);
+      imageUrl = await compositeLogoAndUpload(openRouterUrl, compositeSpec);
     } else {
       console.error('OpenRouter returned null image URL. Using fallback mock image.');
-      imageUrl = 'https://chilaquiles-top.web.app/assets/menu_chilaquiles_top-DmJU2W6e.png';
+      imageUrl = 'https://raw.githubusercontent.com/tumangugt-design/Imagenes-chilaquiles/main/Fotos%20de%20Platos%20Reales%20Sin%20Fondo/Plato%202.png';
     }
   } catch (fallbackError) {
     console.error('OpenRouter generation failed:', fallbackError.message);
-    imageUrl = 'https://chilaquiles-top.web.app/assets/menu_chilaquiles_top-DmJU2W6e.png';
+    imageUrl = 'https://raw.githubusercontent.com/tumangugt-design/Imagenes-chilaquiles/main/Fotos%20de%20Platos%20Reales%20Sin%20Fondo/Plato%202.png';
   }
 
   const draft = new ContentDraft({
