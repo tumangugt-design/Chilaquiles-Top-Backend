@@ -61,12 +61,12 @@ const compositeLogoAndUpload = async (generatedImageUrl, designSpec) => {
       }
     }
 
-    // 3. Logo (top-left, always)
+    // 3. Logo (top-left, always — using round blue logo that's visible on any background)
     try {
-      const logoBuffer = await fetchImageBuffer(BRAND_ASSETS.logoWhiteOnBlue);
-      const logoWidth = Math.floor(canvasSize.width * 0.22);
-      const logoResized = await sharp(logoBuffer).resize(logoWidth, null, { fit: 'inside' }).toBuffer();
-      composites.push({ input: logoResized, top: 36, left: 36, blend: 'over' });
+      const logoBuffer = await fetchImageBuffer(BRAND_ASSETS.logo);
+      const logoWidth = Math.floor(canvasSize.width * 0.18);
+      const logoResized = await sharp(logoBuffer).resize(logoWidth, logoWidth, { fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 0 } }).toBuffer();
+      composites.push({ input: logoResized, top: 30, left: 30, blend: 'over' });
       console.log('[Brand] Logo composited');
     } catch (err) {
       console.warn('[Brand] Logo composite failed:', err.message);

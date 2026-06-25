@@ -19,15 +19,15 @@ export const BRAND_CONTACT = {
 };
 
 export const BRAND_ASSETS = {
-  // Logo oficial - versión azul sobre blanco
-  logoBlueOnWhite: process.env.BRAND_LOGO_URL || 'https://raw.githubusercontent.com/tumangugt-design/Imagenes-chilaquiles/main/Logo/Redondo%20Fondo%20Azul.png',
-  // Logo oficial - versión blanco sobre azul
+  // Logo principal - redondo con fondo azul (visible en cualquier fondo)
+  logo: process.env.BRAND_LOGO_URL || 'https://raw.githubusercontent.com/tumangugt-design/Imagenes-chilaquiles/main/Logo/Redondo%20Fondo%20Azul.png',
+  // Logo letras blancas (solo para fondos oscuros/azul)
   logoWhiteOnBlue: process.env.BRAND_LOGO_WHITE_URL || 'https://raw.githubusercontent.com/tumangugt-design/Imagenes-chilaquiles/main/Logo/Logo%20Letras%20Blancas.png',
-  // Mascota TopIA
+  // Logo rectangular azul transparente (para fondos blancos)
+  logoBlueTransparent: 'https://raw.githubusercontent.com/tumangugt-design/Imagenes-chilaquiles/main/Logo/Rectangular%20Letra%20Azul%20Transparente.png',
+  // Mascota TopIA - Avatar principal
   topIA: process.env.BRAND_TOPIA_URL || 'https://raw.githubusercontent.com/tumangugt-design/Imagenes-chilaquiles/main/Personajes/TopIA/TopIA%20Avatar%20V1.png',
-  // Foto hero por defecto del producto
-  productDefault: 'https://raw.githubusercontent.com/tumangugt-design/Imagenes-chilaquiles/main/Fotos%20de%20Platos%20Reales%20Sin%20Fondo/Plato%202.png',
-  // Arreglo de platos reales para seleccionar al azar
+  // Platos reales sin fondo para composición
   plates: [
     'https://raw.githubusercontent.com/tumangugt-design/Imagenes-chilaquiles/main/Fotos%20de%20Platos%20Reales%20Sin%20Fondo/Plato%201.png',
     'https://raw.githubusercontent.com/tumangugt-design/Imagenes-chilaquiles/main/Fotos%20de%20Platos%20Reales%20Sin%20Fondo/Plato%202.png',
@@ -55,65 +55,53 @@ export const BRAND_COLORS = {
   gradient: 'linear-gradient(90deg, #0000FF 0%, #FF6B00 100%)',
 };
 
-// Prompt base de diseño para la IA generadora de imágenes
+// Expert marketing art prompt builder
 export const buildImagePrompt = (designSpec, promotionData) => {
-  const { headline, subheadline, price, cta, layout, useTopIA } = designSpec || {};
+  const { headline, subheadline, price, cta, layout, includeTopIA, includePlate } = designSpec || {};
   const promoName = promotionData?.name || '';
   const promoPrice = promotionData?.price ? `Q${promotionData.price}` : (price || '');
+  const isStory = layout === 'instagram_story' || layout === 'story_cta';
 
-  const baseRules = `
-Professional social media promotional art for "Chilaquiles TOP", a modern fast-food restaurant in Villa Nueva, Guatemala.
+  return `You are an expert Latin American food brand marketing designer. Create a premium social media promotional image for "Chilaquiles TOP" restaurant, Villa Nueva, Guatemala.
 
-STRICT BRAND COLORS - USE ONLY THESE:
-- Primary background: Pure Blue #0000FF or White #FFFFFF
-- Main brand: Electric Blue #0000FF (backgrounds, accents, identity)
-- Action/CTA: Orange #FF6B00 (buttons, price highlights ONLY - use sparingly, max 10% of image)
-- Text: White #FFFFFF on blue, Near-black #0B0B12 on white
-- Supporting: Lavender #E5E6FC for soft backgrounds, Gold #F2B705 for food accents
-- Official gradient: linear-gradient from #0000FF to #FF6B00 (for borders/lines only)
+═══════════════════════════════
+MANDATORY BRAND COLORS (no exceptions):
+- #0000FF Pure Blue → backgrounds, identity, price circles
+- #FFFFFF White → breathing space, cards, clean areas
+- #0B0B12 Near-Black → body text on white
+- #FF6B00 Orange → ONLY for CTA button (max 10% of image)
+- #E5E6FC Lavender → soft card backgrounds
+- #F2B705 Gold → subtle food accent only
+Color law: 60% blue/white · 30% text/content · 10% orange
 
-COLOR PROPORTION RULE:
-60% Blue or White (dominant)
-30% Content/Photography/Black text
-10% Orange accents (CTA only)
+═══════════════════════════════
+PROMOTION CONTENT:
+${promoName ? `• Name: ${promoName}` : ''}
+${promoPrice ? `• Price: ${promoPrice} — display inside a bold blue filled circle, large and clear` : ''}
+${headline ? `• Main headline: "${headline}"` : '• Create a compelling Spanish headline about this promotion'}
+${subheadline ? `• Sub-headline: "${subheadline}"` : ''}
+• CTA pill button (orange #FF6B00, border-radius 999px): "${cta || 'ORDENAR AHORA →'}"
+• WhatsApp: ${BRAND_CONTACT.whatsapp}
+• Order: ${BRAND_CONTACT.orderUrl}
+• Hashtags (tiny, at bottom): ${BRAND_CONTACT.hashtags.join(' ')}
 
-DESIGN RULES:
-- Clean, premium, modern look. NOT cluttered.
-- Large readable headline (bold/black weight)
-- Price clearly visible in a blue circle or pill shape
-- CTA button: orange pill shape, rounded (border-radius 999px)
-- Logo area reserved top-left (leave space, do NOT generate a logo yourself)
-- Card elements: border-radius 24px, soft shadow
-- NO random colors. NO gradients as main backgrounds (only as thin accent lines)
-- Feel: technological, clean, close to the customer
+═══════════════════════════════
+LAYOUT ZONES — RESPECT THESE STRICTLY:
+• TOP-LEFT corner (120×120px area): LEAVE COMPLETELY EMPTY — the real logo will be placed here programmatically. Do NOT draw any logo, icon, text, or placeholder in this zone.
+${includePlate ? `• BOTTOM-LEFT area: Leave clear space for a real food plate photo that will be composited on top. Design the background/colors to work well with a food image placed there.` : '• DO NOT draw any food photos, bowls, plates or dishes anywhere in the image. The design must be purely typographic and graphic.'}
+${includeTopIA ? `• BOTTOM-RIGHT corner: Leave a natural space for a friendly mascot character. The layout should visually "invite" a character to stand there — perhaps with a speech bubble, a colored zone, or simply open space.` : '• DO NOT draw any mascot, character, or cartoon.'}
 
-⚠️ REAL CONTACT DATA - ALWAYS USE EXACTLY THESE, NEVER INVENT:
-- WhatsApp: ${BRAND_CONTACT.whatsapp}
-- Order link: ${BRAND_CONTACT.orderUrl}
-- Website: ${BRAND_CONTACT.landingUrl}
-- Location: ${BRAND_CONTACT.location}
-- Delivery: ${BRAND_CONTACT.deliveryArea}
-- Instagram: ${BRAND_CONTACT.instagram}
-- Hashtags: ${BRAND_CONTACT.hashtags.join(' ')}
-If the design includes a QR code, phone number, URL, or any contact detail — use ONLY the data above, never invent it.
-`;
+═══════════════════════════════
+DESIGN EXCELLENCE RULES:
+• Premium, clean, modern aesthetic — NOT cheap or generic
+• Bold typography hierarchy: main headline very large, price huge, CTA clear
+• Geometric shapes allowed: circles, rounded rectangles, gradient lines
+• Thin gradient accent line (blue→orange) can be used as a separator
+• Card elements: border-radius 24px, soft shadow if needed
+• NO stock photo backgrounds — use flat color or subtle geometric patterns
+• NO QR codes (unless explicitly requested)
+• NO invented phone numbers, URLs, or addresses
+• The image must feel like it was designed by a professional studio
 
-  const contentBlock = `
-CONTENT TO DISPLAY:
-${promoName ? `- Promotion: ${promoName}` : ''}
-${promoPrice ? `- Price: ${promoPrice} (show in blue circle, very visible)` : ''}
-${headline ? `- Headline: "${headline}"` : ''}
-${subheadline ? `- Subheadline: "${subheadline}"` : ''}
-${cta ? `- CTA button text: "${cta}"` : `- CTA button: "ORDENAR AHORA →" linking to ${BRAND_CONTACT.orderUrl}`}
-- WhatsApp for orders: ${BRAND_CONTACT.whatsapp}
-${useTopIA ? '- Include space for TopIA mascot character (friendly cartoon robot/food character) on the right side' : ''}
-- Include chilaquiles food photography style elements (warm tones, appetizing)
-- Bottom: hashtags ${BRAND_CONTACT.hashtags.join(' ')} (small, subtle)
-`;
-
-  const formatBlock = layout === 'instagram_story' || layout === 'story_cta'
-    ? 'FORMAT: Vertical 9:16 ratio for Instagram Story. Large headline at top, product center, CTA button bottom.'
-    : 'FORMAT: Square 1:1 ratio for Instagram/Facebook feed post.';
-
-  return `${baseRules}\n${contentBlock}\n${formatBlock}`;
+${isStory ? 'FORMAT: Vertical 9:16 (1080×1920px). Big bold text top, visual center, CTA bottom.' : 'FORMAT: Square 1:1 (1080×1080px). Clean grid layout.'}`;
 };
