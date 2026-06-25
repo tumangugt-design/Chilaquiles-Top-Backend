@@ -19,13 +19,22 @@ export const BRAND_CONTACT = {
 
 export const BRAND_ASSETS = {
   // Logo oficial - versión azul sobre blanco
-  logoBlueOnWhite: process.env.BRAND_LOGO_URL || 'https://chilaquiles-top.web.app/logos/logo_blue.png',
+  logoBlueOnWhite: process.env.BRAND_LOGO_URL || 'https://raw.githubusercontent.com/tumangugt-design/Imagenes-chilaquiles/main/Logo/Redondo%20Fondo%20Azul.png',
   // Logo oficial - versión blanco sobre azul
-  logoWhiteOnBlue: process.env.BRAND_LOGO_WHITE_URL || 'https://chilaquiles-top.web.app/logos/logo_white.png',
+  logoWhiteOnBlue: process.env.BRAND_LOGO_WHITE_URL || 'https://raw.githubusercontent.com/tumangugt-design/Imagenes-chilaquiles/main/Logo/Logo%20Letras%20Blancas.png',
   // Mascota TopIA
-  topIA: process.env.BRAND_TOPIA_URL || 'https://chilaquiles-top.web.app/logos/topia.png',
+  topIA: process.env.BRAND_TOPIA_URL || 'https://raw.githubusercontent.com/tumangugt-design/Imagenes-chilaquiles/main/Personajes/TopIA/TopIA%20Avatar%20V1.png',
   // Foto hero por defecto del producto
-  productDefault: 'https://chilaquiles-top.web.app/assets/hero_transparent-04-7IXms.png',
+  productDefault: 'https://raw.githubusercontent.com/tumangugt-design/Imagenes-chilaquiles/main/Fotos%20de%20Platos%20Reales%20Sin%20Fondo/Plato%202.png',
+  // Arreglo de platos reales para seleccionar al azar
+  plates: [
+    'https://raw.githubusercontent.com/tumangugt-design/Imagenes-chilaquiles/main/Fotos%20de%20Platos%20Reales%20Sin%20Fondo/Plato%201.png',
+    'https://raw.githubusercontent.com/tumangugt-design/Imagenes-chilaquiles/main/Fotos%20de%20Platos%20Reales%20Sin%20Fondo/Plato%202.png',
+    'https://raw.githubusercontent.com/tumangugt-design/Imagenes-chilaquiles/main/Fotos%20de%20Platos%20Reales%20Sin%20Fondo/Plato%203.png',
+    'https://raw.githubusercontent.com/tumangugt-design/Imagenes-chilaquiles/main/Fotos%20de%20Platos%20Reales%20Sin%20Fondo/Plato%204.png',
+    'https://raw.githubusercontent.com/tumangugt-design/Imagenes-chilaquiles/main/Fotos%20de%20Platos%20Reales%20Sin%20Fondo/Plato%205.png',
+    'https://raw.githubusercontent.com/tumangugt-design/Imagenes-chilaquiles/main/Fotos%20de%20Platos%20Reales%20Sin%20Fondo/Plato%206.png'
+  ]
 };
 
 export const BRAND_COLORS = {

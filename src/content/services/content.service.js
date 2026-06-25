@@ -29,21 +29,49 @@ const compositeLogoAndUpload = async (generatedImageUrl, designSpec) => {
     // Resize base image to canvas size
     let compositeImage = sharp(baseBuffer).resize(canvasSize.width, canvasSize.height, { fit: 'cover' });
 
-    // Try to composite logo - gracefully skip if logo URL fails
+    const composites = [];
+
+    // 1. Prepare TopIA if needed
+    if (designSpec?.useTopIA && BRAND_ASSETS.topIA) {
+      try {
+        const topiaBuffer = await fetchImageBuffer(BRAND_ASSETS.topIA);
+        const topiaHeight = Math.floor(canvasSize.height * 0.4); // 40% of height
+        const topiaResized = await sharp(topiaBuffer).resize(null, topiaHeight, { fit: 'inside' }).toBuffer();
+        
+        // Position at bottom right
+        composites.push({
+          input: topiaResized,
+          gravity: 'southeast',
+          blend: 'over'
+        });
+      } catch (err) {
+        console.warn('[Brand] Could not composite TopIA, skipping:', err.message);
+      }
+    }
+
+    // 2. Prepare Logo
     try {
       const logoUrl = BRAND_ASSETS.logoWhiteOnBlue;
       if (logoUrl && !logoUrl.includes('placeholder')) {
         const logoBuffer = await fetchImageBuffer(logoUrl);
-        const logoResized = await sharp(logoBuffer).resize(180, null, { fit: 'inside' }).toBuffer();
-        compositeImage = compositeImage.composite([{
+        const logoWidth = Math.floor(canvasSize.width * 0.25); // 25% of width
+        const logoResized = await sharp(logoBuffer).resize(logoWidth, null, { fit: 'inside' }).toBuffer();
+        
+        // Position at top left with padding
+        composites.push({
           input: logoResized,
-          top: 30,
-          left: 30,
+          top: 40,
+          left: 40,
           blend: 'over'
-        }]);
+        });
       }
     } catch (logoErr) {
       console.warn('[Brand] Could not composite logo, skipping:', logoErr.message);
+    }
+
+    // Apply composites
+    if (composites.length > 0) {
+      compositeImage = compositeImage.composite(composites);
     }
 
     const finalBuffer = await compositeImage.png({ quality: 90 }).toBuffer();
