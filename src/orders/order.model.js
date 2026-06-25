@@ -62,6 +62,7 @@ const orderSchema = new mongoose.Schema({
     default: 'CALIENTE'
   },
   appliedPromo: { type: appliedPromoSchema, default: null },
+  appliedPromos: { type: [appliedPromoSchema], default: [] },
   couponCode: { type: String, default: null },
   couponDiscount: { type: Number, default: 0 },
   total: { type: Number, required: true },

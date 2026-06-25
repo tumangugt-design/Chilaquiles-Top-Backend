@@ -81,6 +81,7 @@ export const createOrder = async (req, res) => {
       items,
       sauceTemperature: req.body.sauceTemperature,
       appliedPromo: req.body.appliedPromo,
+      appliedPromos: req.body.appliedPromos,
       couponCode: req.body.couponCode,
       paymentMethod: req.body.paymentMethod || 'efectivo',
     })

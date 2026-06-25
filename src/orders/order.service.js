@@ -176,18 +176,58 @@ const baseHistoryQuery = () => Order.find()
   .populate('chefId', 'name phone email photoUrl role status')
   .populate('repartidorId', 'name phone email photoUrl role status');
 
-export const createOrderRecord = async ({ user, customer, items, sauceTemperature, appliedPromo, couponCode, paymentMethod = 'efectivo' }) => {
+export const createOrderRecord = async ({ user, customer, items, sauceTemperature, appliedPromo, appliedPromos, couponCode, paymentMethod = 'efectivo' }) => {
   let orderItems = Array.isArray(items) ? items.map(cloneOrderItem) : [];
-  const resolvedPromo = await resolveAppliedPromotion({ requestedPromo: appliedPromo, items: orderItems });
-  if (resolvedPromo) {
-    if (resolvedPromo.plates && resolvedPromo.plates.length > 0) {
-      orderItems = resolvedPromo.plates.map(cloneOrderItem);
-    } else {
-      orderItems = completePromoItems(orderItems, resolvedPromo.requestedCount);
+
+  const reqPromos = Array.isArray(appliedPromos) && appliedPromos.length > 0 
+    ? appliedPromos 
+    : (appliedPromo?.id ? [appliedPromo] : []);
+
+  const resolvedPromos = [];
+  let totalPromoPrice = 0;
+  let promoPlatesCombined = [];
+
+  let itemOffset = 0;
+  for (const reqPromo of reqPromos) {
+    const resolved = await resolveAppliedPromotion({ 
+      requestedPromo: reqPromo, 
+      items: orderItems.slice(itemOffset, itemOffset + (reqPromo.requestedCount || 2)) 
+    });
+    
+    if (resolved) {
+      resolvedPromos.push(resolved);
+      totalPromoPrice += Number(resolved.promoPrice || 0);
+      const count = Number(resolved.requestedCount || resolved.plates?.length || 2);
+
+      let promoPlates = [];
+      if (resolved.plates && resolved.plates.length > 0) {
+        promoPlates = resolved.plates.map((plate, index) => {
+          const cloned = cloneOrderItem(plate);
+          const clientItem = orderItems[itemOffset + index];
+          if (clientItem && clientItem.baseRecipe) {
+            cloned.baseRecipe = {
+              onion: clientItem.baseRecipe.onion !== false,
+              cilantro: clientItem.baseRecipe.cilantro !== false,
+              cream: clientItem.baseRecipe.cream !== false,
+            };
+          }
+          return cloned;
+        });
+      } else {
+        const clientPromoItems = orderItems.slice(itemOffset, itemOffset + count);
+        promoPlates = completePromoItems(clientPromoItems, count);
+      }
+
+      promoPlatesCombined.push(...promoPlates);
+      itemOffset += count;
     }
   }
 
-  let total = resolvedPromo ? resolvedPromo.promoPrice : calculateOrderTotal(orderItems.length);
+  if (resolvedPromos.length > 0) {
+    orderItems = promoPlatesCombined;
+  }
+
+  let total = resolvedPromos.length > 0 ? totalPromoPrice : calculateOrderTotal(orderItems.length);
   
   let couponDiscount = 0;
   let cleanCouponCode = null;
@@ -264,7 +304,8 @@ export const createOrderRecord = async ({ user, customer, items, sauceTemperatur
       navigationLinks,
       items: orderItems,
       sauceTemperature: sauceTemperature === 'FRIO' ? 'FRIO' : 'CALIENTE',
-      appliedPromo: resolvedPromo,
+      appliedPromo: resolvedPromos[0] || null,
+      appliedPromos: resolvedPromos,
       couponCode: cleanCouponCode,
       couponDiscount,
       total,
