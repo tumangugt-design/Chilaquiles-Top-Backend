@@ -70,6 +70,16 @@ export const buildImagePrompt = (designSpec, promotionData) => {
   };
   const fmtSpec = FORMAT_SPECS[layout] || FORMAT_SPECS.instagram_feed;
 
+  const topiaInstructions = includeTopIA
+    ? `MASCOTA TopIA (primera imagen de referencia enviada):
+La primera imagen es nuestra mascota oficial TopIA. DEBES integrarla de forma natural al arte — que parezca que siempre fue parte del diseño, no pegada encima. Puede estar presentando la promoción, señalando el precio, o al lado de la comida. Escala y posición apropiadas para que se vea integrada.`
+    : `NO incluyas ninguna mascota, personaje animado ni ilustración de personaje.`;
+
+  const plateInstructions = includePlate
+    ? `FOTO REAL DE PLATO (imagen de referencia enviada):
+Una de las imágenes de referencia muestra una foto real de nuestros chilaquiles. Intégrala de forma natural al diseño como el elemento visual principal de comida. Mézclala con los colores de la marca de forma apetitosa y estética.`
+    : `Este es un diseño TIPOGRÁFICO y GRÁFICO — NO dibujes ni ilustres ningún plato, tazón ni comida. Enfócate en texto, formas geométricas e identidad de marca.`;
+
   return `Eres un diseñador experto de marketing para la marca "Chilaquiles TOP", restaurante en Villa Nueva, Guatemala.
 
 IDIOMA: Todo el texto del arte debe estar en ESPAÑOL CORRECTO. Sin abreviaciones, sin anglicismos innecesarios, sin faltas de ortografía. Revisa cada palabra antes de incluirla.
