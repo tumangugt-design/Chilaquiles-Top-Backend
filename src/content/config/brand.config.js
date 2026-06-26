@@ -85,26 +85,26 @@ ${plateBlock}
 
 COMPONENTES HTML DISPONIBLES (escoge los que mejor combinen):
 Backgrounds:
-  - "ct-bg--1" → Campo de puntos lavanda, fondos claros. Versátil. Para: temas suaves, educativos, marca.
-  - "ct-bg--2" → Fondo azul oscuro premium. Para: temas nocturnos, premium, épicos.
-  - "ct-bg--3" → Panel diagonal azul/blanco. Para: promos dinámicas, vibrantes.
+  - "ct-bg--1" → Campo de puntos lavanda, fondo blanco/claro. Versátil. Para: cualquier tipo de publicación.
+  - "ct-bg--3" → Panel diagonal azul/blanco. Para: promos dinámicas, comunicados vibrantes.
+  NOTA: SIEMPRE usa ct-bg--1 o ct-bg--3. NUNCA uses ct-bg--2 (reservado para uso futuro).
 Headers:
-  - "ct-header--1" → Azul sólido con glow, logo blanco centrado + badge naranja. Combina con BG1, BG2.
-  - "ct-header--2" → Blanco minimalista, logo azul izq + badge naranja der. Combina con BG1, BG3.
-  - "ct-header--3" → Barra degradé naranja/azul arriba, logo azul cuadrado centrado. Combina con BG1, BG3.
+  - "ct-header--1" → Azul sólido con logo blanco + badge naranja. USAR SIEMPRE en promociones.
+  - "ct-header--2" → Blanco minimalista, logo azul + badge naranja. Para: comunicados, educativo.
+  - "ct-header--3" → Faja naranja→azul, logo azul centrado. Para: comunicados, educativo.
 Footers:
-  - "ct-footer--1" → Azul sólido, texto blanco. Combina con Header1 y BG2.
-  - "ct-footer--2" → Negro premium, íconos naranja. Combina con BG2.
-  - "ct-footer--3" → Blanco borde naranja. Combina con Header2, Header3 y BG1.
+  - "ct-footer--1" → Azul sólido, texto blanco. Combina con ct-header--1.
+  - "ct-footer--3" → Blanco borde naranja. Combina con ct-header--2 y ct-header--3.
 
 REGLAS DE DISEÑO:
-1. Escoge componentes que combinen entre sí (ver "Combina con"). NO elijas siempre los mismos — varía las combinaciones para que cada arte sea diferente.
-2. Si es PROMOCIÓN: el badge del header ya dice "OFERTA LIMITADA" — pon el campo badge vacío ("") excepto si usas ct-header--3 (que no tiene badge). Incluye precio en el campo price. Incluye plato hero.
-3. Si NO es promoción: price = "", badge puede ser el slogan "MANTENTE TOP" u otra frase de marca.
-4. El copy debe estar en ESPAÑOL CORRECTO, sin abreviaciones, sin anglicismos. Sé creativo y antojable.
-5. El CTA SIEMPRE dice "PIDE POR WHATSAPP" (ya que el botón lleva al WhatsApp de la marca, no a la web).
-6. Varía los colores dentro del brand book: en unas piezas usa el azul dominante, en otras el naranja, en otras combina. Nunca salgas de la paleta de marca.
-7. IMPORTANTE: Devuelve SOLO JSON puro. Cero texto, cero comentarios, cero markdown.
+1. FONDO: Siempre usa ct-bg--1 o ct-bg--3. NUNCA ct-bg--2.
+2. HEADER para PROMOCIÓN: SIEMPRE usa ct-header--1 (azul con logo blanco). FOOTER: ct-footer--1.
+3. HEADER para OTRO TEMA: elige entre ct-header--2 o ct-header--3. FOOTER: ct-footer--3.
+4. BADGE: Los headers 1 y 2 ya incluyen el badge — deja el campo badge vacío ("") al usarlos. Solo pon texto en badge si usas ct-header--3.
+5. PROMO: precio en campo price (ej: "Q55"), badge vacío si usas header--1 o header--2.
+6. COPY: ESPAÑOL correcto, antojable, persuasivo. Headline corto y poderoso (max 4 palabras idealmente).
+7. CTA: siempre "PIDE POR WHATSAPP" para promos.
+8. IMPORTANTE: Devuelve SOLO JSON puro. Cero texto, cero comentarios, cero markdown.
 
 ESTRUCTURA EXACTA A DEVOLVER (no pongas ningún comentario, no pongas // ni /* */):
 {

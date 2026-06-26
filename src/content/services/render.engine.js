@@ -142,17 +142,47 @@ export const buildHtmlFromSpec = (spec) => {
 
   // ── Foto del plato (hero product)
   const heroObj = objects.find(o => o.role === 'hero' || o.type === 'product');
+  // ══════════════════════════════════════════════════════════════
+  // LAYOUT DE 3 ZONAS — El plato NUNCA se superpone al texto
+  //
+  // ZONA 1 (TOP):    Header + Badge + Headline + Subheadline
+  // ZONA 2 (MEDIO):  Foto del plato + Círculo de precio
+  // ZONA 3 (BOTTOM): Válido hasta + CTA + Footer
+  // ══════════════════════════════════════════════════════════════
+  const headerHeight = headerClass === 'ct-header--1' ? 280 : (headerClass === 'ct-header--2' ? 120 : 162);
+  const footerHeight = 104;
+
+  // Área disponible total
+  const availableTop    = headerHeight;
+  const availableBottom = height - footerHeight;
+  const availableHeight = availableBottom - availableTop;
+
+  // Con plato: dividimos en zonas fijas
+  // Zona texto: 35% del área disponible (arriba del plato)
+  // Zona plato: 40% del área (centro)
+  // Zona CTA:   25% del área (abajo)
+  const ZONE_TEXT_RATIO  = 0.35;
+  const ZONE_PLATE_RATIO = 0.40;
+
+  const zoneTextTop    = availableTop;
+  const zoneTextHeight = Math.round(availableHeight * ZONE_TEXT_RATIO);
+  const zonePlateTop   = zoneTextTop + zoneTextHeight;
+  const zonePlateHeight = Math.round(availableHeight * ZONE_PLATE_RATIO);
+  const zoneCtaTop     = zonePlateTop + zonePlateHeight;
+
+  // ── Foto del plato (posicionada dentro de Zona 2 siempre)
   let heroHtml = '';
   if (heroObj) {
     const imgUrl = resolveAsset(heroObj.assetId);
     if (imgUrl) {
+      const plateCenterY = zonePlateTop + Math.round(zonePlateHeight / 2);
       heroHtml = `
         <div style="
           position: absolute;
           left: 50%;
-          top: 58%;
+          top: ${plateCenterY}px;
           transform: translate(-50%, -50%);
-          width: 480px;
+          width: 500px;
           z-index: 5;
         ">
           <img src="${imgUrl}"
@@ -162,16 +192,10 @@ export const buildHtmlFromSpec = (spec) => {
     }
   }
 
-  // ── Badge en el body SOLO si se usa ct-header--3 (los headers 1 y 2 ya traen el badge integrado)
-  const showBodyBadge = copy.badge && headerClass === 'ct-header--3';
-  const headerHeight = headerClass === 'ct-header--1' ? 280 : (headerClass === 'ct-header--2' ? 120 : 162);
-  const footerHeight = 104;
   const hasHero = !!heroHtml;
 
-  // ── Área disponible entre header y footer
-  const availableTop = headerHeight;
-  const availableBottom = height - footerHeight;
-  const availableHeight = availableBottom - availableTop;
+  // Badge en el body SOLO si se usa ct-header--3
+  const showBodyBadge = copy.badge && headerClass === 'ct-header--3';
 
   // ── Badge
   const badgeHtml = showBodyBadge ? `
@@ -200,33 +224,26 @@ export const buildHtmlFromSpec = (spec) => {
       ${copy.badge}
     </div>` : '';
 
-  // ── Headline: posición inteligente
-  // Sin hero: centrado verticalmente en el área disponible
-  // Con hero: pegado más arriba para dejar espacio al plato
-  let headlineTop;
-  if (hasHero) {
-    // Con plato: encima del plato
-    headlineTop = headerHeight + (showBodyBadge ? 90 : 40);
-  } else if (isPromo) {
-    // Promo sin plato: un poco más arriba del centro para dejar espacio al precio y CTA
-    headlineTop = availableTop + Math.round(availableHeight * 0.15);
-  } else {
-    // Otro tema sin plato: centrado verticalmente
-    headlineTop = availableTop + Math.round(availableHeight * 0.20);
-  }
+  // ── Headline: siempre en Zona 1 (texto), centrado en esa zona
+  const headlineCenterY = hasHero
+    ? zoneTextTop + Math.round(zoneTextHeight / 2)   // centrado en zona texto (con plato)
+    : isPromo
+      ? availableTop + Math.round(availableHeight * 0.20) // promo sin plato: más arriba
+      : availableTop + Math.round(availableHeight * 0.22); // otro tema: centrado alto
 
-  // Tamaño de fuente según largo del texto y tipo
-  const h1FontSize = copy.headline.length > 20 ? '62px'
-    : copy.headline.length > 14 ? '72px'
+  // Tamaño de fuente: más corto = más grande
+  const h1FontSize = copy.headline.length > 22 ? '58px'
+    : copy.headline.length > 16 ? '68px'
+    : copy.headline.length > 12 ? '78px'
     : '88px';
 
   const headlineHtml = copy.headline ? `
     <div style="
       position: absolute;
-      top: ${headlineTop}px;
+      top: ${headlineCenterY}px;
       left: 50%;
-      transform: translateX(-50%);
-      width: ${hasHero ? '85%' : '88%'};
+      transform: translate(-50%, -50%);
+      width: ${hasHero ? '86%' : '88%'};
       text-align: center;
       z-index: 10;
     ">
@@ -242,27 +259,29 @@ export const buildHtmlFromSpec = (spec) => {
       ">${copy.headline}</h1>
       ${copy.subheadline ? `<p style="
         font-family: var(--ct-font);
-        font-size: ${isPromo || hasHero ? '28px' : '30px'};
-        font-weight: ${isPromo ? '600' : '500'};
+        font-size: ${hasHero ? '24px' : '28px'};
+        font-weight: 500;
         color: ${scheme.subheadColor};
-        margin: ${isPromo ? '14px' : '22px'} 0 0 0;
+        margin: 14px 0 0 0;
         line-height: 1.4;
-        max-width: 800px;
+        max-width: ${hasHero ? '700px' : '800px'};
         margin-left: auto;
         margin-right: auto;
       ">${copy.subheadline}</p>` : ''}
     </div>` : '';
 
-  // ── Precio (solo para promos)
-  // Posición ajustada según si hay plato o no
-  const priceTop = hasHero ? '44%' : `${availableTop + Math.round(availableHeight * 0.58)}px`;
-  const priceRight = hasHero ? '54px' : '80px';
+  // ── Precio (solo para promos) — posicionado en Zona 2 (junto al plato)
+  const priceCenterY = hasHero
+    ? zonePlateTop + Math.round(zonePlateHeight * 0.35)   // arriba-derecha del plato
+    : availableTop + Math.round(availableHeight * 0.52);  // centrado si no hay plato
+  const priceRight = '60px';
 
   const priceHtml = (isPromo && copy.price) ? `
     <div style="
       position: absolute;
       right: ${priceRight};
-      ${hasHero ? `top: ${priceTop}; transform: translateY(-50%) rotate(5deg);` : `top: ${priceTop}; transform: rotate(5deg);`}
+      top: ${priceCenterY}px;
+      transform: rotate(5deg);
       width: 190px;
       height: 190px;
       background: ${scheme.priceBg};
@@ -280,11 +299,13 @@ export const buildHtmlFromSpec = (spec) => {
       <span style="font-size:52px;line-height:1;">${copy.price}</span>
     </div>` : '';
 
-  // ── Válido hasta (SOLO en promos)
+  // ── Válido hasta (SOLO en promos) — Zona 3, encima del botón CTA
+  // Se posiciona desde zoneCtaTop o con bottom fijo
+  const validUntilBottom = footerHeight + 108; // justo encima del CTA
   const validUntilHtml = (isPromo && copy.validUntil) ? `
     <div style="
       position: absolute;
-      bottom: ${isPromo && !hasHero ? '190px' : '196px'};
+      bottom: ${validUntilBottom}px;
       left: 50%;
       transform: translateX(-50%);
       background: ${scheme.validUntilBg};
@@ -301,7 +322,7 @@ export const buildHtmlFromSpec = (spec) => {
       align-items: center;
       gap: 8px;
     ">
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="${scheme.validUntilColor === 'var(--ct-lavanda)' ? '#E5E6FC' : 'currentColor'}" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
       Válido hasta el ${copy.validUntil}
     </div>` : '';
 
