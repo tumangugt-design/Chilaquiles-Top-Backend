@@ -42,4 +42,5 @@ dist-ssr
 *.sln
 *.sw?
 .cache/  
+firebase_credenciales.js
  
