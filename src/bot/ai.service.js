@@ -14,6 +14,9 @@ export const getAICompletion = async (messages, options = {}) => {
     if (options.response_format) {
       payload.response_format = options.response_format;
     }
+    if (options.temperature !== undefined) {
+      payload.temperature = options.temperature;
+    }
 
     const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
       method: 'POST',
