@@ -3,7 +3,7 @@ import { generateContentFromIdea, generateDesignSpecWithAI } from './content-ai.
 import { renderImageFromSpec } from './render.engine.js';
 
 export const createDraftFromIdea = async (ideaData, userId) => {
-  const { topic, format, formats, platforms, objective, promotionData, includePlate, includeTopIA } = ideaData;
+  const { topic, format, formats, platforms, objective, promotionData, includePlate, includeTopIA, selectedPlate } = ideaData;
 
   // Determinar formato final
   const finalFormat = format || (formats && formats[0]) || 'post';
@@ -24,7 +24,8 @@ export const createDraftFromIdea = async (ideaData, userId) => {
     format: finalFormat,
     promotionData,
     includePlate: includePlate || !!promotionData,
-    includeTopIA: includeTopIA || false
+    includeTopIA: includeTopIA || false,
+    selectedPlate
   });
 
   // 3. Renderizar PNG con Sharp

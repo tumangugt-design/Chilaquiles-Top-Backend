@@ -270,6 +270,31 @@ export const buildHtmlFromSpec = (spec) => {
       ">${copy.subheadline}</p>` : ''}
     </div>` : '';
 
+  // ── Body Text (para comunicados largos sin plato) — Zona 2 (Centro)
+  const bodyTextHtml = (copy.bodyText && !hasHero) ? `
+    <div style="
+      position: absolute;
+      top: ${zonePlateTop}px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 82%;
+      max-height: ${zonePlateHeight}px;
+      text-align: left;
+      z-index: 10;
+      font-family: var(--ct-font);
+      font-size: 20px;
+      font-weight: 400;
+      color: ${scheme.subheadColor};
+      line-height: 1.6;
+      background: rgba(255, 255, 255, 0.7);
+      padding: 32px 40px;
+      border-radius: 24px;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.05);
+      backdrop-filter: blur(10px);
+    ">
+      ${copy.bodyText.replace(/\n/g, '<br/>')}
+    </div>` : '';
+
   // ── Precio (solo para promos) — posicionado en Zona 2 (junto al plato)
   const priceCenterY = hasHero
     ? zonePlateTop + Math.round(zonePlateHeight * 0.35)   // arriba-derecha del plato
@@ -354,7 +379,7 @@ export const buildHtmlFromSpec = (spec) => {
 
 
   // ── Inyectar contenido dentro del background
-  const bodyContent = `${badgeHtml}${headlineHtml}${priceHtml}${heroHtml}${validUntilHtml}${ctaHtml}`;
+  const bodyContent = `${badgeHtml}${headlineHtml}${bodyTextHtml}${priceHtml}${heroHtml}${validUntilHtml}${ctaHtml}`;
   let bgWithContent = bgBlock.replace('<!-- CONTENIDO DE LA PIEZA AQUÍ -->', bodyContent);
 
   // ── Armar HTML final

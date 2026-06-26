@@ -102,7 +102,7 @@ REGLAS DE DISEÑO:
 3. HEADER para OTRO TEMA: elige entre ct-header--2 o ct-header--3. FOOTER: ct-footer--3.
 4. BADGE: Los headers 1 y 2 ya incluyen el badge — deja el campo badge vacío ("") al usarlos. Solo pon texto en badge si usas ct-header--3.
 5. PROMO: precio en campo price (ej: "Q55"), badge vacío si usas header--1 o header--2.
-6. COPY: ESPAÑOL correcto, antojable, persuasivo. Headline corto y poderoso (max 4 palabras idealmente).
+6. COPY: ESPAÑOL correcto, antojable, persuasivo. Headline corto y poderoso. Si el post es informativo o tiene texto largo (ej. instrucciones), usa el campo "bodyText" para acomodarlo.
 7. CTA: siempre "PIDE POR WHATSAPP" para promos.
 8. IMPORTANTE: Devuelve SOLO JSON puro. Cero texto, cero comentarios, cero markdown.
 
@@ -121,6 +121,7 @@ ESTRUCTURA EXACTA A DEVOLVER (no pongas ningún comentario, no pongas // ni /* *
     "badge": "OFERTA LIMITADA",
     "headline": "TEXTO PRINCIPAL CORTO",
     "subheadline": "Texto secundario descriptivo",
+    "bodyText": "Si es un tema informativo (ej. instrucciones, comunicados), pon el texto largo aquí.",
     "price": "${isPromo ? ('Q' + (promotionData?.price || '00')) : ''}",
     "validUntil": "",
     "cta": "PIDE POR WHATSAPP",
