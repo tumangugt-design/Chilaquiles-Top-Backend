@@ -113,10 +113,18 @@ export const buildHtmlFromSpec = (spec) => {
     }
   }
 
-  // Badge en el body SOLO si se usa ct-header--3 (los headers 1 y 2 ya traen el badge integrado)
+  // ── Badge en el body SOLO si se usa ct-header--3 (los headers 1 y 2 ya traen el badge integrado)
   const showBodyBadge = copy.badge && headerClass === 'ct-header--3';
   const headerHeight = headerClass === 'ct-header--1' ? 280 : (headerClass === 'ct-header--2' ? 120 : 162);
+  const footerHeight = 104;
+  const hasHero = !!heroHtml;
 
+  // ── Área disponible entre header y footer
+  const availableTop = headerHeight;
+  const availableBottom = height - footerHeight;
+  const availableHeight = availableBottom - availableTop;
+
+  // ── Badge
   const badgeHtml = showBodyBadge ? `
     <div style="
       position: absolute;
@@ -143,45 +151,69 @@ export const buildHtmlFromSpec = (spec) => {
       ${copy.badge}
     </div>` : '';
 
-  // ── Headline principal
-  const headlineTopBase = headerHeight + (showBodyBadge ? 90 : 40);
+  // ── Headline: posición inteligente
+  // Sin hero: centrado verticalmente en el área disponible
+  // Con hero: pegado más arriba para dejar espacio al plato
+  let headlineTop;
+  if (hasHero) {
+    // Con plato: encima del plato
+    headlineTop = headerHeight + (showBodyBadge ? 90 : 40);
+  } else if (isPromo) {
+    // Promo sin plato: un poco más arriba del centro para dejar espacio al precio y CTA
+    headlineTop = availableTop + Math.round(availableHeight * 0.15);
+  } else {
+    // Otro tema sin plato: centrado verticalmente
+    headlineTop = availableTop + Math.round(availableHeight * 0.20);
+  }
+
+  // Tamaño de fuente según largo del texto y tipo
+  const h1FontSize = copy.headline.length > 20 ? '62px'
+    : copy.headline.length > 14 ? '72px'
+    : '88px';
+
   const headlineHtml = copy.headline ? `
     <div style="
       position: absolute;
-      top: ${headlineTopBase}px;
+      top: ${headlineTop}px;
       left: 50%;
       transform: translateX(-50%);
-      width: 88%;
+      width: ${hasHero ? '85%' : '88%'};
       text-align: center;
       z-index: 10;
     ">
       <h1 style="
         font-family: var(--ct-font);
-        font-size: ${copy.headline.length > 16 ? '68px' : '88px'};
+        font-size: ${h1FontSize};
         font-weight: 900;
         color: ${isPromo ? 'var(--ct-naranja)' : (hasDark ? '#FFFFFF' : 'var(--ct-azul)')};
         text-transform: uppercase;
-        line-height: 1.0;
+        line-height: 1.05;
         margin: 0;
         letter-spacing: -1px;
       ">${copy.headline}</h1>
       ${copy.subheadline ? `<p style="
         font-family: var(--ct-font);
-        font-size: 30px;
-        font-weight: 600;
+        font-size: ${isPromo || hasHero ? '28px' : '30px'};
+        font-weight: ${isPromo ? '600' : '500'};
         color: ${hasDark ? 'rgba(255,255,255,0.85)' : textColor};
-        margin: 14px 0 0 0;
-        line-height: 1.3;
+        margin: ${isPromo ? '14px' : '22px'} 0 0 0;
+        line-height: 1.4;
+        max-width: 800px;
+        margin-left: auto;
+        margin-right: auto;
       ">${copy.subheadline}</p>` : ''}
     </div>` : '';
 
-  // ── Precio (círculo de precio para promos)
-  const priceHtml = copy.price ? `
+  // ── Precio (solo para promos)
+  // Posición ajustada según si hay plato o no
+  const priceTop = hasHero ? '44%' : `${availableTop + Math.round(availableHeight * 0.58)}px`;
+  const priceRight = hasHero ? '54px' : '80px';
+
+  const priceHtml = (isPromo && copy.price) ? `
     <div style="
       position: absolute;
-      right: 54px;
-      top: ${heroObj ? '44%' : '50%'};
-      transform: translateY(-50%) rotate(5deg);
+      right: ${priceRight};
+      ${hasHero ? `top: ${priceTop}; transform: translateY(-50%) rotate(5deg);` : `top: ${priceTop}; transform: rotate(5deg);`}
       width: 190px;
       height: 190px;
       background: var(--ct-azul);
@@ -197,14 +229,13 @@ export const buildHtmlFromSpec = (spec) => {
       box-shadow: var(--ct-sh-azul);
     ">
       <span style="font-size:52px;line-height:1;">${copy.price}</span>
-      ${copy.validUntil ? `<span style="font-size:13px;font-weight:600;opacity:.85;margin-top:4px;text-align:center;padding:0 10px;">Válido hasta ${copy.validUntil}</span>` : ''}
     </div>` : '';
 
-  // ── Válido hasta (pill separado, más visible que el texto del círculo)
-  const validUntilHtml = copy.validUntil ? `
+  // ── Válido hasta (SOLO en promos)
+  const validUntilHtml = (isPromo && copy.validUntil) ? `
     <div style="
       position: absolute;
-      bottom: 196px;
+      bottom: ${isPromo && !hasHero ? '190px' : '196px'};
       left: 50%;
       transform: translateX(-50%);
       background: rgba(255,255,255,0.92);
@@ -225,8 +256,8 @@ export const buildHtmlFromSpec = (spec) => {
       Válido hasta el ${copy.validUntil}
     </div>` : '';
 
-  // ── CTA Button (WhatsApp)
-  const ctaHtml = copy.cta ? `
+  // ── CTA Button (WhatsApp — SOLO en promos)
+  const ctaHtml = (isPromo && copy.cta) ? `
     <div style="
       position: absolute;
       bottom: 116px;
@@ -248,8 +279,9 @@ export const buildHtmlFromSpec = (spec) => {
       gap: 14px;
     ">
       <svg width="26" height="26" viewBox="0 0 32 32" fill="#FFFFFF"><path d="M16 .4C7.4.4.5 7.3.5 15.9c0 2.8.7 5.4 2 7.8L.4 31.6l8.1-2.1c2.3 1.2 4.8 1.9 7.5 1.9 8.6 0 15.5-7 15.5-15.5C31.5 7.3 24.6.4 16 .4zm7.1 18.9c-.4-.2-2.3-1.1-2.6-1.3-.3-.1-.6-.2-.9.2-.3.4-1 1.3-1.2 1.5-.2.2-.4.3-.8.1-.4-.2-1.6-.6-3.1-1.9-1.1-1-1.9-2.3-2.2-2.7-.2-.4 0-.6.2-.8.2-.2.4-.4.5-.7.2-.2.2-.4.4-.7.1-.3.1-.5 0-.7-.1-.2-.9-2.2-1.3-3-.3-.8-.7-.7-.9-.7h-.8c-.3 0-.7.1-1.1.5-.4.4-1.4 1.4-1.4 3.4s1.5 3.9 1.7 4.2c.2.3 2.9 4.5 7.1 6.3 1 .4 1.8.7 2.4.9 1 .3 1.9.3 2.6.2.8-.1 2.3-1 2.7-1.9.3-.9.3-1.7.2-1.9-.1-.2-.4-.3-.8-.5z"/></svg>
-      ${copy.cta || 'PIDE POR WHATSAPP'}
+      PIDE POR WHATSAPP
     </div>` : '';
+
 
   // ── Inyectar contenido dentro del background
   const bodyContent = `${badgeHtml}${headlineHtml}${priceHtml}${heroHtml}${validUntilHtml}${ctaHtml}`;
