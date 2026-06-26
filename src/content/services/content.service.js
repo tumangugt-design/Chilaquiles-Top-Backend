@@ -1,7 +1,7 @@
 import { ContentDraft } from '../models/ContentDraft.model.js';
 import { generateContentFromIdea, generateDesignSpecWithAI } from './content-ai.service.js';
 import { renderImageFromSpec } from './render.engine.js';
-import { getFirebaseStorage } from '../../configs/firebase.js';
+import { getFirebaseStorage } from '../../../configs/firebase.js';
 
 export const createDraftFromIdea = async (ideaData, userId) => {
   const { topic, format, formats, platforms, objective, promotionData, includePlate, includeTopIA, selectedPlate } = ideaData;
