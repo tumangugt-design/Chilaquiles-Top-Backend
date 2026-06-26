@@ -11,16 +11,25 @@ export const renderImageFromSpec = async (spec) => {
 
   console.log('[RenderEngine] Sending HTML to Browserless, size:', html.length, 'chars, w:', width, 'h:', height);
 
-  const response = await fetch(`https://production-sfo.browserless.io/screenshot?token=${BROWSERLESS_TOKEN}`, {
+  const browserlessFunction = `
+    module.exports = async ({ page, context }) => {
+      const { html, width, height } = context;
+      await page.setViewport({ width, height });
+      await page.setContent(html, { waitUntil: 'networkidle0' });
+      await page.evaluate(async () => {
+        await document.fonts.ready;
+      });
+      const buffer = await page.screenshot({ type: 'png', clip: { x: 0, y: 0, width, height } });
+      return buffer;
+    };
+  `;
+
+  const response = await fetch(`https://production-sfo.browserless.io/function?token=${BROWSERLESS_TOKEN}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      html,
-      options: {
-        type: 'png',
-        clip: { x: 0, y: 0, width, height }
-      },
-      viewport: { width, height }
+      code: browserlessFunction,
+      context: { html, width, height }
     })
   });
 
