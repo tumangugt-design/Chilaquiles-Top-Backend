@@ -1,4 +1,4 @@
-import { getAICompletion } from '../../bot/ai.service.js';
+import { getClaudeCompletion } from './claude.service.js';
 import { BrandKnowledge } from '../models/BrandKnowledge.model.js';
 import { ContentStandard } from '../models/ContentStandard.model.js';
 import { buildDesignSpecPrompt } from '../config/brand.config.js';
@@ -16,8 +16,8 @@ export const generateContentFromIdea = async (ideaData) => {
   const rulesText = rules.map(r => `- [${r.type}] ${r.content}`).join('\n') || '(Sin reglas adicionales)';
   const standardsText = standards.map(s => `- [Estándar: ${s.scope}] ${s.value}`).join('\n') || '(Sin estándares)';
 
-  const systemPrompt = `Eres un estratega experto de contenido y copywriter para "Chilaquiles TOP", restaurante en Villa Nueva, Guatemala.
-Tu objetivo es generar un JSON con el contenido para publicar en redes sociales.
+  const systemPrompt = `Eres un profesional experto en marketing, redes sociales, edición y renderización de HTML para artes gráficos de "Chilaquiles TOP", restaurante en Villa Nueva, Guatemala.
+Tu objetivo es analizar la idea y generar un JSON con el contenido exacto y persuasivo para publicar en redes sociales.
 
 Reglas del negocio:
 - Solo entregamos en Villa Nueva.
@@ -56,10 +56,12 @@ Formato de salida REQUERIDO (JSON puro, sin markdown ni explicaciones):
   }
 
   try {
-    const aiResponse = await getAICompletion([
-      { role: 'system', content: systemPrompt },
-      { role: 'user', content: userPrompt }
-    ]);
+    const aiResponse = await getClaudeCompletion(
+      systemPrompt,
+      userPrompt,
+      true, // isJson
+      0.7   // temperature
+    );
 
     const cleanJson = aiResponse.replace(/```json/g, '').replace(/```/g, '').trim();
     const resultJson = JSON.parse(cleanJson);
@@ -98,12 +100,15 @@ export const generateDesignSpecWithAI = async (requestData) => {
   console.log('[Content AI] Generating DesignSpec with AI Art Director...');
 
   try {
-    const aiResponse = await getAICompletion([
-      { role: 'user', content: prompt }
-    ], {
-      response_format: { type: 'json_object' },
-      temperature: 0.95 // Temperatura alta para forzar variaciones de color y layout en cada generación
-    });
+    const systemPrompt = `Eres un profesional experto en marketing, redes sociales, edición y renderización de HTML para artes gráficos de "Chilaquiles TOP".
+Debes devolver estrictamente el JSON con la configuración de componentes, siguiendo fielmente las reglas de la marca.`;
+
+    const aiResponse = await getClaudeCompletion(
+      systemPrompt,
+      prompt,
+      true, // isJson
+      0.95  // temperature (alta para variaciones)
+    );
 
     if (!aiResponse || typeof aiResponse !== 'string') {
       throw new Error('AI returned empty or non-string response');
