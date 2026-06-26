@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<!--
+╔══════════════════════════════════════════════════════════════════╗
+║  CHILAQUILES TOP — ct-story-promo.html                          ║
+║  Story Instagram 9:16 · 1080x1920px                             ║
+║  Uso: promos con foto de plato                                   ║
+║  Sin barras — logo flotante arriba, info flotante abajo          ║
+║                                                                  ║
+║  SAFE ZONE: top 250px · bottom 250px · lados 65px               ║
+║    Logo: top=290px · Bottom info: bottom=265px                   ║
+╠══════════════════════════════════════════════════════════════════╣
+║  VARIABLES:                                                      ║
+║  {{LOGO_WORD_BLANCO}}  URL logo blanco (sobre fondo claro        ║
+║                        usa {{LOGO_WORD_AZUL}} en su lugar)       ║
+║  {{BADGE_TEXT}}        Badge naranja (omitir div si no aplica)   ║
+║  {{HEADLINE}}          Gancho principal — Poppins Black + stroke  ║
+║                        Naranja: color gancho                     ║
+║                        ct-hl--xl < 15c → 130px                  ║
+║                        ct-hl--lg 15-30c → 102px                 ║
+║                        ct-hl--md 30-60c → 80px                  ║
+║  {{PRODUCT_NAME}}      Nombre del plato (omitir si no aplica)    ║
+║  {{PLATE_URL}}         URL de la foto del plato (GitHub)         ║
+║  {{PRICE}}             "Q55" (omitir div si no aplica)           ║
+║  {{DATE}}              "30 de junio" (omitir div si no aplica)   ║
+║  {{CTA_TEXT}}          Texto del botón CTA                       ║
+║  {{CTA_COLOR}}         Color del CTA: #25D366 WA / #0000FF web   ║
+╚══════════════════════════════════════════════════════════════════╝
+-->
+<html><head><meta charset="utf-8">
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;900&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{margin:0;padding:0;box-sizing:border-box;}
+body{background:#FAFAFF;}
+.canvas{position:relative;width:1080px;height:1920px;overflow:hidden;
+  background-color:#FAFAFF;
+  background-image:radial-gradient(#E5E6FC 2.2px,transparent 2.2px);
+  background-size:30px 30px;}
+.g1{position:absolute;width:1000px;height:1000px;top:-260px;left:-260px;border-radius:50%;
+  background:radial-gradient(circle,rgba(0,0,255,.13),rgba(0,0,255,0) 62%);}
+.g2{position:absolute;width:900px;height:900px;bottom:-100px;right:-200px;border-radius:50%;
+  background:radial-gradient(circle,rgba(255,107,0,.15),rgba(255,107,0,0) 62%);}
+
+/* LOGO — flotante, top safe zone */
+.logo-wrap{position:absolute;top:290px;left:50%;transform:translateX(-50%);
+  z-index:4;display:flex;flex-direction:column;align-items:center;gap:16px;}
+.logo{height:100px;width:auto;}
+.badge{display:inline-flex;align-items:center;gap:8px;background:#FF6B00;color:#fff;
+  font-family:'Poppins',sans-serif;font-weight:700;font-size:22px;letter-spacing:1.5px;
+  text-transform:uppercase;padding:9px 24px;border-radius:999px;
+  box-shadow:0 8px 22px rgba(255,107,0,.32);}
+.bdot{width:10px;height:10px;border-radius:50%;background:#fff;
+  box-shadow:0 0 0 4px rgba(255,255,255,.25);flex-shrink:0;}
+
+/* BLOQUE CENTRAL — centrado en safe area (y=960) */
+.center{position:absolute;top:960px;left:50%;transform:translate(-50%,-50%);
+  width:950px;display:flex;flex-direction:column;align-items:center;z-index:2;gap:0;}
+
+/* HEADLINE — Poppins Black + stroke */
+.ct-hl{font-family:'Poppins',sans-serif;font-weight:900;text-align:center;
+  line-height:1.0;color:#FF6B00;
+  -webkit-text-stroke:2px #FF6B00;paint-order:stroke fill;}
+.ct-hl--xl{font-size:152px;}
+.ct-hl--lg{font-size:120px;}
+.ct-hl--md{font-size:94px;}
+
+/* product name */
+.product-name{font-family:'Poppins',sans-serif;font-weight:700;font-size:58px;
+  color:#0000FF;text-align:center;letter-spacing:-.5px;margin-top:16px;}
+
+/* plate */
+.plate-stage{position:relative;display:flex;align-items:center;
+  justify-content:center;width:100%;margin-top:20px;}
+.plate{max-height:560px;width:auto;max-width:920px;
+  filter:drop-shadow(0 30px 40px rgba(11,11,18,.28));}
+.price-badge{position:absolute;right:20px;bottom:10px;
+  width:120px;height:120px;border-radius:50%;background:#0000FF;color:#fff;
+  display:flex;align-items:center;justify-content:center;
+  font-family:'Poppins',sans-serif;font-weight:900;font-size:38px;
+  box-shadow:0 10px 28px rgba(0,0,255,.38);}
+
+/* date pill */
+.date-pill{display:inline-flex;align-items:center;gap:10px;margin-top:24px;
+  border:2px solid #0000FF;color:#0000FF;background:rgba(0,0,255,.05);
+  font-family:'Poppins',sans-serif;font-weight:600;font-size:22px;
+  padding:10px 26px;border-radius:999px;}
+
+/* CTA */
+.cta{display:inline-flex;align-items:center;gap:14px;margin-top:30px;
+  background:{{CTA_COLOR}};color:#fff;
+  font-family:'Poppins',sans-serif;font-weight:700;font-size:40px;
+  padding:22px 54px;border-radius:999px;
+  box-shadow:0 14px 32px rgba(0,0,0,.20);white-space:nowrap;}
+
+/* INFO BOTTOM — flotante, bottom safe zone */
+.bottom{position:absolute;bottom:265px;left:0;right:0;
+  display:flex;flex-direction:column;align-items:center;gap:12px;z-index:4;}
+.hashtag{font-family:'Poppins',sans-serif;font-weight:700;font-size:42px;
+  color:#0000FF;letter-spacing:1px;}
+.web{font-family:'Poppins',sans-serif;font-weight:400;font-size:33px;
+  color:#0B0B12;opacity:.45;}
+</style></head><body>
+<div class="canvas">
+  <div class="g1"></div><div class="g2"></div>
+
+  <!-- LOGO — flotante, sin barra -->
+  <div class="logo-wrap">
+    <img class="logo" src="{{LOGO_WORD_AZUL}}" alt="Chilaquiles TOP"/>
+    <!-- Omitir si {{BADGE_TEXT}} no aplica -->
+    <div class="badge"><span class="bdot"></span>{{BADGE_TEXT}}</div>
+  </div>
+
+  <!-- BLOQUE CENTRAL -->
+  <div class="center">
+    <div class="ct-hl ct-hl--lg">{{HEADLINE}}</div>
+    <!-- Omitir si {{PRODUCT_NAME}} no aplica -->
+    <div class="product-name">{{PRODUCT_NAME}}</div>
+    <div class="plate-stage">
+      <img class="plate" src="{{PLATE_URL}}" alt="Plato"/>
+      <!-- Omitir si {{PRICE}} no aplica -->
+      <div class="price-badge">{{PRICE}}</div>
+    </div>
+    <!-- Omitir si {{DATE}} no aplica -->
+    <div class="date-pill">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#0000FF" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+      Válido hasta el {{DATE}}
+    </div>
+    <div class="cta">{{CTA_TEXT}}</div>
+  </div>
+
+  <!-- INFO BOTTOM — flotante, sin barra -->
+  <div class="bottom">
+    <div class="hashtag">#MantenteTOP</div>
+    <div class="web">chilaquilestop.com</div>
+  </div>
+</div>
+</body></html>
