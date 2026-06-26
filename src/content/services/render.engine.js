@@ -231,11 +231,11 @@ export const buildHtmlFromSpec = (spec) => {
   // ── Headline: siempre en Zona 1 (texto), centrado en esa zona
   const hasBodyText = !!copy.bodyText;
   const headlineCenterY = hasHero
-    ? zoneTextTop + Math.round(zoneTextHeight * 0.35)   // más arriba para no tocar el plato
+    ? zoneTextTop + Math.round(zoneTextHeight * 0.55)   // centrado (el plato ya no lo tocará)
     : isPromo
-      ? availableTop + Math.round(availableHeight * 0.18) // promo sin plato: más arriba
+      ? availableTop + Math.round(availableHeight * 0.20) // promo sin plato: centrado arriba
       : hasBodyText
-        ? availableTop + Math.round(availableHeight * 0.15) // muy arriba para dejar espacio al texto largo
+        ? availableTop + Math.round(availableHeight * 0.18) // muy arriba para dejar espacio al texto largo
         : availableTop + Math.round(availableHeight * 0.35); // otro tema sin body: centrado alto
 
   // Tamaño de fuente: más corto = más grande

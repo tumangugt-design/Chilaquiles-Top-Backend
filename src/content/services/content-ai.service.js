@@ -135,17 +135,17 @@ export const generateDesignSpecWithAI = async (requestData) => {
     }
     if (!spec.objects) spec.objects = [];
 
-    // Si NO es promoción y NO hay includePlate, quitar todos los objetos de tipo product
-    if (spec.type !== 'promocion' && !requestData.includePlate) {
+    // Si no hay includePlate explícitamente habilitado, quitamos todos los productos (incluso si es promo)
+    if (!requestData.includePlate) {
       spec.objects = spec.objects.filter(o => o.type !== 'product');
     }
 
-    // Forza el plato seleccionado si el admin eligió uno específico
-    if (requestData.selectedPlate && requestData.selectedPlate !== 'aleatorio') {
+    // Forza el plato seleccionado si el admin eligió uno específico Y marcó includePlate
+    if (requestData.includePlate && requestData.selectedPlate && requestData.selectedPlate !== 'aleatorio') {
       const heroIdx = spec.objects.findIndex(o => o.role === 'hero' || o.type === 'product');
       if (heroIdx >= 0) {
         spec.objects[heroIdx].assetId = requestData.selectedPlate;
-      } else if (spec.type === 'promocion' || requestData.includePlate) {
+      } else {
         spec.objects.push({
           id: 'hero_product',
           type: 'product',
