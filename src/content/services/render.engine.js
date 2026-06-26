@@ -113,9 +113,8 @@ export const buildHtmlFromSpec = (spec) => {
     }
   }
 
-  // ── Badge de oferta (solo si es promo Y el header es ct-header--1 que ya lo lleva,
-  //    para los otros headers lo insertamos en el body debajo del header)
-  const showBodyBadge = copy.badge && headerClass !== 'ct-header--1';
+  // Badge en el body SOLO si se usa ct-header--3 (los headers 1 y 2 ya traen el badge integrado)
+  const showBodyBadge = copy.badge && headerClass === 'ct-header--3';
   const headerHeight = headerClass === 'ct-header--1' ? 280 : (headerClass === 'ct-header--2' ? 120 : 162);
 
   const badgeHtml = showBodyBadge ? `
@@ -201,7 +200,32 @@ export const buildHtmlFromSpec = (spec) => {
       ${copy.validUntil ? `<span style="font-size:13px;font-weight:600;opacity:.85;margin-top:4px;text-align:center;padding:0 10px;">Válido hasta ${copy.validUntil}</span>` : ''}
     </div>` : '';
 
-  // ── CTA Button
+  // ── Válido hasta (pill separado, más visible que el texto del círculo)
+  const validUntilHtml = copy.validUntil ? `
+    <div style="
+      position: absolute;
+      bottom: 196px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(255,255,255,0.92);
+      border: 1.5px solid var(--ct-azul);
+      color: var(--ct-azul);
+      font-family: var(--ct-font);
+      font-size: 19px;
+      font-weight: 600;
+      padding: 8px 24px;
+      border-radius: 999px;
+      z-index: 12;
+      white-space: nowrap;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+    ">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+      Válido hasta el ${copy.validUntil}
+    </div>` : '';
+
+  // ── CTA Button (WhatsApp)
   const ctaHtml = copy.cta ? `
     <div style="
       position: absolute;
@@ -224,11 +248,11 @@ export const buildHtmlFromSpec = (spec) => {
       gap: 14px;
     ">
       <svg width="26" height="26" viewBox="0 0 32 32" fill="#FFFFFF"><path d="M16 .4C7.4.4.5 7.3.5 15.9c0 2.8.7 5.4 2 7.8L.4 31.6l8.1-2.1c2.3 1.2 4.8 1.9 7.5 1.9 8.6 0 15.5-7 15.5-15.5C31.5 7.3 24.6.4 16 .4zm7.1 18.9c-.4-.2-2.3-1.1-2.6-1.3-.3-.1-.6-.2-.9.2-.3.4-1 1.3-1.2 1.5-.2.2-.4.3-.8.1-.4-.2-1.6-.6-3.1-1.9-1.1-1-1.9-2.3-2.2-2.7-.2-.4 0-.6.2-.8.2-.2.4-.4.5-.7.2-.2.2-.4.4-.7.1-.3.1-.5 0-.7-.1-.2-.9-2.2-1.3-3-.3-.8-.7-.7-.9-.7h-.8c-.3 0-.7.1-1.1.5-.4.4-1.4 1.4-1.4 3.4s1.5 3.9 1.7 4.2c.2.3 2.9 4.5 7.1 6.3 1 .4 1.8.7 2.4.9 1 .3 1.9.3 2.6.2.8-.1 2.3-1 2.7-1.9.3-.9.3-1.7.2-1.9-.1-.2-.4-.3-.8-.5z"/></svg>
-      ${copy.cta}
+      ${copy.cta || 'PIDE POR WHATSAPP'}
     </div>` : '';
 
   // ── Inyectar contenido dentro del background
-  const bodyContent = `${badgeHtml}${headlineHtml}${priceHtml}${heroHtml}${ctaHtml}`;
+  const bodyContent = `${badgeHtml}${headlineHtml}${priceHtml}${heroHtml}${validUntilHtml}${ctaHtml}`;
   let bgWithContent = bgBlock.replace('<!-- CONTENIDO DE LA PIEZA AQUÍ -->', bodyContent);
 
   // ── Armar HTML final

@@ -53,11 +53,19 @@ export const buildDesignSpecPrompt = (requestData = {}) => {
   const w = 1080;
   const h = isHistoria ? 1920 : 1080;
 
+  // Calcular fecha de validez legible
+  let validUntilStr = '';
+  if (isPromo && promotionData.endDate) {
+    const d = new Date(promotionData.endDate);
+    validUntilStr = d.toLocaleDateString('es-GT', { day: 'numeric', month: 'long' });
+  }
+
   const promoBlock = isPromo ? `
 PROMOCIÓN ACTIVA:
 - Nombre: "${promotionData.name}"
 - Descripción: "${promotionData.description || ''}"
 - Precio: "Q${promotionData.price}"
+${validUntilStr ? `- Válido hasta: "${validUntilStr}"` : ''}
 ` : '';
 
   const topiaBlock = includeTopIA ? `- INCLUIR mascota TopIA: assetId = "topia_avatar"` : `- NO incluir mascota TopIA`;
@@ -90,12 +98,13 @@ Footers:
   - "ct-footer--3" → Blanco borde naranja. Combina con Header2, Header3 y BG1.
 
 REGLAS DE DISEÑO:
-1. Escoge componentes que combinen entre sí (ver "Combina con").
-2. Si es PROMOCIÓN: incluye badge "OFERTA LIMITADA", precio en el campo price, y plato hero (a menos que includePlate sea false).
-3. Si NO es promoción: el campo price debe estar vacío (""), y objects puede estar vacío o contener solo TopIA si corresponde.
-4. El copy debe estar en ESPAÑOL CORRECTO, sin abreviaciones, sin anglicismos.
-5. El CTA siempre dice "ORDENA EN NUESTRA PÁGINA" o algo similar relacionado con chilaquilestop.com.
-6. IMPORTANTE: Devuelve SOLO JSON puro. Cero texto, cero comentarios, cero markdown.
+1. Escoge componentes que combinen entre sí (ver "Combina con"). NO elijas siempre los mismos — varía las combinaciones para que cada arte sea diferente.
+2. Si es PROMOCIÓN: el badge del header ya dice "OFERTA LIMITADA" — pon el campo badge vacío ("") excepto si usas ct-header--3 (que no tiene badge). Incluye precio en el campo price. Incluye plato hero.
+3. Si NO es promoción: price = "", badge puede ser el slogan "MANTENTE TOP" u otra frase de marca.
+4. El copy debe estar en ESPAÑOL CORRECTO, sin abreviaciones, sin anglicismos. Sé creativo y antojable.
+5. El CTA SIEMPRE dice "PIDE POR WHATSAPP" (ya que el botón lleva al WhatsApp de la marca, no a la web).
+6. Varía los colores dentro del brand book: en unas piezas usa el azul dominante, en otras el naranja, en otras combina. Nunca salgas de la paleta de marca.
+7. IMPORTANTE: Devuelve SOLO JSON puro. Cero texto, cero comentarios, cero markdown.
 
 ESTRUCTURA EXACTA A DEVOLVER (no pongas ningún comentario, no pongas // ni /* */):
 {
@@ -114,7 +123,8 @@ ESTRUCTURA EXACTA A DEVOLVER (no pongas ningún comentario, no pongas // ni /* *
     "subheadline": "Texto secundario descriptivo",
     "price": "${isPromo ? ('Q' + (promotionData?.price || '00')) : ''}",
     "validUntil": "",
-    "cta": "ORDENA EN NUESTRA PÁGINA"
+    "cta": "PIDE POR WHATSAPP",
+    "validUntil": "${validUntilStr}"
   },
   "objects": [],
   "caption": {
