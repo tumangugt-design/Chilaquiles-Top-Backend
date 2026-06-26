@@ -87,9 +87,58 @@ export const buildHtmlFromSpec = (spec) => {
   bgBlock     = injectVars(bgBlock,     logoVars);
   footerBlock = injectVars(footerBlock, logoVars);
 
-  // ── Detectar si el fondo es oscuro para ajustar colores de texto
-  const hasDark = bgClass === 'ct-bg--2';
-  const textColor = hasDark ? '#FFFFFF' : 'var(--ct-negro)';
+
+  // ══════════════════════════════════════════════════════════════
+  // ESQUEMA DE COLORES — 100% tokens del sistema (ct-tokens.css)
+  //
+  // BG1 (claro/lavanda) → texto azul o negro, acentos naranja
+  // BG2 (oscuro premium) → texto blanco, acentos lavanda/naranja
+  // BG3 (diagonal azul/blanco) → panel izq oscuro, panel der claro
+  // ══════════════════════════════════════════════════════════════
+  const COLOR_SCHEMES = {
+    'ct-bg--1': {
+      isDark:         false,
+      headlineColor:  'var(--ct-azul)',        // azul fuerte sobre fondo claro
+      subheadColor:   'var(--ct-negro)',        // negro profundo para legibilidad
+      badgeBg:        'var(--ct-naranja)',
+      badgeText:      'var(--ct-blanco)',
+      priceBg:        'var(--ct-azul)',
+      priceText:      'var(--ct-blanco)',
+      validUntilBg:   'rgba(255,255,255,0.92)',
+      validUntilBorder:'var(--ct-azul)',
+      validUntilColor: 'var(--ct-azul)',
+    },
+    'ct-bg--2': {
+      isDark:         true,
+      headlineColor:  'var(--ct-lavanda)',      // lavanda para fondo oscuro
+      subheadColor:   'rgba(229,230,252,0.85)', // lavanda semitransparente
+      badgeBg:        'var(--ct-naranja)',
+      badgeText:      'var(--ct-blanco)',
+      priceBg:        'var(--ct-naranja)',      // naranja sobre oscuro resalta más
+      priceText:      'var(--ct-blanco)',
+      validUntilBg:   'rgba(229,230,252,0.15)',
+      validUntilBorder:'var(--ct-lavanda)',
+      validUntilColor: 'var(--ct-lavanda)',
+    },
+    'ct-bg--3': {
+      isDark:         false,
+      headlineColor:  'var(--ct-azul)',
+      subheadColor:   'var(--ct-negro)',
+      badgeBg:        'var(--ct-naranja)',
+      badgeText:      'var(--ct-blanco)',
+      priceBg:        'var(--ct-naranja)',      // naranja sobre bg3 combina con acento
+      priceText:      'var(--ct-blanco)',
+      validUntilBg:   'rgba(255,255,255,0.95)',
+      validUntilBorder:'var(--ct-naranja)',
+      validUntilColor: 'var(--ct-naranja)',
+    },
+  };
+
+  const scheme = COLOR_SCHEMES[bgClass] || COLOR_SCHEMES['ct-bg--1'];
+
+  // En promos, el headline siempre en naranja para que resalte la oferta
+  const headlineColor = isPromo ? 'var(--ct-naranja)' : scheme.headlineColor;
+
 
   // ── Foto del plato (hero product)
   const heroObj = objects.find(o => o.role === 'hero' || o.type === 'product');
@@ -147,7 +196,7 @@ export const buildHtmlFromSpec = (spec) => {
       align-items: center;
       gap: 10px;
     ">
-      <span style="width:10px;height:10px;border-radius:50%;background:#fff;flex-shrink:0;"></span>
+      <span style="width:10px;height:10px;border-radius:50%;background:${scheme.badgeText};flex-shrink:0;"></span>
       ${copy.badge}
     </div>` : '';
 
@@ -185,7 +234,7 @@ export const buildHtmlFromSpec = (spec) => {
         font-family: var(--ct-font);
         font-size: ${h1FontSize};
         font-weight: 900;
-        color: ${isPromo ? 'var(--ct-naranja)' : (hasDark ? '#FFFFFF' : 'var(--ct-azul)')};
+        color: ${headlineColor};
         text-transform: uppercase;
         line-height: 1.05;
         margin: 0;
@@ -195,7 +244,7 @@ export const buildHtmlFromSpec = (spec) => {
         font-family: var(--ct-font);
         font-size: ${isPromo || hasHero ? '28px' : '30px'};
         font-weight: ${isPromo ? '600' : '500'};
-        color: ${hasDark ? 'rgba(255,255,255,0.85)' : textColor};
+        color: ${scheme.subheadColor};
         margin: ${isPromo ? '14px' : '22px'} 0 0 0;
         line-height: 1.4;
         max-width: 800px;
@@ -216,17 +265,17 @@ export const buildHtmlFromSpec = (spec) => {
       ${hasHero ? `top: ${priceTop}; transform: translateY(-50%) rotate(5deg);` : `top: ${priceTop}; transform: rotate(5deg);`}
       width: 190px;
       height: 190px;
-      background: var(--ct-azul);
+      background: ${scheme.priceBg};
       border-radius: 50%;
       display: flex;
       flex-direction: column;
       align-items: center;
       justify-content: center;
-      color: #fff;
+      color: ${scheme.priceText};
       font-family: var(--ct-font);
       font-weight: 900;
       z-index: 15;
-      box-shadow: var(--ct-sh-azul);
+      box-shadow: ${scheme.priceBg === 'var(--ct-naranja)' ? 'var(--ct-sh-nrj)' : 'var(--ct-sh-azul)'};
     ">
       <span style="font-size:52px;line-height:1;">${copy.price}</span>
     </div>` : '';
@@ -238,9 +287,9 @@ export const buildHtmlFromSpec = (spec) => {
       bottom: ${isPromo && !hasHero ? '190px' : '196px'};
       left: 50%;
       transform: translateX(-50%);
-      background: rgba(255,255,255,0.92);
-      border: 1.5px solid var(--ct-azul);
-      color: var(--ct-azul);
+      background: ${scheme.validUntilBg};
+      border: 1.5px solid ${scheme.validUntilBorder};
+      color: ${scheme.validUntilColor};
       font-family: var(--ct-font);
       font-size: 19px;
       font-weight: 600;
@@ -252,7 +301,7 @@ export const buildHtmlFromSpec = (spec) => {
       align-items: center;
       gap: 8px;
     ">
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="${scheme.validUntilColor === 'var(--ct-lavanda)' ? '#E5E6FC' : 'currentColor'}" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
       Válido hasta el ${copy.validUntil}
     </div>` : '';
 
