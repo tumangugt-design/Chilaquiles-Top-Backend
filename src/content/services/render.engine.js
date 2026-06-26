@@ -12,7 +12,7 @@ export const renderImageFromSpec = async (spec) => {
   console.log('[RenderEngine] Sending HTML to Browserless, size:', html.length, 'chars, w:', width, 'h:', height);
 
   const browserlessFunction = `
-    module.exports = async ({ page, context }) => {
+    export default async ({ page, context }) => {
       const { html, width, height } = context;
       await page.setViewport({ width, height });
       await page.setContent(html, { waitUntil: 'networkidle0' });
