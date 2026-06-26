@@ -100,7 +100,7 @@ REGLAS DE DISEÑO:
 1. FONDO: Siempre usa ct-bg--1 o ct-bg--3. NUNCA ct-bg--2.
 2. HEADER para PROMOCIÓN: SIEMPRE usa ct-header--1 (azul con logo blanco). FOOTER: ct-footer--1.
 3. HEADER para OTRO TEMA: elige entre ct-header--2 o ct-header--3. FOOTER: ct-footer--3.
-4. BADGE: Los headers 1 y 2 ya incluyen el badge — deja el campo badge vacío ("") al usarlos. Solo pon texto en badge si usas ct-header--3.
+4. BADGE: Úsalo SOLO para Promociones. Para "Otro Tema", déjalo SIEMPRE vacío ("").
 5. PROMO: precio en campo price (ej: "Q55"), badge vacío si usas header--1 o header--2.
 6. COPY: ESPAÑOL correcto, antojable, persuasivo. Headline corto y poderoso. Usa "bodyText" ÚNICAMENTE para comunicados largos o instrucciones (Ej. "Otro tema"). NUNCA uses "bodyText" para Promociones.
 7. CTA: siempre "PIDE POR WHATSAPP" para promos.

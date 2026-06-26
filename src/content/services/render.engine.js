@@ -197,9 +197,10 @@ export const buildHtmlFromSpec = (spec) => {
   }
 
   const hasHero = !!heroHtml;
+  const hasBodyText = !!copy.bodyText;
 
-  // Badge en el body SOLO si se usa ct-header--3
-  const showBodyBadge = copy.badge && headerClass === 'ct-header--3';
+  // Badge en el body SOLO si se usa ct-header--3, NO hay bodyText y ES PROMO (para evitar colisión)
+  const showBodyBadge = copy.badge && headerClass === 'ct-header--3' && !hasBodyText && isPromo;
 
   // ── Badge
   const badgeHtml = showBodyBadge ? `
@@ -229,7 +230,6 @@ export const buildHtmlFromSpec = (spec) => {
     </div>` : '';
 
   // ── Headline: siempre en Zona 1 (texto), centrado en esa zona
-  const hasBodyText = !!copy.bodyText;
   const headlineCenterY = hasHero
     ? zoneTextTop + Math.round(zoneTextHeight * 0.55)   // centrado (el plato ya no lo tocará)
     : hasBodyText
