@@ -1,6 +1,7 @@
 import { ContentDraft } from '../models/ContentDraft.model.js';
 import { generateContentFromIdea, generateDesignSpecWithAI } from './content-ai.service.js';
 import { renderImageFromSpec } from './render.engine.js';
+import { getFirebaseStorage } from '../../configs/firebase.js';
 
 export const createDraftFromIdea = async (ideaData, userId) => {
   const { topic, format, formats, platforms, objective, promotionData, includePlate, includeTopIA, selectedPlate } = ideaData;
@@ -39,8 +40,28 @@ export const createDraftFromIdea = async (ideaData, userId) => {
       width: 1080,
       height: isHistoria ? 1920 : 1080
     });
-    imageUrl = `data:image/png;base64,${pngBuffer.toString('base64')}`;
-    console.log('[Content Service] Image rendered OK');
+    const storage = getFirebaseStorage();
+    if (storage) {
+      console.log('[Content Service] Uploading PNG to Firebase Storage...');
+      const bucket = storage.bucket();
+      const filename = `content_arts/art_${Date.now()}_${Math.floor(Math.random() * 1000)}.png`;
+      const file = bucket.file(filename);
+      
+      await file.save(pngBuffer, {
+        metadata: { contentType: 'image/png' }
+      });
+      
+      const [url] = await file.getSignedUrl({
+        action: 'read',
+        expires: '01-01-2100' // Far future to act as a public URL
+      });
+      
+      imageUrl = url;
+      console.log('[Content Service] Image uploaded successfully:', imageUrl);
+    } else {
+      console.log('[Content Service] Firebase not configured, falling back to base64');
+      imageUrl = `data:image/png;base64,${pngBuffer.toString('base64')}`;
+    }
   } catch (renderErr) {
     console.error('[Content Service] Render failed:', renderErr.message);
   }

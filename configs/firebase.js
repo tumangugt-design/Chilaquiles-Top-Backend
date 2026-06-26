@@ -8,12 +8,14 @@ const getAdminConfig = () => {
   const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
   const privateKey = process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n');
   const databaseURL = process.env.FIREBASE_DATABASE_URL;
+  const storageBucket = process.env.FIREBASE_STORAGE_BUCKET;
 
   return {
     projectId,
     clientEmail,
     privateKey,
     databaseURL,
+    storageBucket,
     hasAdminCredentials: Boolean(projectId && clientEmail && privateKey)
   };
 };
@@ -36,7 +38,8 @@ export const initFirebaseAdmin = () => {
           clientEmail,
           privateKey
         }),
-        ...(databaseURL ? { databaseURL } : {})
+        ...(databaseURL ? { databaseURL } : {}),
+        ...(storageBucket ? { storageBucket } : {})
       });
     }
 
