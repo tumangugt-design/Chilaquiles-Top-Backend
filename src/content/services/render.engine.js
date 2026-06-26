@@ -225,11 +225,14 @@ export const buildHtmlFromSpec = (spec) => {
     </div>` : '';
 
   // ── Headline: siempre en Zona 1 (texto), centrado en esa zona
+  const hasBodyText = !!copy.bodyText;
   const headlineCenterY = hasHero
-    ? zoneTextTop + Math.round(zoneTextHeight / 2)   // centrado en zona texto (con plato)
+    ? zoneTextTop + Math.round(zoneTextHeight * 0.35)   // más arriba para no tocar el plato
     : isPromo
-      ? availableTop + Math.round(availableHeight * 0.20) // promo sin plato: más arriba
-      : availableTop + Math.round(availableHeight * 0.22); // otro tema: centrado alto
+      ? availableTop + Math.round(availableHeight * 0.18) // promo sin plato: más arriba
+      : hasBodyText
+        ? availableTop + Math.round(availableHeight * 0.15) // muy arriba para dejar espacio al texto largo
+        : availableTop + Math.round(availableHeight * 0.35); // otro tema sin body: centrado alto
 
   // Tamaño de fuente: más corto = más grande
   const h1FontSize = copy.headline.length > 22 ? '58px'
@@ -274,11 +277,10 @@ export const buildHtmlFromSpec = (spec) => {
   const bodyTextHtml = (copy.bodyText && !hasHero) ? `
     <div style="
       position: absolute;
-      top: ${zonePlateTop}px;
+      top: ${availableTop + Math.round(availableHeight * 0.55)}px;
       left: 50%;
-      transform: translateX(-50%);
+      transform: translate(-50%, -50%);
       width: 82%;
-      max-height: ${zonePlateHeight}px;
       text-align: left;
       z-index: 10;
       font-family: var(--ct-font);
