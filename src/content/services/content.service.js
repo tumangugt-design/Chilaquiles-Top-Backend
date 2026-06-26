@@ -23,7 +23,7 @@ export const createDraftFromIdea = async (ideaData, userId) => {
     topic,
     format: finalFormat,
     promotionData,
-    includePlate: includePlate || !!promotionData,
+    includePlate: !!includePlate,
     includeTopIA: includeTopIA || false,
     selectedPlate
   });
