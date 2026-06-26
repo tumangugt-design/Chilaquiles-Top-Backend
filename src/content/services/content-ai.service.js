@@ -1,7 +1,36 @@
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
 import { getClaudeCompletion } from './claude.service.js';
 import { BrandKnowledge } from '../models/BrandKnowledge.model.js';
 import { ContentStandard } from '../models/ContentStandard.model.js';
-import { buildDesignSpecPrompt } from '../config/brand.config.js';
+import { AssetCatalog, resolveAsset } from '../config/asset.catalog.js';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+/**
+ * Helper para leer los nuevos templates HTML
+ */
+const readTemplate = (filename) => {
+  try {
+    return fs.readFileSync(path.join(__dirname, '../templates', filename), 'utf-8');
+  } catch (e) {
+    console.error(`[Content AI] No se pudo leer template ${filename}:`, e.message);
+    throw e;
+  }
+};
+
+/**
+ * Lee la guía ct-composing-guide.md
+ */
+const readGuide = () => {
+  try {
+    return fs.readFileSync(path.join(__dirname, '../ct-composing-guide.md'), 'utf-8');
+  } catch (e) {
+    console.error(`[Content AI] No se pudo leer la guía:`, e.message);
+    return 'Eres el generador de contenido visual de Chilaquiles TOP.';
+  }
+};
 
 /**
  * Genera el contenido textual (copy, caption, hashtags) para la publicación.
@@ -90,119 +119,93 @@ Formato de salida REQUERIDO (JSON puro, sin markdown ni explicaciones):
   }
 };
 
-/**
- * Genera el DesignSpec JSON — instrucciones para el motor de render.
- * La IA elige componentes HTML, copia persuasiva y objetos visuales.
- */
 export const generateDesignSpecWithAI = async (requestData) => {
-  const prompt = buildDesignSpecPrompt(requestData);
+  const { topic, format, promotionData, includePlate, selectedPlate } = requestData;
 
-  console.log('[Content AI] Generating DesignSpec with AI Art Director...');
+  console.log('[Content AI] Generando HTML con Claude Art Director...');
+
+  // 1. Determinar URL del plato si se requiere
+  let plateUrl = '';
+  if (includePlate) {
+    if (!selectedPlate || selectedPlate === 'aleatorio') {
+      const keys = Object.keys(AssetCatalog.products);
+      const randomKey = keys[Math.floor(Math.random() * keys.length)];
+      plateUrl = AssetCatalog.products[randomKey].url;
+    } else {
+      plateUrl = resolveAsset(selectedPlate);
+    }
+  }
+
+  // 2. Determinar archivo de template basado en el request
+  const isPost = format === 'post';
+  const folder = isPost ? 'Posts' : 'Historias';
+  let templateFilename = '';
+  
+  if (includePlate) {
+    templateFilename = isPost ? 'ct-post-promo.html' : 'ct-story-promo.html';
+  } else {
+    templateFilename = isPost ? 'ct-post-texto.html' : 'ct-story-texto.html';
+  }
+
+  const templateHtml = readTemplate(`${folder}/${templateFilename}`);
+  const systemPrompt = readGuide();
+
+  // 3. Preparar User Prompt para inyectar a Claude
+  let userPrompt = `A continuación tienes la solicitud para el nuevo arte.
+Formato seleccionado: ${format}
+Tema: ${topic}
+`;
+
+  if (promotionData) {
+    userPrompt += `Promoción: ${promotionData.name}
+Descripción: ${promotionData.description}
+Precio: ${promotionData.price}
+Vigencia: ${promotionData.endDate || 'No especificada'}
+`;
+  }
+
+  userPrompt += `
+URLs CONSTANTES A UTILIZAR:
+- LOGO_WORD_BLANCO: ${AssetCatalog.logos.logo_word_blanco.url}
+- LOGO_WORD_AZUL: ${AssetCatalog.logos.logo_word_azul.url}
+`;
+  
+  if (includePlate) {
+    userPrompt += `- PLATE_URL: ${plateUrl}\n`;
+  }
+
+  userPrompt += `
+TU TAREA:
+Rellena el siguiente template HTML con las variables {{}} solicitadas, basándote en la información anterior y tu creatividad. 
+DEVUELVE ÚNICAMENTE EL CÓDIGO HTML PURO, SIN EXPLICACIONES, SIN MARKDOWN (\`\`\`html).
+
+TEMPLATE A UTILIZAR:
+${templateHtml}
+`;
 
   try {
-    const systemPrompt = `Eres un profesional experto en marketing, redes sociales, edición y renderización de HTML para artes gráficos de "Chilaquiles TOP".
-Debes devolver estrictamente el JSON con la configuración de componentes, siguiendo fielmente las reglas de la marca.`;
-
     const aiResponse = await getClaudeCompletion(
       systemPrompt,
-      prompt,
-      true, // isJson
-      0.95  // temperature (alta para variaciones)
+      userPrompt,
+      false, // no es JSON, es HTML
+      0.85   // Temperatura moderada alta para buena escritura
     );
 
     if (!aiResponse || typeof aiResponse !== 'string') {
       throw new Error('AI returned empty or non-string response');
     }
 
-    // Limpieza agresiva: quitar markdown, comentarios JS (// ...) y /* ... */
-    let clean = aiResponse
-      .replace(/```json/gi, '')
+    // Limpieza agresiva de markdown
+    const finalHtml = aiResponse
+      .replace(/```html/gi, '')
       .replace(/```/g, '')
-      .replace(/\/\/[^\n]*/g, '')     // quita comentarios de línea
-      .replace(/\/\*[\s\S]*?\*\//g, '') // quita comentarios de bloque
       .trim();
 
-    // Si la respuesta empieza con texto antes del JSON, intentar extraer el JSON
-    const jsonStart = clean.indexOf('{');
-    const jsonEnd = clean.lastIndexOf('}');
-    if (jsonStart > 0) {
-      clean = clean.substring(jsonStart, jsonEnd + 1);
-    }
-
-    const spec = JSON.parse(clean);
-
-    // Validaciones de seguridad
-    if (!spec.selectedComponents) {
-      spec.selectedComponents = { background: 'ct-bg--1', header: 'ct-header--1', footer: 'ct-footer--1' };
-    }
-    if (!spec.copy) {
-      spec.copy = { badge: '', headline: 'CHILAQUILES TOP', subheadline: '', price: '', cta: 'ORDENA EN NUESTRA PÁGINA' };
-    }
-    if (!spec.objects) spec.objects = [];
-
-    // Si no hay includePlate explícitamente habilitado, quitamos todos los productos (incluso si es promo)
-    if (!requestData.includePlate) {
-      spec.objects = spec.objects.filter(o => o.type !== 'product');
-    }
-
-    // Forza el plato seleccionado si el admin eligió uno específico Y marcó includePlate
-    if (requestData.includePlate && requestData.selectedPlate && requestData.selectedPlate !== 'aleatorio') {
-      const heroIdx = spec.objects.findIndex(o => o.role === 'hero' || o.type === 'product');
-      if (heroIdx >= 0) {
-        spec.objects[heroIdx].assetId = requestData.selectedPlate;
-      } else {
-        spec.objects.push({
-          id: 'hero_product',
-          type: 'product',
-          assetId: requestData.selectedPlate,
-          role: 'hero',
-          size: { width: 420 },
-          effects: { shadow: 'plate' }
-        });
-      }
-    }
-
-    console.log('[Content AI] DesignSpec generated OK. Components:', spec.selectedComponents);
-    return spec;
+    return finalHtml;
 
   } catch (error) {
     console.error('[Content AI] Error generating DesignSpec:', error.message);
-
-    // Fallback con spec básico para no romper el flujo
-    const isPromo = !!requestData.promotionData;
-    return {
-      format: requestData.format || 'post',
-      width: 1080,
-      height: requestData.format === 'historia' ? 1920 : 1080,
-      type: isPromo ? 'promocion' : 'comunicado',
-      selectedComponents: {
-        background: 'ct-bg--1',
-        header: 'ct-header--1',
-        footer: 'ct-footer--1'
-      },
-      copy: {
-        badge: isPromo ? 'OFERTA LIMITADA' : 'CHILAQUILES TOP',
-        headline: isPromo ? (requestData.promotionData?.name || 'OFERTA ESPECIAL').toUpperCase() : (requestData.topic || 'MANTENTE TOP').toUpperCase(),
-        subheadline: isPromo ? 'Solo en Villa Nueva' : 'Los chilaquiles más top de Guatemala',
-        price: isPromo ? `Q${requestData.promotionData?.price || ''}` : '',
-        validUntil: '',
-        cta: 'ORDENA EN NUESTRA PÁGINA'
-      },
-      objects: (isPromo || requestData.includePlate) ? [{
-        id: 'hero_product',
-        type: 'product',
-        assetId: 'chilaquiles_2',
-        role: 'hero',
-        size: { width: 420 },
-        effects: { shadow: 'plate' }
-      }] : [],
-      caption: {
-        instagram: `¡${requestData.topic || 'Chilaquiles TOP'} ahora disponible! 🔥 #ChilaquilesTop #MantenteTOP`,
-        facebook: `Ahora disponible en Villa Nueva. Ordena en chilaquilestop.com`,
-        whatsapp: `¡Hola! Quiero pedir: ${requestData.topic || 'Chilaquiles TOP'}. Ver menú en chilaquilestop.com`
-      },
-      hashtags: ['#ChilaquilesTop', '#MantenteTOP', '#VillaNueva', '#Guatemala']
-    };
+    throw error;
   }
 };
 

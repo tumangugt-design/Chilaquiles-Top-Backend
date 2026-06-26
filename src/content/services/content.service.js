@@ -17,9 +17,9 @@ export const createDraftFromIdea = async (ideaData, userId) => {
     console.error('[Content Service] generateContentFromIdea failed, using defaults:', e.message);
   }
 
-  // 2. Generar DesignSpec con IA (Director de Arte)
-  console.log('[Content Service] Requesting DesignSpec from AI Art Director...');
-  const designSpec = await generateDesignSpecWithAI({
+  // 2. Generar DesignSpec con IA (ahora devuelve HTML crudo)
+  console.log('[Content Service] Requesting HTML from AI Art Director...');
+  const designHtml = await generateDesignSpecWithAI({
     topic,
     format: finalFormat,
     promotionData,
@@ -28,12 +28,17 @@ export const createDraftFromIdea = async (ideaData, userId) => {
     selectedPlate
   });
 
-  // 3. Renderizar PNG con Sharp
+  // 3. Renderizar PNG con Browserless
   let imageUrl = null;
+  const isHistoria = finalFormat === 'historia';
 
   try {
-    console.log('[Content Service] Rendering PNG with Sharp...');
-    const pngBuffer = await renderImageFromSpec(designSpec);
+    console.log('[Content Service] Rendering PNG with Browserless...');
+    const pngBuffer = await renderImageFromSpec({
+      html: designHtml,
+      width: 1080,
+      height: isHistoria ? 1920 : 1080
+    });
     imageUrl = `data:image/png;base64,${pngBuffer.toString('base64')}`;
     console.log('[Content Service] Image rendered OK');
   } catch (renderErr) {
@@ -52,8 +57,8 @@ export const createDraftFromIdea = async (ideaData, userId) => {
     formats: [finalFormat],
     copy: contentData?.copy || {},
     visual: {
-      designSpec,
-      artProvider: 'sharp_svg',
+      designSpec: designHtml, // Guardamos el HTML crudo
+      artProvider: 'browserless',
       imageUrl,
       githubPath: null
     },
