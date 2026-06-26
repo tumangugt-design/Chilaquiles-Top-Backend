@@ -49,7 +49,7 @@ body{background:#FAFAFF;}
 .badge{display:inline-flex;align-items:center;gap:8px;background:#FF6B00;color:#fff;
   font-family:'Poppins',sans-serif;font-weight:700;font-size:22px;letter-spacing:1.5px;
   text-transform:uppercase;padding:9px 24px;border-radius:999px;
-  box-shadow:0 8px 22px rgba(255,107,0,.32);}
+  box-shadow:0 8px 22px rgba(255,107,0,.32);margin-bottom:20px;}
 .bdot{width:10px;height:10px;border-radius:50%;background:#fff;
   box-shadow:0 0 0 4px rgba(255,255,255,.25);flex-shrink:0;}
 /* BLOQUE CENTRAL — centrado en safe area (y=250 a y=1670, centro y=960) */
@@ -83,11 +83,11 @@ body{background:#FAFAFF;}
   <!-- LOGO — flotante, sin barra -->
   <div class="logo-wrap">
     <img class="logo" src="{{LOGO_WORD_AZUL}}" alt="Chilaquiles TOP"/>
-    <!-- Omitir si {{BADGE_TEXT}} no aplica -->
-    <div class="badge"><span class="bdot"></span>{{BADGE_TEXT}}</div>
   </div>
   <!-- BLOQUE CENTRAL -->
   <div class="center">
+    <!-- Omitir el siguiente div si {{BADGE_TEXT}} no aplica -->
+    <div class="badge"><span class="bdot"></span>{{BADGE_TEXT}}</div>
     <!--
       Seleccionar clase según longitud del {{HEADLINE}}:
         ct-hl--xl < 15c → 170px | ct-hl--lg 15-35c → 130px
