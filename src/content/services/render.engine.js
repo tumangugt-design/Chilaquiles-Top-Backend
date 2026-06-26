@@ -232,11 +232,9 @@ export const buildHtmlFromSpec = (spec) => {
   const hasBodyText = !!copy.bodyText;
   const headlineCenterY = hasHero
     ? zoneTextTop + Math.round(zoneTextHeight * 0.55)   // centrado (el plato ya no lo tocará)
-    : isPromo
-      ? availableTop + Math.round(availableHeight * 0.20) // promo sin plato: centrado arriba
-      : hasBodyText
-        ? availableTop + Math.round(availableHeight * 0.18) // muy arriba para dejar espacio al texto largo
-        : availableTop + Math.round(availableHeight * 0.35); // otro tema sin body: centrado alto
+    : hasBodyText
+      ? availableTop + Math.round(availableHeight * 0.15) // muy arriba para dejar espacio al texto largo
+      : availableTop + Math.round(availableHeight * 0.40); // otro tema o promo sin body: centrado alto
 
   // Tamaño de fuente: más corto = más grande
   const h1FontSize = copy.headline.length > 22 ? '58px'
@@ -288,16 +286,10 @@ export const buildHtmlFromSpec = (spec) => {
       text-align: left;
       z-index: 10;
       font-family: var(--ct-font);
-      font-size: 22px;
+      font-size: 24px;
       font-weight: 500;
       color: ${scheme.subheadColor};
-      line-height: 1.7;
-      background: linear-gradient(145deg, rgba(255, 255, 255, 0.95) 0%, rgba(255, 255, 255, 0.75) 100%);
-      padding: 40px 48px;
-      border-radius: 32px;
-      border: 1px solid rgba(255, 255, 255, 1);
-      box-shadow: 0 24px 48px rgba(0,0,0,0.08), inset 0 2px 0 rgba(255,255,255,1);
-      backdrop-filter: blur(16px);
+      line-height: 1.6;
     ">
       ${copy.bodyText.replace(/\n/g, '<br/>')}
     </div>` : '';
