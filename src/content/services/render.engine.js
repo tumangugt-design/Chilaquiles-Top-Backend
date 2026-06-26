@@ -182,11 +182,15 @@ export const buildHtmlFromSpec = (spec) => {
           left: 50%;
           top: ${plateCenterY}px;
           transform: translate(-50%, -50%);
-          width: 500px;
+          width: 85%;
+          height: ${zonePlateHeight}px;
+          display: flex;
+          justify-content: center;
+          align-items: center;
           z-index: 5;
         ">
           <img src="${imgUrl}"
-               style="width:100%;height:auto;filter:drop-shadow(0 24px 36px rgba(11,11,18,0.35));"
+               style="max-width: 100%; max-height: 100%; object-fit: contain; filter: drop-shadow(0 24px 36px rgba(11,11,18,0.35));"
                crossorigin="anonymous" />
         </div>`;
     }
@@ -284,15 +288,16 @@ export const buildHtmlFromSpec = (spec) => {
       text-align: left;
       z-index: 10;
       font-family: var(--ct-font);
-      font-size: 20px;
-      font-weight: 400;
+      font-size: 22px;
+      font-weight: 500;
       color: ${scheme.subheadColor};
-      line-height: 1.6;
-      background: rgba(255, 255, 255, 0.7);
-      padding: 32px 40px;
-      border-radius: 24px;
-      box-shadow: 0 10px 30px rgba(0,0,0,0.05);
-      backdrop-filter: blur(10px);
+      line-height: 1.7;
+      background: linear-gradient(145deg, rgba(255, 255, 255, 0.95) 0%, rgba(255, 255, 255, 0.75) 100%);
+      padding: 40px 48px;
+      border-radius: 32px;
+      border: 1px solid rgba(255, 255, 255, 1);
+      box-shadow: 0 24px 48px rgba(0,0,0,0.08), inset 0 2px 0 rgba(255,255,255,1);
+      backdrop-filter: blur(16px);
     ">
       ${copy.bodyText.replace(/\n/g, '<br/>')}
     </div>` : '';
