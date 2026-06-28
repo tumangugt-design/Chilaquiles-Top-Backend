@@ -39,16 +39,17 @@ export const publishToFacebook = async (imageUrl, message) => {
  * @param {boolean} isStory Si es true, publica como HISTORIA
  */
 export const publishToInstagram = async (imageUrl, caption, isStory = false) => {
-  const IG_ACCOUNT_ID = process.env.META_IG_ACCOUNT_ID;
-  const ACCESS_TOKEN = process.env.META_ACCESS_TOKEN;
+  // Ahora usamos la variable de entorno que ya tienes (IG_ACCESS_TOKEN)
+  const ACCESS_TOKEN = process.env.IG_ACCESS_TOKEN || process.env.META_ACCESS_TOKEN;
+  const IG_GRAPH_URL = 'https://graph.instagram.com/v20.0';
 
-  if (!IG_ACCOUNT_ID || !ACCESS_TOKEN) {
-    throw new Error('Faltan credenciales META_IG_ACCOUNT_ID o META_ACCESS_TOKEN');
+  if (!ACCESS_TOKEN) {
+    throw new Error('Falta la credencial IG_ACCESS_TOKEN');
   }
 
   try {
     console.log(`[Publish Service] Creando contenedor IG (${isStory ? 'Story' : 'Feed'})...`);
-    // Paso 1: Crear el contenedor de media
+    // Paso 1: Crear el contenedor de media (usando 'me' para cuentas de Instagram directas)
     const mediaParams = {
       image_url: imageUrl,
       access_token: ACCESS_TOKEN
@@ -60,7 +61,7 @@ export const publishToInstagram = async (imageUrl, caption, isStory = false) => 
       mediaParams.caption = caption || '';
     }
 
-    const mediaRes = await axios.post(`${META_GRAPH_URL}/${IG_ACCOUNT_ID}/media`, null, {
+    const mediaRes = await axios.post(`${IG_GRAPH_URL}/me/media`, null, {
       params: mediaParams
     });
 
@@ -68,7 +69,7 @@ export const publishToInstagram = async (imageUrl, caption, isStory = false) => 
     console.log(`[Publish Service] Contenedor IG creado: ${creationId}. Publicando...`);
 
     // Paso 2: Publicar el contenedor
-    const publishRes = await axios.post(`${META_GRAPH_URL}/${IG_ACCOUNT_ID}/media_publish`, null, {
+    const publishRes = await axios.post(`${IG_GRAPH_URL}/me/media_publish`, null, {
       params: {
         creation_id: creationId,
         access_token: ACCESS_TOKEN
