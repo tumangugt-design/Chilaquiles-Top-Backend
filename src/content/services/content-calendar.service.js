@@ -1,6 +1,6 @@
 import { ContentCalendar } from '../models/ContentCalendar.model.js';
 import { ContentDraft } from '../models/ContentDraft.model.js';
-import { publishToMeta } from './meta.service.js';
+import { publishToFacebook, publishToInstagram } from './publish.service.js';
 
 export const schedulePublication = async (draftId, platform, format, scheduledAt) => {
   const draft = await ContentDraft.findById(draftId);
@@ -47,7 +47,17 @@ export const runScheduler = async () => {
     await item.save();
 
     try {
-      await publishToMeta(item.contentDraftId, item.platform, item.format);
+      const draft = item.contentDraftId;
+      const imageUrl = draft.visual?.imageUrl;
+      const caption = draft.copy?.post || draft.copy?.story || draft.copy?.caption || draft.title;
+      const isHistoria = item.format === 'historia' || draft.formats?.includes('historia');
+
+      if (item.platform === 'facebook') {
+        await publishToFacebook(imageUrl, caption);
+      } else if (item.platform === 'instagram') {
+        await publishToInstagram(imageUrl, caption, isHistoria);
+      }
+
       item.status = 'published';
       
       item.contentDraftId.status = 'published';
