@@ -122,21 +122,32 @@ export const createManualDraft = async (imageBase64, promptText, userId, format 
     throw new Error('Fallo al subir la imagen al servidor');
   }
 
-  // Generar copy con Claude Vision
+  // Generar copy con Claude Vision solo si no es historia
   let contentData = null;
-  try {
-    const aiRes = await generateCaptionForImage(imageBase64, promptText);
-    contentData = aiRes.data;
-  } catch (e) {
-    console.error('[Content Service] Error con Claude Vision:', e);
+  if (format === 'historia') {
     contentData = {
-      title: 'Publicación Manual',
+      title: 'Historia Manual',
       copy: {
         main: '',
-        caption: promptText || '',
-        hashtags: ['#ChilaquilesTop']
+        caption: '',
+        hashtags: []
       }
     };
+  } else {
+    try {
+      const aiRes = await generateCaptionForImage(imageBase64, promptText);
+      contentData = aiRes.data;
+    } catch (e) {
+      console.error('[Content Service] Error con Claude Vision:', e);
+      contentData = {
+        title: 'Publicación Manual',
+        copy: {
+          main: '',
+          caption: promptText || '',
+          hashtags: ['#ChilaquilesTop']
+        }
+      };
+    }
   }
 
   const draft = new ContentDraft({
