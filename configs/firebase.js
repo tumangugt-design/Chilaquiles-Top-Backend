@@ -22,7 +22,8 @@ const getAdminConfig = () => {
 
 export const initFirebaseAdmin = () => {
   try {
-    const { projectId, clientEmail, privateKey, databaseURL, hasAdminCredentials } = getAdminConfig();
+    const adminObj = admin.default || admin;
+    const { projectId, clientEmail, privateKey, databaseURL, storageBucket, hasAdminCredentials } = getAdminConfig();
 
     if (!hasAdminCredentials) {
       firebaseEnabled = false;
@@ -31,9 +32,9 @@ export const initFirebaseAdmin = () => {
       return null;
     }
 
-    if (!admin.apps.length) {
-      admin.initializeApp({
-        credential: admin.credential.cert({
+    if (!adminObj.apps || !adminObj.apps.length) {
+      adminObj.initializeApp({
+        credential: adminObj.credential.cert({
           projectId,
           clientEmail,
           privateKey
@@ -45,7 +46,7 @@ export const initFirebaseAdmin = () => {
 
     firebaseEnabled = true;
     firebaseInitialized = true;
-    return admin;
+    return adminObj;
   } catch (error) {
     firebaseEnabled = false;
     firebaseInitialized = false;
@@ -55,10 +56,11 @@ export const initFirebaseAdmin = () => {
 };
 
 export const getFirebaseAdmin = () => {
+  const adminObj = admin.default || admin;
   if (!firebaseInitialized) {
     initFirebaseAdmin();
   }
-  return admin.apps.length ? admin : null;
+  return adminObj.apps && adminObj.apps.length ? adminObj : null;
 };
 
 export const getFirebaseAuth = () => {
@@ -78,14 +80,16 @@ export const getFirebaseFirestore = () => {
 
 export const getFirebaseStorage = () => {
   const app = getFirebaseAdmin();
-  return app ? admin.storage() : null;
+  const adminObj = admin.default || admin;
+  return app ? adminObj.storage().bucket() : null;
 };
 
 export const isFirebaseEnabled = () => {
+  const adminObj = admin.default || admin;
   if (!firebaseInitialized) {
     initFirebaseAdmin();
   }
-  return firebaseEnabled && admin.apps.length > 0;
+  return firebaseEnabled && adminObj.apps && adminObj.apps.length > 0;
 };
 
 export default admin;
