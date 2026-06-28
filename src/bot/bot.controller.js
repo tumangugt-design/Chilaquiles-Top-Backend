@@ -378,9 +378,14 @@ export const triggerSurveyCronJob = async (req, res) => {
     console.log('[API Cron Trigger] Running manual survey check...');
     const { runSurveyCheck } = await import('./survey.cron.js');
     await runSurveyCheck();
-    res.status(200).json({ success: true, message: 'Survey check executed successfully.' });
+
+    console.log('[API Cron Trigger] Running content scheduler check...');
+    const { runScheduler } = await import('../content/services/content-calendar.service.js');
+    await runScheduler();
+
+    res.status(200).send('Crons ejecutados exitosamente');
   } catch (error) {
-    console.error('[API Cron Trigger] Error executing manual survey check:', error);
-    res.status(500).json({ success: false, error: error.message });
+    console.error('[API Cron Trigger] Error executing manual crons:', error);
+    res.status(500).send('Error interno ejecutando crons');
   }
 };
