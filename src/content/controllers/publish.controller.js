@@ -19,7 +19,7 @@ export const publishDraft = async (req, res) => {
     const isHistoria = draft.formats?.includes('historia');
     
     // Obtener texto del copy dependiendo del formato
-    const caption = draft.copy?.post || draft.copy?.story || draft.title;
+    const caption = draft.copy?.post || draft.copy?.story || draft.copy?.caption || draft.title;
 
     const results = [];
     const errors = [];

@@ -23,25 +23,27 @@ const getAdminConfig = () => {
 export const initFirebaseAdmin = () => {
   try {
     const adminObj = admin.default || admin;
-    const { projectId, clientEmail, privateKey, databaseURL, storageBucket, hasAdminCredentials } = getAdminConfig();
-
-    if (!hasAdminCredentials) {
-      firebaseEnabled = false;
-      firebaseInitialized = false;
-      console.warn('Firebase Admin SDK credentials are missing');
-      return null;
-    }
+    const { projectId, clientEmail, privateKey, databaseURL } = getAdminConfig();
+    const storageBucket = process.env.FIREBASE_STORAGE_BUCKET || 'chilaquiles-top.appspot.com';
 
     if (!adminObj.apps || !adminObj.apps.length) {
-      adminObj.initializeApp({
-        credential: adminObj.credential.cert({
-          projectId,
-          clientEmail,
-          privateKey
-        }),
-        ...(databaseURL ? { databaseURL } : {}),
-        ...(storageBucket ? { storageBucket } : {})
-      });
+      if (projectId && clientEmail && privateKey) {
+        adminObj.initializeApp({
+          credential: adminObj.credential.cert({
+            projectId,
+            clientEmail,
+            privateKey
+          }),
+          ...(databaseURL ? { databaseURL } : {}),
+          storageBucket
+        });
+      } else {
+        console.log('[Firebase] Inicializando con Application Default Credentials');
+        adminObj.initializeApp({
+          ...(databaseURL ? { databaseURL } : {}),
+          storageBucket
+        });
+      }
     }
 
     firebaseEnabled = true;
