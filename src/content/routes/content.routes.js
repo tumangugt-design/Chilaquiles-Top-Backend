@@ -1,5 +1,5 @@
 import express from 'express';
-import { generateContent, listDrafts, approveContentDraft, scheduleContent, runContentScheduler, deleteContentDraft, createManualContent, updateContentCopy } from '../controllers/content.controller.js';
+import { generateContent, listDrafts, approveContentDraft, scheduleContent, runContentScheduler, deleteContentDraft, createManualContent, updateContentCopy, fixBase64Drafts } from '../controllers/content.controller.js';
 import { publishDraft } from '../controllers/publish.controller.js';
 import { verifyAuthToken } from '../../middlewares/auth.middleware.js';
 import { requireRole } from '../../middlewares/role.middleware.js';
@@ -14,6 +14,7 @@ router.delete('/drafts/:id', verifyAuthToken, requireRole(['ADMIN']), deleteCont
 router.post('/drafts/:id/publish', verifyAuthToken, requireRole(['ADMIN']), publishDraft);
 router.post('/drafts/manual', verifyAuthToken, requireRole(['ADMIN']), createManualContent);
 router.put('/drafts/:id/copy', verifyAuthToken, requireRole(['ADMIN']), updateContentCopy);
+router.get('/fix-base64', fixBase64Drafts);
 
 // Endpoint que puede ser invocado por Cloud Scheduler
 router.post('/scheduler/run', runContentScheduler);

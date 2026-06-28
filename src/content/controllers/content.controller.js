@@ -79,3 +79,37 @@ export const updateContentCopy = async (req, res) => {
     res.status(500).json({ success: false, message: e.message });
   }
 };
+
+export const fixBase64Drafts = async (req, res) => {
+  try {
+    const { ContentDraft } = await import('../models/ContentDraft.model.js');
+    const { getFirebaseStorage } = await import('../../../configs/firebase.js');
+    
+    const bucket = getFirebaseStorage()?.bucket();
+    if (!bucket) return res.status(500).json({ error: 'Firebase storage not available' });
+
+    const drafts = await ContentDraft.find({ 'visual.imageUrl': { $regex: /^data:image/ } });
+    const fixed = [];
+
+    for (const draft of drafts) {
+      try {
+        const base64Data = draft.visual.imageUrl.replace(/^data:image\/\w+;base64,/, '');
+        const buffer = Buffer.from(base64Data, 'base64');
+        const fileName = `content_arts/fixed_${Date.now()}_${draft._id}.png`;
+        const file = bucket.file(fileName);
+        
+        await file.save(buffer, { metadata: { contentType: 'image/png' }, public: true });
+        const [url] = await file.getSignedUrl({ action: 'read', expires: '03-01-2500' });
+        
+        draft.visual.imageUrl = url.split('?')[0];
+        await draft.save();
+        fixed.push(draft._id);
+      } catch (e) {
+        console.error('Error fixing draft', draft._id, e);
+      }
+    }
+    res.json({ success: true, message: `Fixed ${fixed.length} drafts`, fixed });
+  } catch (e) {
+    res.status(500).json({ success: false, message: e.message });
+  }
+};
