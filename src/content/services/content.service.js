@@ -43,7 +43,7 @@ export const createDraftFromIdea = async (ideaData, userId) => {
     const storage = getFirebaseStorage();
     if (storage) {
       console.log('[Content Service] Uploading PNG to Firebase Storage...');
-      const bucket = storage.bucket();
+      const bucket = storage;
       const filename = `content_arts/art_${Date.now()}_${Math.floor(Math.random() * 1000)}.png`;
       const file = bucket.file(filename);
       

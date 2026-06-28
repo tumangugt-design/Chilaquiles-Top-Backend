@@ -8,6 +8,9 @@ export const schedulePublication = async (draftId, platform, format, scheduledAt
   if (draft.status === 'draft' || draft.status === 'needs_review') {
     throw new Error('No se puede programar un borrador que no está aprobado');
   }
+  if (!draft.visual?.imageUrl) {
+    throw new Error('El arte falló al generarse (Sin Imagen). No se puede programar.');
+  }
 
   const cal = new ContentCalendar({
     contentDraftId: draftId,
