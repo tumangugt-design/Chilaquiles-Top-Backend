@@ -17,7 +17,7 @@ const getClient = () => {
 
 export const getClaudeCompletion = async (systemPrompt, userPrompt, isJson = false, temperature = 0.7, imageBase64 = null) => {
   const client = getClient();
-  const model = 'claude-3-5-sonnet-20240620'; // Usar versión estable anterior
+  const model = 'claude-sonnet-4.6';
 
   let messageContent = userPrompt;
 
