@@ -58,11 +58,11 @@ export const deleteContentDraft = async (req, res) => {
 
 export const createManualContent = async (req, res) => {
   try {
-    const { imageBase64, promptText } = req.body;
+    const { imageBase64, promptText, format } = req.body;
     if (!imageBase64) {
       return res.status(400).json({ success: false, message: 'La imagen en base64 es obligatoria' });
     }
-    const draft = await createManualDraft(imageBase64, promptText, req.user?.userId);
+    const draft = await createManualDraft(imageBase64, promptText, req.user?.userId, format);
     res.json({ success: true, draft });
   } catch (e) {
     res.status(500).json({ success: false, message: e.message });

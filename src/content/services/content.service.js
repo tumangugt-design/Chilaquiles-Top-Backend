@@ -95,7 +95,7 @@ export const createDraftFromIdea = async (ideaData, userId) => {
   return draft;
 };
 
-export const createManualDraft = async (imageBase64, promptText, userId) => {
+export const createManualDraft = async (imageBase64, promptText, userId, format = 'post') => {
   const bucket = getFirebaseStorage();
   let imageUrl = null;
 
@@ -143,7 +143,7 @@ export const createManualDraft = async (imageBase64, promptText, userId) => {
     title: contentData.title || 'Publicación Manual',
     objective: 'engagement',
     platforms: ['facebook', 'instagram'], // por defecto, el usuario elige al publicar
-    formats: ['post'],
+    formats: [format],
     status: 'draft',
     createdBy: userId,
     visual: {
