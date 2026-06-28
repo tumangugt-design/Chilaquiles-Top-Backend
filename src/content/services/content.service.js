@@ -1,5 +1,5 @@
 import { ContentDraft } from '../models/ContentDraft.model.js';
-import { generateContentFromIdea, generateDesignSpecWithAI } from './content-ai.service.js';
+import { generateContentFromIdea, generateDesignSpecWithAI, generateCaptionForImage } from './content-ai.service.js';
 import { renderImageFromSpec } from './render.engine.js';
 import { getFirebaseStorage } from '../../../configs/firebase.js';
 
@@ -91,6 +91,78 @@ export const createDraftFromIdea = async (ideaData, userId) => {
     createdBy: userId
   });
 
+  await draft.save();
+  return draft;
+};
+
+export const createManualDraft = async (imageBase64, promptText, userId) => {
+  const bucket = getFirebaseStorage();
+  let imageUrl = null;
+
+  try {
+    if (bucket) {
+      const fileName = `manual_uploads/${Date.now()}_manual.png`;
+      const file = bucket.file(fileName);
+      
+      const base64Data = imageBase64.replace(/^data:image\/\w+;base64,/, '');
+      const buffer = Buffer.from(base64Data, 'base64');
+      
+      await file.save(buffer, {
+        metadata: { contentType: 'image/png' },
+        public: true,
+      });
+      
+      const [url] = await file.getSignedUrl({ action: 'read', expires: '03-01-2500' });
+      // Extraemos la URL base pública sin token para compatibilidad total con Meta
+      imageUrl = url.split('?')[0]; 
+      console.log('[Content Service] Imagen manual subida a Firebase:', imageUrl);
+    }
+  } catch (e) {
+    console.error('[Content Service] Error subiendo foto manual a Firebase:', e);
+    throw new Error('Fallo al subir la imagen al servidor');
+  }
+
+  // Generar copy con Claude Vision
+  let contentData = null;
+  try {
+    const aiRes = await generateCaptionForImage(imageBase64, promptText);
+    contentData = aiRes.data;
+  } catch (e) {
+    console.error('[Content Service] Error con Claude Vision:', e);
+    contentData = {
+      title: 'Publicación Manual',
+      copy: {
+        main: '',
+        caption: promptText || '',
+        hashtags: ['#ChilaquilesTop']
+      }
+    };
+  }
+
+  const draft = new ContentDraft({
+    title: contentData.title || 'Publicación Manual',
+    objective: 'engagement',
+    platforms: ['facebook', 'instagram'], // por defecto, el usuario elige al publicar
+    formats: ['post'],
+    status: 'draft',
+    createdBy: userId,
+    visual: {
+      templateId: 'manual',
+      imageUrl: imageUrl
+    },
+    copy: contentData.copy,
+    approvalContext: {}
+  });
+
+  await draft.save();
+  return draft;
+};
+
+export const updateDraftCopy = async (id, newCopy) => {
+  const draft = await ContentDraft.findById(id);
+  if (!draft) throw new Error('Borrador no encontrado');
+  
+  draft.copy = { ...draft.copy, ...newCopy };
   await draft.save();
   return draft;
 };

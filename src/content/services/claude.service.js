@@ -15,9 +15,34 @@ const getClient = () => {
   return anthropicClient;
 };
 
-export const getClaudeCompletion = async (systemPrompt, userPrompt, isJson = false, temperature = 0.7) => {
+export const getClaudeCompletion = async (systemPrompt, userPrompt, isJson = false, temperature = 0.7, imageBase64 = null) => {
   const client = getClient();
-  const model = 'claude-sonnet-4-6';
+  const model = 'claude-3-5-sonnet-20241022'; // Usar el modelo correcto más reciente para vision
+
+  let messageContent = userPrompt;
+
+  if (imageBase64) {
+    // Si viene con el prefijo de data URI, lo quitamos
+    const base64Data = imageBase64.includes('base64,') ? imageBase64.split('base64,')[1] : imageBase64;
+    let mediaType = 'image/jpeg';
+    if (imageBase64.includes('image/png')) mediaType = 'image/png';
+    else if (imageBase64.includes('image/webp')) mediaType = 'image/webp';
+
+    messageContent = [
+      {
+        type: 'image',
+        source: {
+          type: 'base64',
+          media_type: mediaType,
+          data: base64Data
+        }
+      },
+      {
+        type: 'text',
+        text: userPrompt
+      }
+    ];
+  }
 
   try {
     const response = await client.messages.create({
@@ -26,7 +51,7 @@ export const getClaudeCompletion = async (systemPrompt, userPrompt, isJson = fal
       temperature: temperature,
       system: systemPrompt,
       messages: [
-        { role: 'user', content: userPrompt }
+        { role: 'user', content: messageContent }
       ]
     });
 

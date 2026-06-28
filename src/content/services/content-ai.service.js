@@ -222,13 +222,67 @@ Devuelve EXCLUSIVAMENTE un JSON con:
 O si no hay regla: {"shouldSave": false}`;
 
   try {
-    const aiResponse = await getAICompletion([
-      { role: 'system', content: systemPrompt },
-      { role: 'user', content: userMessage }
-    ]);
+    const aiResponse = await getClaudeCompletion(
+      systemPrompt,
+      userMessage,
+      true
+    );
     const cleanJsonStr = aiResponse.replace(/```json/g, '').replace(/```/g, '').trim();
     return JSON.parse(cleanJsonStr);
   } catch (e) {
     return { shouldSave: false };
+  }
+};
+
+export const generateCaptionForImage = async (imageBase64, promptText) => {
+  const rules = await BrandKnowledge.find({ status: 'active' });
+  const standards = await ContentStandard.find({ active: true });
+
+  const rulesText = rules.map(r => `- [${r.type}] ${r.content}`).join('\n') || '(Sin reglas adicionales)';
+  const standardsText = standards.map(s => `- [Estándar: ${s.scope}] ${s.value}`).join('\n') || '(Sin estándares)';
+
+  const systemPrompt = `Eres un profesional experto en marketing, redes sociales y redacción creativa para "Chilaquiles TOP", restaurante en Villa Nueva, Guatemala.
+Tu objetivo es analizar la foto adjunta y generar un JSON con el contenido exacto y persuasivo para publicarla en redes sociales.
+
+Reglas del negocio:
+- Solo entregamos en Villa Nueva.
+- No inventes promociones ni precios.
+- El tono debe ser antojable, claro, juvenil y confiable.
+- Todo el copy debe estar en ESPAÑOL correcto, sin anglicismos.
+
+Base de Conocimiento de Marca:
+${rulesText}
+
+Estándares aprendidos:
+${standardsText}
+
+Formato de salida REQUERIDO (JSON puro, sin markdown ni explicaciones):
+{
+  "title": "Título descriptivo de la foto",
+  "copy": {
+    "main": "Texto principal corto",
+    "caption": "El caption perfecto y antojable describiendo lo que se ve en la foto",
+    "hashtags": ["#ChilaquilesTop", "#VillaNueva"],
+    "cta": "¡Pide los tuyos hoy!"
+  }
+}`;
+
+  const userPrompt = promptText || "Analiza esta foto de nuestros chilaquiles y genera el texto para publicarla en nuestras redes sociales hoy.";
+
+  try {
+    const aiResponse = await getClaudeCompletion(
+      systemPrompt,
+      userPrompt,
+      true, // isJson
+      0.7,  // temperature
+      imageBase64
+    );
+
+    const cleanJson = aiResponse.replace(/```json/g, '').replace(/```/g, '').trim();
+    const resultJson = JSON.parse(cleanJson);
+    return { success: true, data: resultJson };
+  } catch (error) {
+    console.error('[Content AI] Error in generateCaptionForImage:', error);
+    throw new Error('No se pudo generar el texto para la imagen');
   }
 };

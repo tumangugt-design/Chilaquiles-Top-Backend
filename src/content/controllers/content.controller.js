@@ -1,4 +1,4 @@
-import { createDraftFromIdea, getDrafts, approveDraft, deleteDraft } from '../services/content.service.js';
+import { createDraftFromIdea, getDrafts, approveDraft, deleteDraft, createManualDraft, updateDraftCopy } from '../services/content.service.js';
 import { runScheduler, schedulePublication } from '../services/content-calendar.service.js';
 
 export const generateContent = async (req, res) => {
@@ -50,6 +50,30 @@ export const runContentScheduler = async (req, res) => {
 export const deleteContentDraft = async (req, res) => {
   try {
     const draft = await deleteDraft(req.params.id);
+    res.json({ success: true, draft });
+  } catch (e) {
+    res.status(500).json({ success: false, message: e.message });
+  }
+};
+
+export const createManualContent = async (req, res) => {
+  try {
+    const { imageBase64, promptText } = req.body;
+    if (!imageBase64) {
+      return res.status(400).json({ success: false, message: 'La imagen en base64 es obligatoria' });
+    }
+    const draft = await createManualDraft(imageBase64, promptText, req.user?.userId);
+    res.json({ success: true, draft });
+  } catch (e) {
+    res.status(500).json({ success: false, message: e.message });
+  }
+};
+
+export const updateContentCopy = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { copy } = req.body;
+    const draft = await updateDraftCopy(id, copy);
     res.json({ success: true, draft });
   } catch (e) {
     res.status(500).json({ success: false, message: e.message });
