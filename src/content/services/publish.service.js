@@ -68,13 +68,28 @@ export const publishToInstagram = async (imageUrl, caption, isStory = false) => 
     const creationId = mediaRes.data.id;
     console.log(`[Publish Service] Contenedor IG creado: ${creationId}. Publicando...`);
 
-    // Paso 2: Publicar el contenedor
-    const publishRes = await axios.post(`${IG_GRAPH_URL}/me/media_publish`, null, {
-      params: {
-        creation_id: creationId,
-        access_token: ACCESS_TOKEN
+    // Paso 2: Publicar el contenedor con reintentos
+    let publishRes;
+    let attempts = 0;
+    while(attempts < 3) {
+      try {
+        publishRes = await axios.post(`${IG_GRAPH_URL}/me/media_publish`, null, {
+          params: {
+            creation_id: creationId,
+            access_token: ACCESS_TOKEN
+          }
+        });
+        break;
+      } catch (err) {
+        attempts++;
+        if (err.response?.data?.error?.code === 9007 && attempts < 3) {
+          console.log(`[Publish Service] IG Media no lista. Reintentando en 5s (intento ${attempts})...`);
+          await new Promise(resolve => setTimeout(resolve, 5000));
+        } else {
+          throw err;
+        }
       }
-    });
+    }
 
     console.log('[Publish Service] IG Post ID:', publishRes.data.id);
     return publishRes.data;
