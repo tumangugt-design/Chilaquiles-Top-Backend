@@ -1,4 +1,8 @@
-import admin from 'firebase-admin';
+import { initializeApp, getApps, cert } from 'firebase-admin/app';
+import { getAuth } from 'firebase-admin/auth';
+import { getDatabase } from 'firebase-admin/database';
+import { getFirestore } from 'firebase-admin/firestore';
+import { getStorage } from 'firebase-admin/storage';
 
 let firebaseEnabled = false;
 let firebaseInitialized = false;
@@ -8,28 +12,25 @@ const getAdminConfig = () => {
   const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
   const privateKey = process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n');
   const databaseURL = process.env.FIREBASE_DATABASE_URL;
-  const storageBucket = process.env.FIREBASE_STORAGE_BUCKET;
+  const storageBucket = process.env.FIREBASE_STORAGE_BUCKET || 'chilaquiles-top.appspot.com';
 
   return {
     projectId,
     clientEmail,
     privateKey,
     databaseURL,
-    storageBucket,
-    hasAdminCredentials: Boolean(projectId && clientEmail && privateKey)
+    storageBucket
   };
 };
 
 export const initFirebaseAdmin = () => {
   try {
-    const adminObj = admin.default || admin;
-    const { projectId, clientEmail, privateKey, databaseURL } = getAdminConfig();
-    const storageBucket = process.env.FIREBASE_STORAGE_BUCKET || 'chilaquiles-top.appspot.com';
+    const { projectId, clientEmail, privateKey, databaseURL, storageBucket } = getAdminConfig();
 
-    if (!adminObj.apps || !adminObj.apps.length) {
+    if (getApps().length === 0) {
       if (projectId && clientEmail && privateKey) {
-        adminObj.initializeApp({
-          credential: adminObj.credential.cert({
+        initializeApp({
+          credential: cert({
             projectId,
             clientEmail,
             privateKey
@@ -39,7 +40,7 @@ export const initFirebaseAdmin = () => {
         });
       } else {
         console.log('[Firebase] Inicializando con Application Default Credentials');
-        adminObj.initializeApp({
+        initializeApp({
           ...(databaseURL ? { databaseURL } : {}),
           storageBucket
         });
@@ -48,7 +49,7 @@ export const initFirebaseAdmin = () => {
 
     firebaseEnabled = true;
     firebaseInitialized = true;
-    return adminObj;
+    return getApps()[0];
   } catch (error) {
     firebaseEnabled = false;
     firebaseInitialized = false;
@@ -58,40 +59,33 @@ export const initFirebaseAdmin = () => {
 };
 
 export const getFirebaseAdmin = () => {
-  const adminObj = admin.default || admin;
   if (!firebaseInitialized) {
     initFirebaseAdmin();
   }
-  return adminObj.apps && adminObj.apps.length ? adminObj : null;
+  return getApps().length > 0 ? getApps()[0] : null;
 };
 
 export const getFirebaseAuth = () => {
-  const app = getFirebaseAdmin();
-  return app ? admin.auth() : null;
+  return getFirebaseAdmin() ? getAuth() : null;
 };
 
 export const getFirebaseRealtimeDb = () => {
-  const app = getFirebaseAdmin();
-  return app && process.env.FIREBASE_DATABASE_URL ? admin.database() : null;
+  return getFirebaseAdmin() && process.env.FIREBASE_DATABASE_URL ? getDatabase() : null;
 };
 
 export const getFirebaseFirestore = () => {
-  const app = getFirebaseAdmin();
-  return app ? admin.firestore() : null;
+  return getFirebaseAdmin() ? getFirestore() : null;
 };
 
 export const getFirebaseStorage = () => {
-  const app = getFirebaseAdmin();
-  const adminObj = admin.default || admin;
-  return app ? adminObj.storage().bucket() : null;
+  return getFirebaseAdmin() ? getStorage().bucket() : null;
 };
 
 export const isFirebaseEnabled = () => {
-  const adminObj = admin.default || admin;
   if (!firebaseInitialized) {
     initFirebaseAdmin();
   }
-  return firebaseEnabled && adminObj.apps && adminObj.apps.length > 0;
+  return firebaseEnabled && getApps().length > 0;
 };
 
-export default admin;
+export default getApps;
