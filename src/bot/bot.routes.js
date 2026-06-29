@@ -34,7 +34,7 @@ router.post('/whatsapp', verifyMetaSignature, handleWhatsAppWebhook);
 
 // Instagram Webhook
 router.get('/instagram', verifyInstagramWebhook);
-router.post('/instagram', verifyMetaSignature, handleInstagramWebhook);
+router.post('/instagram', handleInstagramWebhook);
 
 // Manual Cron Trigger Endpoint
 router.get('/cron-survey', triggerSurveyCronJob);
