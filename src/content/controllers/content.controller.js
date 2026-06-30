@@ -24,6 +24,9 @@ export const generateContent = async (req, res) => {
 export const listDrafts = async (req, res) => {
   try {
     const drafts = await getDrafts();
+    res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    res.set('Pragma', 'no-cache');
+    res.set('Expires', '0');
     res.json({ success: true, drafts });
   } catch (e) {
     res.status(500).json({ success: false, message: e.message });
