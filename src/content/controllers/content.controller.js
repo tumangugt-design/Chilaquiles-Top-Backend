@@ -1,5 +1,16 @@
-import { createDraftFromIdea, getDrafts, approveDraft, deleteDraft, createManualDraft, updateDraftCopy } from '../services/content.service.js';
+import { createDraftFromIdea, getDrafts, approveDraft, deleteDraft, createManualDraft, updateDraftCopy, uploadPlateToFirebase } from '../services/content.service.js';
 import { runScheduler, schedulePublication } from '../services/content-calendar.service.js';
+
+export const uploadPlate = async (req, res) => {
+  try {
+    const { imageBase64 } = req.body;
+    if (!imageBase64) return res.status(400).json({ success: false, message: 'Falta la imagen' });
+    const url = await uploadPlateToFirebase(imageBase64);
+    res.json({ success: true, url });
+  } catch (e) {
+    res.status(500).json({ success: false, message: e.message });
+  }
+};
 
 export const generateContent = async (req, res) => {
   try {

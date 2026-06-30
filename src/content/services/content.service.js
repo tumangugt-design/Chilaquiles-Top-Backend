@@ -113,7 +113,6 @@ export const createManualDraft = async (imageBase64, promptText, userId, format 
       });
       
       const [url] = await file.getSignedUrl({ action: 'read', expires: '03-01-2500' });
-      // Extraemos la URL base pública sin token para compatibilidad total con Meta
       imageUrl = url.split('?')[0]; 
       console.log('[Content Service] Imagen manual subida a Firebase:', imageUrl);
     }
@@ -203,4 +202,23 @@ export const deleteDraft = async (id) => {
   const draft = await ContentDraft.findByIdAndDelete(id);
   if (!draft) throw new Error('Borrador no encontrado');
   return draft;
+};
+
+export const uploadPlateToFirebase = async (imageBase64) => {
+  const bucket = getFirebaseStorage();
+  if (!bucket) throw new Error('Firebase Storage no configurado');
+
+  const fileName = `platos/${Date.now()}_plato.png`;
+  const file = bucket.file(fileName);
+  
+  const base64Data = imageBase64.replace(/^data:image\/\w+;base64,/, '');
+  const buffer = Buffer.from(base64Data, 'base64');
+  
+  await file.save(buffer, {
+    metadata: { contentType: 'image/png' },
+    public: true,
+  });
+  
+  const [url] = await file.getSignedUrl({ action: 'read', expires: '03-01-2500' });
+  return url.split('?')[0]; 
 };
