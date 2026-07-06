@@ -88,6 +88,8 @@ export const INVENTORY_CATALOG = [
   { name: 'steak', label: 'Steak', unit: 'g', category: 'Proteínas', usedPerPlate: 60 },
   { name: 'pollo', label: 'Pollo', unit: 'g', category: 'Proteínas', usedPerPlate: 60 },
   { name: 'chorizo', label: 'Chorizo', unit: 'g', category: 'Proteínas', usedPerPlate: 60 },
+  { name: 'pulled pork', label: 'Pulled Pork', unit: 'g', category: 'Proteínas', usedPerPlate: 60 },
+
   { name: 'aguacate', label: 'Aguacate', unit: 'und', category: 'Complementos', usedPerPlate: 0.5 },
   { name: 'cebolla caramelizada', label: 'Cebolla caramelizada', unit: 'g', category: 'Complementos', usedPerPlate: 30 },
   { name: 'queso extra', label: 'Queso extra', unit: 'g', category: 'Complementos', usedPerPlate: 30 },

@@ -142,7 +142,7 @@ const getConsumptionForItem = (item, portionMap, inventoryMap, sauceTemperature 
     }
   }
 
-  const hardcodedProteins = { STEAK: 'steak', POLLO: 'pollo', CHORIZO: 'chorizo' }
+  const hardcodedProteins = { STEAK: 'steak', POLLO: 'pollo', CHORIZO: 'chorizo', PULLED_PORK: 'pulled pork' }
   if (protein) {
     if (hardcodedProteins[protein]) {
       consumption[hardcodedProteins[protein]] = getQty(hardcodedProteins[protein])
@@ -359,11 +359,16 @@ export const getAvailablePlatesCount = async () => {
 
   const sauceLimit = getMaxSaucePlatesDynamic(rojaStock, verdeStock)
 
-  const proteinNames = ['steak', 'pollo', 'chorizo']
+  const proteinNames = inventory
+    .filter(item => item.category === 'Proteínas')
+    .map(item => item.name)
   const proteinLimit = proteinNames.reduce((sum, name) => sum + Math.floor(getRawStock(name) / getRequiredPortionQty(name)), 0)
 
-  const complementNames = ['aguacate', 'cebolla caramelizada', 'queso extra']
+  const complementNames = inventory
+    .filter(item => item.category === 'Complementos')
+    .map(item => item.name)
   const complementLimit = complementNames.reduce((sum, name) => sum + Math.floor(getRawStock(name) / getRequiredPortionQty(name)), 0)
+
 
   const limits = [mandatoryLimit, sauceLimit, proteinLimit, complementLimit]
   return Math.max(0, Math.min(...limits))
