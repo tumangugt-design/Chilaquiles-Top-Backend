@@ -16,7 +16,8 @@ const orderItemSchema = new mongoose.Schema({
   sauce: { type: String, required: true },
   protein: { type: String, required: true },
   complement: { type: String, required: true },
-  baseRecipe: { type: baseRecipeSchema, default: () => ({}) }
+  baseRecipe: { type: baseRecipeSchema, default: () => ({}) },
+  packagingOverrides: { type: mongoose.Schema.Types.Mixed, default: null }
 }, { _id: false });
 
 
