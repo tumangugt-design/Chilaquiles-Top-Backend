@@ -174,6 +174,10 @@ export const notifyAdminNewOrder = async (order) => {
     `Dirección: ${order.address}`,
     order.accessCode ? `Código de acceso: ${order.accessCode}` : null,
     `Total: Q${Number(order.total || 0).toFixed(2)}`,
+    `Método de pago: ${order.paymentMethod === 'tarjeta' ? 'Tarjeta' : 'Efectivo'}`,
+    order.paymentMethod === 'efectivo' && order.cashAmount 
+      ? `Paga con: Q${Number(order.cashAmount).toFixed(2)} (Llevar cambio de Q${Number(order.cashAmount - order.total).toFixed(2)})` 
+      : null,
     maps ? `Google Maps: ${maps}` : null,
     waze ? `Waze: ${waze}` : null,
     '',
