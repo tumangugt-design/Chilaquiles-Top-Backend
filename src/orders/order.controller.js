@@ -84,6 +84,7 @@ export const createOrder = async (req, res) => {
       appliedPromos: req.body.appliedPromos,
       couponCode: req.body.couponCode,
       paymentMethod: req.body.paymentMethod || 'efectivo',
+      cashAmount: req.body.cashAmount,
     })
 
     return res.status(201).json({ message: 'Pedido creado', order })

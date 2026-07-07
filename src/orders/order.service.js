@@ -176,7 +176,7 @@ const baseHistoryQuery = () => Order.find()
   .populate('chefId', 'name phone email photoUrl role status')
   .populate('repartidorId', 'name phone email photoUrl role status');
 
-export const createOrderRecord = async ({ user, customer, items, sauceTemperature, appliedPromo, appliedPromos, couponCode, paymentMethod = 'efectivo' }) => {
+export const createOrderRecord = async ({ user, customer, items, sauceTemperature, appliedPromo, appliedPromos, couponCode, paymentMethod = 'efectivo', cashAmount }) => {
   let orderItems = Array.isArray(items) ? items.map(cloneOrderItem) : [];
 
   const reqPromos = Array.isArray(appliedPromos) && appliedPromos.length > 0 
@@ -310,6 +310,7 @@ export const createOrderRecord = async ({ user, customer, items, sauceTemperatur
       couponDiscount,
       total,
       paymentMethod,
+      cashAmount,
       paymentLink,
       status: ORDER_STATUS.RECIBIDO
     });

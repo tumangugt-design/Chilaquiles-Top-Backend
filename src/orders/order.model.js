@@ -72,6 +72,7 @@ const orderSchema = new mongoose.Schema({
     enum: ['efectivo', 'tarjeta'],
     default: 'efectivo'
   },
+  cashAmount: { type: Number, default: null },
   paymentLink: { type: String, default: null },
   status: {
     type: String,
