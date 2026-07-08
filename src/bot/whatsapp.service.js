@@ -156,9 +156,13 @@ export const sendOrderEnRouteMessage = async (to, data, forceTemplate = false) =
 };
 
 export const sendOrderDeliveredMessage = async (to, data, forceTemplate = false) => {
-  const { orderNumber } = data;
+  const { orderNumber, sauceTemperature } = data;
 
-  const text = `¡Pedido entregado! 📦🥡\nOrden #${orderNumber}\n\nPara que disfrutes de la mejor experiencia, te compartimos las instrucciones para calentar:\n\n• Toma los recipientes de salsa y proteína de un solo plato y colócalos en el microondas con la tapa puesta.\n• Calienta durante 2 minutos a potencia máxima.\n• Cuando quede aproximadamente 1 minuto, retira la proteína.\n• Continúa calentando únicamente la salsa hasta completar el tiempo.\n• Retira la salsa y agrégala sobre los chilaquiles antes de servir.\n• Repite este mismo proceso para cada plato en tu orden.\n\nCon esto garantizamos que la salsa esté lo suficientemente caliente para derretir el queso a la perfección y que tu proteína quede en su punto exacto 😮💨🤩\n\n¡Buen provecho! 👨🏼‍🍳`;
+  const isHot = sauceTemperature === 'CALIENTE';
+
+  const text = isHot
+    ? `¡Pedido entregado! 📦🥡\nOrden #${orderNumber}\nEsperamos que disfrutes tus Chilaquiles TOP!!\n¡Buen provecho! 👨🏼‍🍳`
+    : `¡Pedido entregado! 📦🥡\nOrden #${orderNumber}\n\nPara que disfrutes de la mejor experiencia, te compartimos las instrucciones para calentar:\n\n• Toma los recipientes de salsa y proteína de un solo plato y colócalos en el microondas con la tapa puesta.\n• Calienta durante 2 minutos a potencia máxima.\n• Cuando quede aproximadamente 1 minuto, retira la proteína.\n• Continúa calentando únicamente la salsa hasta completar el tiempo.\n• Retira la salsa y agrégala sobre los chilaquiles antes de servir.\n• Repite este mismo proceso para cada plato en tu orden.\n\nCon esto garantizamos que la salsa esté lo suficientemente caliente para derretir el queso a la perfección y que tu proteína quede en su punto exacto 😮💨🤩\n\n¡Buen provecho! 👨🏼‍🍳`;
 
   try {
     if (forceTemplate) {
@@ -170,9 +174,10 @@ export const sendOrderDeliveredMessage = async (to, data, forceTemplate = false)
     return { sent: true, method: 'normal', error: null, wamid: result?.messages?.[0]?.id };
   } catch (error) {
     if (error.code === 131047) {
-      console.log('[Fallback] 24h window closed, trying template pedido_entregado');
+      const templateName = isHot ? 'pedido_entregado_caliente' : 'pedido_entregado';
+      console.log(`[Fallback] 24h window closed, trying template ${templateName}`);
       try {
-        const result = await sendWhatsAppTemplate(to, 'pedido_entregado', [
+        const result = await sendWhatsAppTemplate(to, templateName, [
           {
             type: "body",
             parameters: [

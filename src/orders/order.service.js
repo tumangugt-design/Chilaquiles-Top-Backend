@@ -460,7 +460,8 @@ export const updateOrderStatusRecord = async ({ orderId, nextStatus, actor }) =>
       const summary = generateOrderSummary(order.items);
       const result = await sendOrderDeliveredMessage(order.phone, {
         orderNumber: order.orderNumber,
-        orderSummary: summary
+        orderSummary: summary,
+        sauceTemperature: order.sauceTemperature
       });
       order.set('whatsappMessages.orderDelivered', { sent: result.sent, sentAt: new Date(), method: result.method, error: result.error, wamid: result.wamid });
     }
