@@ -96,6 +96,12 @@ Formato de salida REQUERIDO (JSON puro, sin markdown ni explicaciones):
 
     const cleanJson = aiResponse.replace(/```json/g, '').replace(/```/g, '').trim();
     const resultJson = JSON.parse(cleanJson);
+    
+    // Forzar limpieza del caption si no es un post, por si Claude lo incluyó de todos modos
+    if (!isPost && resultJson.copy) {
+      resultJson.copy.caption = '';
+    }
+
     return { success: true, data: resultJson, rawContext: { rules: rules.length, standards: standards.length } };
   } catch (error) {
     console.error('[Content AI] Error in generateContentFromIdea:', error);
