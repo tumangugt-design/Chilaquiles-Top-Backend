@@ -37,7 +37,7 @@ const readGuide = () => {
  * Devuelve un JSON con copy + designSpec básico.
  */
 export const generateContentFromIdea = async (ideaData) => {
-  const { topic, objective, platforms, formats, tone, promotionData } = ideaData;
+  const { topic, objective, platforms, formats, format, tone, promotionData } = ideaData;
 
   const rules = await BrandKnowledge.find({ status: 'active' });
   const standards = await ContentStandard.find({ active: true });
@@ -45,7 +45,8 @@ export const generateContentFromIdea = async (ideaData) => {
   const rulesText = rules.map(r => `- [${r.type}] ${r.content}`).join('\n') || '(Sin reglas adicionales)';
   const standardsText = standards.map(s => `- [Estándar: ${s.scope}] ${s.value}`).join('\n') || '(Sin estándares)';
 
-  const isPost = !formats || formats.length === 0 || formats.some(f => f.includes('post') || f.includes('feed') || f.includes('reel'));
+  const finalFormat = format || (formats && formats.length > 0 ? formats[0] : 'post');
+  const isPost = finalFormat.includes('post') || finalFormat.includes('feed') || finalFormat.includes('reel');
   const captionField = isPost ? '\n    "caption": "Caption para red social",' : '';
 
   const systemPrompt = `Eres un profesional experto en marketing, redes sociales, edición y renderización de HTML para artes gráficos de "Chilaquiles TOP", restaurante en Villa Nueva, Guatemala.
