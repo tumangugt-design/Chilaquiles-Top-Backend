@@ -455,7 +455,8 @@ export const createOrderRecord = async ({ user, customer, items, sauceTemperatur
         orderSummary: summary,
         orderTotal: `Q${order.total.toFixed(2)}`,
         paymentMethod: order.paymentMethod,
-        paymentLink: order.paymentLink
+        paymentLink: order.paymentLink,
+        trackingLink: `https://pedidos.chilaquilestop.com/pedido/${order.orderNumber}`
       });
       order.set('whatsappMessages.orderReceived', { sent: result.sent, sentAt: new Date(), method: result.method, error: result.error, wamid: result.wamid });
       await order.save();

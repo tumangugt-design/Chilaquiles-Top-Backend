@@ -78,14 +78,15 @@ export const sendWhatsAppTemplate = async (to, templateName, components = [], la
 };
 
 export const sendOrderReceivedMessage = async (to, data, forceTemplate = false) => {
-  const { customerName, orderNumber, orderSummary, orderTotal, paymentMethod, paymentLink } = data;
+  const { customerName, orderNumber, orderSummary, orderTotal, paymentMethod, paymentLink, trackingLink } = data;
   
   const formattedPaymentMethod = paymentMethod === 'tarjeta' ? 'Tarjeta' : 'Efectivo';
   const formattedPaymentLink = paymentMethod === 'tarjeta' && paymentLink 
     ? `Paga tu pedido aquí: ${paymentLink}` 
     : 'Pago contra entrega.';
+  const trackingLine = trackingLink ? `\n\nDa seguimiento a tu pedido aquí: ${trackingLink}` : '';
 
-  const text = `¡Pedido recibido! ✅\n\nHola ${customerName},\n\nTu pedido #${orderNumber} fue recibido correctamente.\n\nPedido:\n${orderSummary}\n\nTotal: ${orderTotal}\n\nMétodo de pago:\n${formattedPaymentMethod}\n\n${formattedPaymentLink}\n\nTe avisaremos por este medio cuando tu pedido vaya en camino.\n\n¡Gracias por elegir Chilaquiles Top! 🌶️`;
+  const text = `¡Pedido recibido! ✅\n\nHola ${customerName},\n\nTu pedido #${orderNumber} fue recibido correctamente.\n\nPedido:\n${orderSummary}\n\nTotal: ${orderTotal}\n\nMétodo de pago:\n${formattedPaymentMethod}\n\n${formattedPaymentLink}${trackingLine}\n\nTe avisaremos por este medio cuando tu pedido vaya en camino.\n\n¡Gracias por elegir Chilaquiles Top! 🌶️`;
 
   try {
     if (forceTemplate) {
@@ -176,7 +177,7 @@ export const sendOrderDeliveredMessage = async (to, data, forceTemplate = false)
 
   const text = isHot
     ? `¡Pedido entregado! 📦🥡\nOrden #${orderNumber}\nEsperamos que disfrutes tus Chilaquiles TOP!!\n¡Buen provecho! 👨🏼‍🍳`
-    : `¡Pedido entregado! 📦🥡\nOrden #${orderNumber}\n\nPara que disfrutes de la mejor experiencia, te compartimos las instrucciones para calentar:\n\n• Toma los recipientes de salsa y proteína de un solo plato y colócalos en el microondas con la tapa puesta.\n• Calienta durante 2 minutos a potencia máxima.\n• Cuando quede aproximadamente 1 minuto, retira la proteína.\n• Continúa calentando únicamente la salsa hasta completar el tiempo.\n• Retira la salsa y agrégala sobre los chilaquiles antes de servir.\n• Repite este mismo proceso para cada plato en tu orden.\n\nCon esto garantizamos que la salsa esté lo suficientemente caliente para derretir el queso a la perfección y que tu proteína quede en su punto exacto 😮💨🤩\n\n¡Buen provecho! 👨🏼‍🍳`;
+    : `¡Pedido entregado! 📦🥡\nOrden #${orderNumber}\nSugerencia de calentado para que disfrutes de la mejor experiencia:\nSalsa: 2.5 minutos\nProteína: 45 segundos\n\nTodos nuestros empaques son aptos para uso en microondas`;
 
   try {
     if (forceTemplate) {
