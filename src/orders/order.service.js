@@ -8,7 +8,7 @@ import { publishOrderRealtimeEvent } from '../realtime/realtime.service.js';
 import { getGuatemalaOrderDatePrefix, getGuatemalaParts } from '../helpers/timezone.helper.js';
 import { notifyAdminNewOrder } from '../helpers/email.helper.js';
 import { sendOrderReceivedMessage, sendOrderEnRouteMessage, sendOrderDeliveredMessage } from '../bot/whatsapp.service.js';
-import { createPaymentLink } from '../finances/paggo.service.js';
+import { createPaymentLink } from '../finances/recurrente.service.js';
 
 
 const normalizeSelection = (value = '') => String(value || '').trim().toUpperCase().replace(/\s+/g, '_');
@@ -284,7 +284,7 @@ export const createOrderRecord = async ({ user, customer, items, sauceTemperatur
       paymentLink = await createPaymentLink({ amount: total, description: `Pago Orden #${orderNumber}`, orderNumber });
     } catch (e) {
       console.error('[createOrderRecord] Failed to create payment link', e);
-      const err = new Error('No se pudo generar el link de pago con Paggo. Por favor intenta con efectivo o más tarde.');
+      const err = new Error('No se pudo generar el link de pago. Por favor intenta con efectivo o más tarde.');
       err.statusCode = 502;
       throw err;
     }
