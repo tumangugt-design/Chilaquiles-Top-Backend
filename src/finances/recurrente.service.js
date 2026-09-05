@@ -3,7 +3,7 @@ import axios from 'axios';
 export const createPaymentLink = async ({ amount, description, orderNumber }) => {
   const baseUrl = process.env.RECURRENTE_BASE_URL || 'https://app.recurrente.com/api';
   const secretKey = process.env.RECURRENTE_SECRET_KEY;
-  const frontendUrl = process.env.CUSTOMER_FRONTEND_URL || 'https://pedidos.chilaquilestop.com';
+  const marketingUrl = process.env.MARKETING_FRONTEND_URL || 'https://chilaquilestop.com';
 
   if (!secretKey) {
     console.error('[Recurrente Service] Missing RECURRENTE_SECRET_KEY in environment variables');
@@ -22,8 +22,8 @@ export const createPaymentLink = async ({ amount, description, orderNumber }) =>
             quantity: 1
           }
         ],
-        success_url: `${frontendUrl}/?payment=success&order=${orderNumber}`,
-        cancel_url: `${frontendUrl}/?payment=cancelled&order=${orderNumber}`
+        success_url: `${marketingUrl}/pedido/${orderNumber}`,
+        cancel_url: `${marketingUrl}/?payment=cancelled&order=${orderNumber}`
       },
       {
         headers: {

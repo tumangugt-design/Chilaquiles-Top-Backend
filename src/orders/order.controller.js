@@ -1,4 +1,4 @@
-import { createOrderRecord, getOrdersByRole, getOrderHistoryForAdmin, updateOrderStatusRecord, hideDeliveredOrdersRecord } from './order.service.js'
+import { createOrderRecord, getOrdersByRole, getOrderHistoryForAdmin, updateOrderStatusRecord, hideDeliveredOrdersRecord, getOrderForTracking } from './order.service.js'
 import { isOperatingNow } from '../settings/settings.service.js'
 import { USER_ROLES } from '../helpers/constants.js'
 
@@ -134,6 +134,20 @@ export const updateOrderStatus = async (req, res) => {
     return res.status(200).json({ message: 'Estado actualizado', order })
   } catch (error) {
     return res.status(error.statusCode || 500).json({ message: error.message || 'No se pudo actualizar el estado' })
+  }
+}
+
+export const trackOrder = async (req, res) => {
+  try {
+    const order = await getOrderForTracking(req.params.orderNumber)
+
+    if (!order) {
+      return res.status(404).json({ message: 'Pedido no encontrado' })
+    }
+
+    return res.status(200).json(order)
+  } catch (error) {
+    return res.status(500).json({ message: 'No se pudo consultar el pedido', error: error.message })
   }
 }
 

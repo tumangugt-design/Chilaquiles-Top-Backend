@@ -13,6 +13,24 @@ import { createPaymentLink } from '../finances/recurrente.service.js';
 
 const normalizeSelection = (value = '') => String(value || '').trim().toUpperCase().replace(/\s+/g, '_');
 
+export const getOrderForTracking = async (orderNumber) => {
+  const order = await Order.findOne({ orderNumber })
+    .select('orderNumber status items total sauceTemperature createdAt updatedAt deliveredAt');
+
+  if (!order) return null;
+
+  return {
+    orderNumber: order.orderNumber,
+    status: order.status,
+    itemsCount: order.items.length,
+    total: order.total,
+    sauceTemperature: order.sauceTemperature,
+    createdAt: order.createdAt,
+    updatedAt: order.updatedAt,
+    deliveredAt: order.deliveredAt
+  };
+};
+
 const normalizeComplementSelection = (value = '') => {
   const normalized = normalizeSelection(value);
   if (normalized === 'CEBOLLA_CARAMELIZADA') return 'CEBOLLA_CARAMELIZADA';
