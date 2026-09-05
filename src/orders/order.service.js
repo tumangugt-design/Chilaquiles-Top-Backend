@@ -31,6 +31,30 @@ export const getOrderForTracking = async (orderNumber) => {
   };
 };
 
+// Public, sanitized order detail used by the post-payment "Pedido Recibido" confirmation
+// screen (the one a customer lands on after finishing a card payment on Recurrente, once
+// the SPA has lost its in-memory cart state). No PII beyond what the customer already sees.
+export const getOrderConfirmation = async (orderNumber) => {
+  const order = await Order.findOne({ orderNumber })
+    .select('orderNumber items total status paymentMethod createdAt');
+
+  if (!order) return null;
+
+  return {
+    orderNumber: order.orderNumber,
+    items: order.items.map((item) => ({
+      sauce: item.sauce,
+      protein: item.protein,
+      complement: item.complement,
+      baseRecipe: item.baseRecipe
+    })),
+    total: order.total,
+    status: order.status,
+    paymentMethod: order.paymentMethod,
+    createdAt: order.createdAt
+  };
+};
+
 // Called from the Recurrente webhook once a card payment is confirmed server-side.
 // Matches the order by the Recurrente checkout id we stored at creation time, falling
 // back to parsing the order number out of the checkout's success_url if needed.
@@ -59,6 +83,29 @@ export const confirmOrderPaymentByCheckout = async ({ checkoutId, successUrl }) 
   }
 
   order.paymentConfirmedAt = new Date();
+
+  // El pedido con tarjeta se creo en PENDIENTE_PAGO (sin descontar inventario, sin
+  // avisar a cocina/admin y sin mandar WhatsApp). Todo eso pasa hasta aqui, ya con
+  // el pago confirmado por Recurrente.
+  if (order.status === ORDER_STATUS.PENDIENTE_PAGO) {
+    order.status = ORDER_STATUS.RECIBIDO;
+
+    try {
+      await discountInventoryForOrder(order.items, order._id, { _id: order.userId }, order.sauceTemperature);
+    } catch (inventoryError) {
+      // El cliente ya pago: no bloqueamos la confirmacion por falta de stock, pero
+      // queda registrado para que el equipo lo resuelva manualmente si hace falta.
+      console.error('[Recurrente Webhook] No se pudo descontar inventario tras confirmar pago', {
+        orderNumber: order.orderNumber,
+        error: inventoryError.message
+      });
+    }
+
+    await publishOrderRealtimeEvent(order);
+    notifyAdminNewOrder(order).catch((emailError) => {
+      console.error('No se pudo enviar correo de nuevo pedido (pago confirmado):', emailError.message);
+    });
+  }
 
   if (order.phone) {
     const trackingLink = `https://pedidos.chilaquilestop.com/pedido/${order.orderNumber}`;
@@ -359,6 +406,11 @@ export const createOrderRecord = async ({ user, customer, items, sauceTemperatur
     }
   }
 
+  // Un pedido con tarjeta no debe entrar a cocina ni descontar inventario hasta que
+  // Recurrente confirme el pago (ver confirmOrderPaymentByCheckout). Mientras tanto
+  // queda en PENDIENTE_PAGO: no aparece en las colas de chef/repartidor.
+  const isCardPending = paymentMethod === 'tarjeta';
+
   let order = null;
 
   try {
@@ -382,8 +434,12 @@ export const createOrderRecord = async ({ user, customer, items, sauceTemperatur
       cashAmount,
       paymentLink,
       recurrenteCheckoutId,
-      status: ORDER_STATUS.RECIBIDO
+      status: isCardPending ? ORDER_STATUS.PENDIENTE_PAGO : ORDER_STATUS.RECIBIDO
     });
+
+    if (isCardPending) {
+      return order;
+    }
 
     await discountInventoryForOrder(orderItems, order._id, user, sauceTemperature);
     await publishOrderRealtimeEvent(order);

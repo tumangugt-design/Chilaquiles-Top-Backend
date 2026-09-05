@@ -12,6 +12,7 @@ export const USER_STATUS = {
 }
 
 export const ORDER_STATUS = {
+  PENDIENTE_PAGO: 'pendiente_pago',
   RECIBIDO: 'recibido',
   EN_PROCESO: 'en_proceso',
   LISTO_PARA_DESPACHO: 'listo_para_despacho',

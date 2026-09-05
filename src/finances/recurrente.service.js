@@ -23,7 +23,7 @@ export const createPaymentLink = async ({ amount, description, orderNumber }) =>
             quantity: 1
           }
         ],
-        success_url: `${customerUrl}/pedido/${orderNumber}`,
+        success_url: `${customerUrl}/pedido/${orderNumber}/confirmacion`,
         cancel_url: `${marketingUrl}/?payment=cancelled&order=${orderNumber}`
       },
       {
