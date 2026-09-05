@@ -7,7 +7,7 @@ import { discountInventoryForOrder, validateInventoryAvailability } from '../inv
 import { publishOrderRealtimeEvent } from '../realtime/realtime.service.js';
 import { getGuatemalaOrderDatePrefix, getGuatemalaParts } from '../helpers/timezone.helper.js';
 import { notifyAdminNewOrder } from '../helpers/email.helper.js';
-import { sendOrderReceivedMessage, sendOrderEnRouteMessage, sendOrderDeliveredMessage } from '../bot/whatsapp.service.js';
+import { sendOrderReceivedMessage, sendOrderEnRouteMessage, sendOrderDeliveredMessage, sendPaymentConfirmedMessage } from '../bot/whatsapp.service.js';
 import { createPaymentLink } from '../finances/recurrente.service.js';
 
 
@@ -29,6 +29,54 @@ export const getOrderForTracking = async (orderNumber) => {
     updatedAt: order.updatedAt,
     deliveredAt: order.deliveredAt
   };
+};
+
+// Called from the Recurrente webhook once a card payment is confirmed server-side.
+// Matches the order by the Recurrente checkout id we stored at creation time, falling
+// back to parsing the order number out of the checkout's success_url if needed.
+// Idempotent: a webhook retry for an already-confirmed order is a no-op.
+export const confirmOrderPaymentByCheckout = async ({ checkoutId, successUrl }) => {
+  let order = null;
+
+  if (checkoutId) {
+    order = await Order.findOne({ recurrenteCheckoutId: checkoutId });
+  }
+
+  if (!order && successUrl) {
+    const match = String(successUrl).match(/\/pedido\/([^/?]+)/);
+    if (match) {
+      order = await Order.findOne({ orderNumber: match[1] });
+    }
+  }
+
+  if (!order) {
+    console.error('[Recurrente Webhook] No matching order found for checkout', { checkoutId, successUrl });
+    return null;
+  }
+
+  if (order.paymentConfirmedAt) {
+    return order;
+  }
+
+  order.paymentConfirmedAt = new Date();
+
+  if (order.phone) {
+    const trackingLink = `https://pedidos.chilaquilestop.com/pedido/${order.orderNumber}`;
+    const result = await sendPaymentConfirmedMessage(order.phone, {
+      orderNumber: order.orderNumber,
+      trackingLink
+    });
+    order.whatsappMessages.paymentConfirmed = {
+      sent: result.sent,
+      sentAt: new Date(),
+      method: result.method,
+      error: result.error,
+      wamid: result.wamid
+    };
+  }
+
+  await order.save();
+  return order;
 };
 
 const normalizeComplementSelection = (value = '') => {
@@ -297,9 +345,12 @@ export const createOrderRecord = async ({ user, customer, items, sauceTemperatur
   }
 
   let paymentLink = null;
+  let recurrenteCheckoutId = null;
   if (paymentMethod === 'tarjeta') {
     try {
-      paymentLink = await createPaymentLink({ amount: total, description: `Pago Orden #${orderNumber}`, orderNumber });
+      const paymentResult = await createPaymentLink({ amount: total, description: `Pago Orden #${orderNumber}`, orderNumber });
+      paymentLink = paymentResult?.checkoutUrl || null;
+      recurrenteCheckoutId = paymentResult?.checkoutId || null;
     } catch (e) {
       console.error('[createOrderRecord] Failed to create payment link', e);
       const err = new Error('No se pudo generar el link de pago. Por favor intenta con efectivo o más tarde.');
@@ -330,6 +381,7 @@ export const createOrderRecord = async ({ user, customer, items, sauceTemperatur
       paymentMethod,
       cashAmount,
       paymentLink,
+      recurrenteCheckoutId,
       status: ORDER_STATUS.RECIBIDO
     });
 

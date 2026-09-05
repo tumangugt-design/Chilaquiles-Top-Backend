@@ -35,7 +35,10 @@ export const createPaymentLink = async ({ amount, description, orderNumber }) =>
     );
 
     console.log('[Recurrente Service] Checkout created:', response.data);
-    return response.data?.checkout_url;
+    return {
+      checkoutUrl: response.data?.checkout_url,
+      checkoutId: response.data?.id || null
+    };
   } catch (error) {
     console.error('[Recurrente Service] Error creating checkout:', error?.response?.data || error.message);
     throw new Error('No se pudo generar el link de pago');

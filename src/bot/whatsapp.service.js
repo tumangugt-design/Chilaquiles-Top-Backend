@@ -121,6 +121,20 @@ export const sendOrderReceivedMessage = async (to, data, forceTemplate = false) 
   }
 };
 
+export const sendPaymentConfirmedMessage = async (to, data) => {
+  const { orderNumber, trackingLink } = data;
+
+  const text = `¡Pago recibido! ✅\n\nTu pedido #${orderNumber} ya está pagado y confirmado.\n\nConsulta el estado de tu pedido en tiempo real aquí:\n${trackingLink}\n\n¡Gracias por elegir Chilaquiles Top! 🌶️`;
+
+  try {
+    const result = await sendWhatsAppMessage(to, text);
+    return { sent: true, method: 'normal', error: null, wamid: result?.messages?.[0]?.id };
+  } catch (error) {
+    console.error('[WhatsApp] Failed to send payment confirmed message:', error.message);
+    return { sent: false, method: 'normal', error: error.message };
+  }
+};
+
 export const sendOrderEnRouteMessage = async (to, data, forceTemplate = false) => {
   const { orderNumber } = data;
   

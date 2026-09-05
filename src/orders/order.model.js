@@ -74,6 +74,8 @@ const orderSchema = new mongoose.Schema({
   },
   cashAmount: { type: Number, default: null },
   paymentLink: { type: String, default: null },
+  recurrenteCheckoutId: { type: String, default: null },
+  paymentConfirmedAt: { type: Date, default: null },
   status: {
     type: String,
     enum: Object.values(ORDER_STATUS),
@@ -105,6 +107,7 @@ const orderSchema = new mongoose.Schema({
     orderReceived: { sent: { type: Boolean, default: false }, sentAt: { type: Date }, method: { type: String, enum: ['normal', 'template'] }, error: { type: String }, wamid: { type: String } },
     orderOnTheWay: { sent: { type: Boolean, default: false }, sentAt: { type: Date }, method: { type: String, enum: ['normal', 'template'] }, error: { type: String }, wamid: { type: String } },
     orderDelivered: { sent: { type: Boolean, default: false }, sentAt: { type: Date }, method: { type: String, enum: ['normal', 'template'] }, error: { type: String }, wamid: { type: String } },
+    paymentConfirmed: { sent: { type: Boolean, default: false }, sentAt: { type: Date }, method: { type: String, enum: ['normal', 'template'] }, error: { type: String }, wamid: { type: String } },
     survey: { sent: { type: Boolean, default: false }, sentAt: { type: Date }, method: { type: String, enum: ['normal_flow', 'template_flow'] }, error: { type: String }, wamid: { type: String } }
   }
 }, { timestamps: true });
