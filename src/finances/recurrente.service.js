@@ -3,6 +3,7 @@ import axios from 'axios';
 export const createPaymentLink = async ({ amount, description, orderNumber }) => {
   const baseUrl = process.env.RECURRENTE_BASE_URL || 'https://app.recurrente.com/api';
   const secretKey = process.env.RECURRENTE_SECRET_KEY;
+  const customerUrl = process.env.CUSTOMER_FRONTEND_URL || 'https://pedidos.chilaquilestop.com';
   const marketingUrl = process.env.MARKETING_FRONTEND_URL || 'https://chilaquilestop.com';
 
   if (!secretKey) {
@@ -22,7 +23,7 @@ export const createPaymentLink = async ({ amount, description, orderNumber }) =>
             quantity: 1
           }
         ],
-        success_url: `${marketingUrl}/pedido/${orderNumber}`,
+        success_url: `${customerUrl}/pedido/${orderNumber}`,
         cancel_url: `${marketingUrl}/?payment=cancelled&order=${orderNumber}`
       },
       {
