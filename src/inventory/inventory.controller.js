@@ -2,7 +2,7 @@ import Inventory from './inventory.model.js'
 import InventoryLog from './inventoryLog.model.js'
 import Portion from './portion.model.js'
 import Supplier from '../suppliers/supplier.model.js'
-import { getAggregatedConsumption, validateInventoryAvailability, manualStockAdjustment, getAvailablePlatesCount, convertAmountToCatalogUnit, recalculatePortionCost } from './inventory.service.js'
+import { getAggregatedConsumption, validateInventoryAvailability, manualStockAdjustment, getAvailablePlatesCount, convertAmountToCatalogUnit } from './inventory.service.js'
 import { INVENTORY_CATALOG, INVENTORY_CATALOG_MAP } from '../helpers/constants.js'
 
 const PROTECTED_PACKAGING_NAMES = INVENTORY_CATALOG
@@ -539,37 +539,6 @@ export const updateInventoryItemStock = async (req, res) => {
   }
 }
 
-export const updateInventoryItemPrice = async (req, res) => {
-  try {
-    const normalizedName = String(req.params.name || '').trim().toLowerCase()
-
-    const item = await Inventory.findOne({ name: normalizedName })
-    if (!item) {
-      return res.status(404).json({ message: 'Producto no encontrado' })
-    }
-
-    const newPrice = await recalculatePortionCost(normalizedName)
-
-    await InventoryLog.create({
-      ingredient: item._id,
-      ingredientName: item.name,
-      type: 'ADJUSTMENT',
-      amount: 0,
-      previousStock: item.stock,
-      newStock: item.stock,
-      userId: req.user?._id,
-      userName: req.user?.name,
-      reason: req.body.reason && String(req.body.reason).trim()
-        ? `Recálculo de costo por porción: ${req.body.reason.trim()} (nuevo costo Q${newPrice})`
-        : `Recálculo automático de costo por porción basado en la última compra (nuevo costo Q${newPrice})`
-    })
-
-    return res.status(200).json({ message: 'Costo por porción recalculado correctamente', price: newPrice, item })
-  } catch (error) {
-    return res.status(error.statusCode || 500).json({ message: error.message || 'Error recalculating item price', error: error.message })
-  }
-}
-
 export const toggleInventoryItemStatus = async (req, res) => {
   try {
     const { name } = req.params;
@@ -834,20 +803,14 @@ export const updatePortion = async (req, res) => {
     const normalizedConsumptionType = ['plate', 'order'].includes(consumptionType) ? consumptionType : 'plate'
     const previousPortion = await Portion.findOne({ name: normalizedName })
 
+    // El costo por porción es exclusivamente el que se fija al registrar una
+    // Entrada de compra (ver saveInventoryItem). Editar la receta aquí nunca
+    // recalcula ni modifica ese costo — Recetario solo asigna cantidades.
     const portion = await Portion.findOneAndUpdate(
       { name: normalizedName },
       { $set: { usedPerPlate: Number(usedPerPlate), unit, consumptionType: normalizedConsumptionType } },
       { new: true, upsert: true }
     )
-
-    // El costo por porción ya no se edita a mano: se recalcula solo a partir
-    // de la última compra registrada, para no desalinear promociones vigentes.
-    let recalculatedPrice = portion.price
-    try {
-      recalculatedPrice = await recalculatePortionCost(normalizedName)
-    } catch (e) {
-      // Sin compras registradas todavía: se conserva el último costo conocido.
-    }
 
     const invItem = await Inventory.findOne({ name: normalizedName })
     if (invItem) {
@@ -867,7 +830,7 @@ export const updatePortion = async (req, res) => {
 
     return res.status(200).json({
       message: 'Porción actualizada exitosamente',
-      portion: { ...portion.toObject(), price: recalculatedPrice }
+      portion: portion.toObject()
     })
   } catch (error) {
     return res.status(500).json({ message: 'Error updating portion', error: error.message })

@@ -12,7 +12,6 @@ import {
   getPublicInventoryOptions, 
   toggleInventoryItemStatus, 
   syncInventory, 
-  updateInventoryItemPrice, 
   updateInventoryItemStock,
   getLastPurchases,
   getPortions,
@@ -43,7 +42,6 @@ router.patch('/:name/rename', requireRole([USER_ROLES.ADMIN]), renameInventoryIt
 router.patch('/:name/stock', requireRole([USER_ROLES.ADMIN]), adjustInventoryStock);
 router.patch('/:name/direct-stock', requireRole([USER_ROLES.ADMIN]), updateInventoryItemStock);
 router.patch('/:name/toggle-status', requireRole([USER_ROLES.ADMIN]), toggleInventoryItemStatus);
-router.patch('/:name/price', requireRole([USER_ROLES.ADMIN]), updateInventoryItemPrice);
 router.post('/preview-consumption', requireRole([USER_ROLES.ADMIN, USER_ROLES.CHEF]), previewRecipeConsumption);
 
 export default router;
