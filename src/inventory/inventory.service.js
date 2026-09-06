@@ -4,6 +4,7 @@ import Portion from './portion.model.js'
 import PurchaseAllocation from '../purchases/purchase-allocation.model.js'
 import TransformationProcess from './transformation-process.model.js'
 import Setting from '../settings/settings.model.js'
+import User from '../users/user.model.js'
 import {
   DEFAULT_RECIPE_CONSUMPTION,
   PACKAGING_CONSUMPTION,
@@ -743,6 +744,10 @@ export const migrateLegacyStockToFinishedGoods = async () => {
 
   const moved = []
 
+  // InventoryLog exige userId: se usa el admin del sistema. Si por lo que sea
+  // no hay ninguno, el traslado igual se hace y solo se omite el rastro.
+  const systemUser = await User.findOne({ role: 'ADMIN' }).select('_id name')
+
   for (const [legacyName, finishedName] of Object.entries(LEGACY_STOCK_NAME_MAP)) {
     const legacy = await Inventory.findOne({ name: legacyName })
     const finished = await Inventory.findOne({ name: finishedName })
@@ -786,30 +791,36 @@ export const migrateLegacyStockToFinishedGoods = async () => {
 
     const reason = `Migración de jerarquía: la existencia de "${toDisplayLabel(legacyName)}" (materia prima) se trasladó a "${toDisplayLabel(finishedName)}" (producto terminado), que es lo que ahora consume el plato.`
 
-    await InventoryLog.insertMany([
-      {
-        ingredient: legacy._id,
-        ingredientName: legacy.name,
-        type: 'ADJUSTMENT',
-        amount: legacyStock,
-        previousStock: legacyStock,
-        newStock: 0,
-        userId: null,
-        userName: 'Sistema',
-        reason
-      },
-      {
-        ingredient: finished._id,
-        ingredientName: finished.name,
-        type: 'ADJUSTMENT',
-        amount: round(amount),
-        previousStock: 0,
-        newStock: round(amount),
-        userId: null,
-        userName: 'Sistema',
-        reason
+    if (systemUser?._id) {
+      try {
+        await InventoryLog.insertMany([
+          {
+            ingredient: legacy._id,
+            ingredientName: legacy.name,
+            type: 'ADJUSTMENT',
+            amount: legacyStock,
+            previousStock: legacyStock,
+            newStock: 0,
+            userId: systemUser._id,
+            userName: 'Sistema (migración de jerarquía)',
+            reason
+          },
+          {
+            ingredient: finished._id,
+            ingredientName: finished.name,
+            type: 'ADJUSTMENT',
+            amount: round(amount),
+            previousStock: 0,
+            newStock: round(amount),
+            userId: systemUser._id,
+            userName: 'Sistema (migración de jerarquía)',
+            reason
+          }
+        ])
+      } catch (logError) {
+        console.error('[MIGRATION v1] No se pudo escribir el rastro en InventoryLog:', logError.message)
       }
-    ])
+    }
 
     moved.push({ from: legacyName, to: finishedName, amount: round(amount), unit: finished.unit })
     console.log(`[MIGRATION v1] ${legacyName} → ${finishedName}: ${round(amount)} ${finished.unit}`)
@@ -978,8 +989,14 @@ export const seedInventory = async ({ silent = false } = {}) => {
   await seedPortions()
 
   // Traslado de existencia de materia prima al producto terminado que ahora
-  // consume el plato (solo la primera vez).
-  report.migration = await migrateLegacyStockToFinishedGoods()
+  // consume el plato (solo la primera vez). Nunca debe tumbar el arranque:
+  // si falla, el servidor sigue levantando y se reintenta en el próximo boot.
+  try {
+    report.migration = await migrateLegacyStockToFinishedGoods()
+  } catch (migrationError) {
+    console.error('[MIGRATION v1] Falló el traslado de existencia:', migrationError.message)
+    report.migration = { error: migrationError.message }
+  }
 
   // La materia prima no se sirve por plato: si arrastraba una porcion de la
   // configuracion anterior, se retira para que no ensucie el Recetario.

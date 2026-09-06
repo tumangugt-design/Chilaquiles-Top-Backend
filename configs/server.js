@@ -52,7 +52,14 @@ const routes = (app) => {
 const connectDependencies = async () => {
   await dbConnection();
   await seedAdminUser();
-  await seedInventory();
+  // El seed del catalogo normaliza datos, no es requisito para servir: si algo
+  // falla, se registra y el servidor levanta igual. Antes un error aqui
+  // tumbaba el contenedor completo en Cloud Run.
+  try {
+    await seedInventory();
+  } catch (seedError) {
+    console.error('[seedInventory] Falló la normalización del catálogo:', seedError);
+  }
   await seedSettings();
 };
 
