@@ -1,6 +1,8 @@
 import Order from '../orders/order.model.js'
 import InventoryLog from '../inventory/inventoryLog.model.js'
 import Purchase from '../purchases/purchase.model.js'
+import PurchaseAllocation from '../purchases/purchase-allocation.model.js'
+import { toDisplayLabel } from '../helpers/constants.js'
 import Supplier from '../suppliers/supplier.model.js'
 import Setting from '../settings/settings.model.js'
 import { getGuatemalaDayRange, getGuatemalaMonthRange, getGuatemalaWeekRange, GUATEMALA_TIMEZONE } from '../helpers/timezone.helper.js'
@@ -152,12 +154,20 @@ const MONTH_NAMES = [
   'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'
 ]
 
-// Valor de inventario en bodega a costo real, usando los lotes de Compras
-// vigentes (remainingQuantity > 0). Solo cubre ingredientes que entraron por
-// Compras - lo que sigue entrando por Entradas manuales no tiene lote y no
-// se puede valuar a costo real (se omite, no se estima).
+// Valor de inventario en bodega a costo real. Se valua en las DOS capas de la
+// jerarquia, porque el inventario real vive en ambas y sumarlas no duplica
+// nada: cuando la materia prima se transforma, su lote de Compra baja y en su
+// lugar nace un lote de Stock con el costo heredado.
+//
+//   Capa 1 - Materia prima sin transformar: lotes de Compra con existencia.
+//   Capa 2 - Stock listo para vender: lotes de Stock con existencia, que son
+//            el insumo listo comprado y el producto terminado producido.
+//
+// Antes solo se valuaba la capa 1, asi que el empaque, el queso, la crema y
+// todas las salsas y proteinas ya producidas quedaban fuera del valor de
+// bodega.
 const getInventoryValuation = async () => {
-  const rows = await Purchase.aggregate([
+  const rawRows = await Purchase.aggregate([
     { $match: { remainingQuantity: { $gt: 0 } } },
     {
       $project: {
@@ -175,20 +185,42 @@ const getInventoryValuation = async () => {
         remainingQuantity: { $sum: '$remainingQuantity' },
         valorTotal: { $sum: '$remainingValue' }
       }
-    },
-    { $sort: { valorTotal: -1 } }
+    }
   ])
 
-  const items = rows.map((r) => ({
+  const stockRows = await PurchaseAllocation.aggregate([
+    { $match: { remainingQuantity: { $gt: 0 } } },
+    { $addFields: { remainingValue: { $multiply: ['$remainingQuantity', '$costPerProducedUnit'] } } },
+    {
+      $group: {
+        _id: '$stockItemName',
+        unit: { $first: '$producedUnit' },
+        remainingQuantity: { $sum: '$remainingQuantity' },
+        valorTotal: { $sum: '$remainingValue' }
+      }
+    }
+  ])
+
+  const mapRow = (capa) => (r) => ({
     ingredientName: r._id,
+    displayLabel: toDisplayLabel(r._id),
+    capa,
     unit: r.unit,
     remainingQuantity: round2(r.remainingQuantity),
     valorTotal: round2(r.valorTotal)
-  }))
+  })
+
+  const materiaPrima = rawRows.map(mapRow('materia_prima'))
+  const stock = stockRows.map(mapRow('stock'))
+
+  const valorMateriaPrima = round2(materiaPrima.reduce((s, i) => s + i.valorTotal, 0))
+  const valorStock = round2(stock.reduce((s, i) => s + i.valorTotal, 0))
 
   return {
-    valorTotal: round2(items.reduce((s, i) => s + i.valorTotal, 0)),
-    items
+    valorTotal: round2(valorMateriaPrima + valorStock),
+    valorMateriaPrima,
+    valorStock,
+    items: [...materiaPrima, ...stock].sort((a, b) => b.valorTotal - a.valorTotal)
   }
 }
 

@@ -28,7 +28,7 @@ export const AI_TOOLS = [
     type: "function",
     function: {
       name: "getInventory",
-      description: "Inventario actual: stock, precios por porción, costos internos, estado activo/inactivo. Incluye datos de porciones (cuánto se usa por plato y costo por porción).",
+      description: "Inventario actual: stock, precios por porción, costos internos, estado activo/inactivo. Incluye datos de porciones (cuánto se usa por plato y costo por porción) y el tipo de item según la jerarquía: MATERIA_PRIMA (solo se compra, hay que transformarla antes de que llegue al plato), INSUMO_LISTO (se compra listo y ya se usa en platos y promociones) y PRODUCTO_TERMINADO (no se compra, nace de un lote de producción con proceso y/o receta). Nunca ofrezcas materia prima como algo vendible.",
       parameters: {
         type: "object",
         properties: {

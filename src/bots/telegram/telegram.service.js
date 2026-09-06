@@ -105,6 +105,11 @@ const executeTool = async (toolCall) => {
         const portion = portionMap[item.name];
         return {
           name: item.name,
+          displayLabel: item.displayLabel || item.name,
+          // Jerarquia: MATERIA_PRIMA no se vende ni entra a un plato (hay que
+          // transformarla primero); INSUMO_LISTO y PRODUCTO_TERMINADO si.
+          itemType: item.itemType,
+          processName: item.processName || null,
           stock: item.stock,
           unit: item.unit,
           category: item.category,
