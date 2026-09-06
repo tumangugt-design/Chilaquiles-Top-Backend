@@ -4,6 +4,7 @@ import {
   createPurchase,
   getAllocationsByStockItem,
   getPurchaseAllocations,
+  getProductionBatches,
   createProductionBatch
 } from './purchase.controller.js';
 import { verifyAuthToken } from '../middlewares/auth.middleware.js';
@@ -16,6 +17,7 @@ router.use(verifyAuthToken, requireApprovedStatus, requireRole([USER_ROLES.ADMIN
 router.get('/', getPurchases);
 router.post('/', createPurchase);
 router.get('/allocations', getAllocationsByStockItem);
+router.get('/production-batches', getProductionBatches);
 router.get('/:id/allocations', getPurchaseAllocations);
 router.post('/production-batches', createProductionBatch);
 

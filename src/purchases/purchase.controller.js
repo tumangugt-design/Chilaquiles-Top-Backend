@@ -1,5 +1,6 @@
 import Purchase from './purchase.model.js';
 import PurchaseAllocation from './purchase-allocation.model.js';
+import Inventory from '../inventory/inventory.model.js';
 import { planPurchaseConsumption, commitPurchaseConsumption } from './purchase.service.js';
 
 const roundMoney = (value) => Math.round(Number(value || 0) * 100) / 100;
@@ -33,6 +34,12 @@ export const createPurchase = async (req, res) => {
 
     if (!ingredientName) {
       return res.status(400).json({ message: 'El nombre del ingrediente es requerido.' });
+    }
+    const existingStockItem = await Inventory.findOne({ name: ingredientName });
+    if (existingStockItem) {
+      return res.status(400).json({
+        message: `"${ingredientName}" ya existe como producto de Stock (elaborado). Una Compra es el ingrediente CRUDO antes de procesarlo - usa un nombre distinto, ej. "${ingredientName} bruto" o "${ingredientName} crudo".`
+      });
     }
     if (!quantity || quantity <= 0) {
       return res.status(400).json({ message: 'La cantidad comprada debe ser mayor a 0.' });
@@ -72,6 +79,20 @@ export const getPurchaseAllocations = async (req, res) => {
     return res.status(200).json(allocations);
   } catch (error) {
     return res.status(500).json({ message: 'Error fetching allocations', error: error.message });
+  }
+};
+
+// GET /api/purchases/production-batches
+// Historial general de lotes de produccion (todas las transformaciones,
+// cualquier producto de Stock) - usado en el Recetario para mostrar
+// actividad reciente sin tener que entrar producto por producto.
+export const getProductionBatches = async (req, res) => {
+  try {
+    const limit = Math.min(Number(req.query.limit) || 100, 200);
+    const batches = await PurchaseAllocation.find({}).sort({ allocationDate: -1 }).limit(limit);
+    return res.status(200).json(batches);
+  } catch (error) {
+    return res.status(500).json({ message: 'Error fetching production batches', error: error.message });
   }
 };
 
