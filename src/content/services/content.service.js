@@ -2,6 +2,8 @@ import { ContentDraft } from '../models/ContentDraft.model.js';
 import { generateContentFromIdea, generateDesignSpecWithAI, generateCaptionForImage } from './content-ai.service.js';
 import { renderImageFromSpec } from './render.engine.js';
 import { getFirebaseStorage } from '../../../configs/firebase.js';
+import User from '../../users/user.model.js';
+import { sendPromotionBlastMessage } from '../../bot/whatsapp.service.js';
 
 export const createDraftFromIdea = async (ideaData, userId) => {
   const { topic, format, formats, platforms, objective, promotionData, includePlate, includeTopIA, selectedPlate } = ideaData;
@@ -221,4 +223,91 @@ export const uploadPlateToFirebase = async (imageBase64) => {
   
   const [url] = await file.getSignedUrl({ action: 'read', expires: '03-01-2500' });
   return url.split('?')[0]; 
+};
+const ALLOWED_WHATSAPP_IMAGE_MIME_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
+
+const isValidPublicImage = async (imageUrl) => {
+  try {
+    const response = await fetch(imageUrl, { method: 'HEAD', redirect: 'follow' });
+    const contentType = response.headers.get('content-type') || '';
+    return response.ok && ALLOWED_WHATSAPP_IMAGE_MIME_TYPES.some((type) => contentType.toLowerCase().includes(type));
+  } catch (error) {
+    console.error('[Content Service] Imagen de WhatsApp inválida:', error.message);
+    return false;
+  }
+};
+
+// Envía una pieza (promoción o comunicado) por WhatsApp a toda la base de clientes.
+// Unifica lo que antes era la Campaign/pestaña "Campañas": el envío queda registrado
+// directamente en la pieza (draft.whatsapp), como un canal más junto a Instagram/Facebook.
+export const sendDraftWhatsApp = async (id, payload) => {
+  const draft = await ContentDraft.findById(id);
+  if (!draft) throw new Error('Pieza no encontrada');
+
+  const { promoName, description, price, validUntil, marketingMessage, imageUrl } = payload || {};
+  if (!marketingMessage || !imageUrl) {
+    throw new Error('Falta el mensaje de marketing o la imagen para enviar por WhatsApp');
+  }
+
+  const isValidImage = await isValidPublicImage(imageUrl);
+  if (!isValidImage) {
+    throw new Error('La URL de imagen no es válida. Debe ser pública y devolver image/jpeg, image/png o image/webp.');
+  }
+
+  const clients = await User.find({ role: 'CLIENT', phone: { $exists: true, $ne: '' } });
+  if (!clients || clients.length === 0) {
+    throw new Error('No hay clientes registrados con teléfono.');
+  }
+
+  draft.whatsapp = {
+    status: 'processing',
+    message: marketingMessage,
+    totalTarget: clients.length,
+    sentCount: 0,
+    failedCount: 0,
+    sentAt: null,
+    error: null
+  };
+  if (!draft.platforms?.includes('whatsapp')) {
+    draft.platforms = [...(draft.platforms || []), 'whatsapp'];
+  }
+  await draft.save();
+
+  setImmediate(async () => {
+    let sentCount = 0;
+    let failedCount = 0;
+
+    for (const client of clients) {
+      try {
+        const result = await sendPromotionBlastMessage(client.phone, {
+          promoName: promoName || draft.title,
+          description: description || '',
+          price: price || '',
+          validUntil: validUntil || '',
+          marketingMessage,
+          imageUrl
+        });
+        if (result.sent) sentCount++; else failedCount++;
+      } catch (err) {
+        failedCount++;
+      }
+      await new Promise((r) => setTimeout(r, 150));
+    }
+
+    try {
+      const fresh = await ContentDraft.findById(id);
+      if (fresh) {
+        fresh.whatsapp.sentCount = sentCount;
+        fresh.whatsapp.failedCount = failedCount;
+        fresh.whatsapp.status = 'sent';
+        fresh.whatsapp.sentAt = new Date();
+        await fresh.save();
+      }
+      console.log(`[Content Service] Envío WhatsApp de pieza ${id} finalizado. Enviados: ${sentCount}, Fallidos: ${failedCount}`);
+    } catch (err) {
+      console.error('[Content Service] Error guardando resultado de envío WhatsApp:', err.message);
+    }
+  });
+
+  return draft;
 };

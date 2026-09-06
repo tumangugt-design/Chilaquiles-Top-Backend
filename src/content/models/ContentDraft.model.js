@@ -45,6 +45,18 @@ const contentDraftSchema = new mongoose.Schema({
     contextUsed: { type: mongoose.Schema.Types.Mixed },
     revisionHistory: [{ type: mongoose.Schema.Types.Mixed }]
   },
+  // Envío masivo por WhatsApp a la base de clientes (canal independiente de Meta/Instagram-Facebook).
+  whatsapp: {
+    status: { type: String, enum: ['not_sent', 'processing', 'sent', 'failed'], default: 'not_sent' },
+    message: { type: String },
+    totalTarget: { type: Number, default: 0 },
+    sentCount: { type: Number, default: 0 },
+    failedCount: { type: Number, default: 0 },
+    sentAt: { type: Date },
+    error: { type: String }
+  },
+  // Id de la Campaign legada de la que se migró este registro (evita duplicar al re-correr el script de migración).
+  migratedFromCampaignId: { type: String, default: null },
   createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
   approvedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
   scheduledAt: { type: Date },

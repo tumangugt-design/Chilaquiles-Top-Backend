@@ -1,4 +1,4 @@
-import { createDraftFromIdea, getDrafts, approveDraft, deleteDraft, createManualDraft, updateDraftCopy, uploadPlateToFirebase } from '../services/content.service.js';
+import { createDraftFromIdea, getDrafts, approveDraft, deleteDraft, createManualDraft, updateDraftCopy, uploadPlateToFirebase, sendDraftWhatsApp } from '../services/content.service.js';
 import { runScheduler, schedulePublication } from '../services/content-calendar.service.js';
 
 export const uploadPlate = async (req, res) => {
@@ -125,5 +125,13 @@ export const fixBase64Drafts = async (req, res) => {
     res.json({ success: true, message: `Fixed ${fixed.length} drafts`, fixed });
   } catch (e) {
     res.status(500).json({ success: false, message: e.message });
+  }
+};
+export const sendWhatsApp = async (req, res) => {
+  try {
+    const draft = await sendDraftWhatsApp(req.params.id, req.body);
+    res.json({ success: true, message: `Iniciando envío por WhatsApp a ${draft.whatsapp.totalTarget} clientes.`, draft });
+  } catch (e) {
+    res.status(400).json({ success: false, message: e.message });
   }
 };
