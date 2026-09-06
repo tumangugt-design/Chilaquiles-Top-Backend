@@ -11,6 +11,43 @@ const PROTECTED_PACKAGING_NAMES = INVENTORY_CATALOG
 
 const isProtectedPackaging = (name = '') => PROTECTED_PACKAGING_NAMES.includes(String(name).trim().toLowerCase())
 
+// Fase 4 (Finanzas): fluctuacion de costo por ingrediente a lo largo del
+// tiempo. InventoryLog nunca se sobreescribe (cada Entrada crea un registro
+// nuevo tipo 'IN'), asi que esto es historico real, al centavo, sin depender
+// todavia del sistema de Lotes/Compras (Fase 1-3).
+export const getIngredientCostHistory = async (req, res) => {
+  try {
+    const name = String(req.params.name || '').trim().toLowerCase()
+    if (!name) {
+      return res.status(400).json({ message: 'Nombre de ingrediente requerido' })
+    }
+
+    const logs = await InventoryLog.find({
+      ingredientName: name,
+      type: 'IN',
+      $or: [{ portionPrice: { $ne: null } }, { unitPrice: { $ne: null } }]
+    })
+      .sort({ createdAt: 1 })
+      .limit(200)
+      .select('createdAt unitPrice portionPrice totalPrice inputAmount inputUnit storedAmount storedUnit')
+
+    const history = logs.map((log) => ({
+      date: log.createdAt,
+      unitPrice: log.unitPrice,
+      portionPrice: log.portionPrice,
+      totalPrice: log.totalPrice,
+      inputAmount: log.inputAmount,
+      inputUnit: log.inputUnit,
+      storedAmount: log.storedAmount,
+      storedUnit: log.storedUnit
+    }))
+
+    return res.status(200).json({ ingredient: name, history })
+  } catch (error) {
+    return res.status(500).json({ message: 'Error fetching cost history', error: error.message })
+  }
+}
+
 export const getAvailablePlates = async (req, res) => {
   try {
     const count = await getAvailablePlatesCount()

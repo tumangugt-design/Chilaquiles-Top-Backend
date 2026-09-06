@@ -16,7 +16,8 @@ import {
   getLastPurchases,
   getPortions,
   updatePortion,
-  createPackagingProduct
+  createPackagingProduct,
+  getIngredientCostHistory
 } from './inventory.controller.js';
 import { verifyAuthToken } from '../middlewares/auth.middleware.js';
 import { requireApprovedStatus, requireRole } from '../middlewares/role.middleware.js';
@@ -31,6 +32,7 @@ router.use(verifyAuthToken, requireApprovedStatus);
 router.get('/', requireRole([USER_ROLES.ADMIN, USER_ROLES.CHEF]), getInventoryItems);
 router.get('/logs', requireRole([USER_ROLES.ADMIN]), getInventoryLogs);
 router.get('/last-purchases', requireRole([USER_ROLES.ADMIN]), getLastPurchases);
+router.get('/:name/cost-history', requireRole([USER_ROLES.ADMIN]), getIngredientCostHistory);
 router.get('/portions', requireRole([USER_ROLES.ADMIN]), getPortions);
 router.put('/portions/:name', requireRole([USER_ROLES.ADMIN]), updatePortion);
 router.post('/packaging', requireRole([USER_ROLES.ADMIN]), createPackagingProduct);
