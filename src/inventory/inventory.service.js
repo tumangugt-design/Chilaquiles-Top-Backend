@@ -1,6 +1,7 @@
 import Inventory from './inventory.model.js'
 import InventoryLog from './inventoryLog.model.js'
 import Portion from './portion.model.js'
+import PurchaseAllocation from '../purchases/purchase-allocation.model.js'
 import { DEFAULT_RECIPE_CONSUMPTION, PACKAGING_CONSUMPTION, INVENTORY_CATALOG, INVENTORY_CATALOG_MAP } from '../helpers/constants.js'
 
 const round = (value) => Math.round(value * 1000) / 1000
@@ -267,6 +268,88 @@ export const validateInventoryAvailability = async (items = [], sauceTemperature
   return { ok: shortages.length === 0, shortages, consumption: aggregated }
 }
 
+// Consume, en orden FIFO (lote mas antiguo primero), la cantidad `requiredQty`
+// (ya expresada en la unidad catalogo del producto de Stock, ej. gramos) de
+// las PurchaseAllocation disponibles para ese producto. Descuenta
+// remainingQuantity de cada lote usado y devuelve de donde salio el costo.
+//
+// Best-effort: si el producto no tiene lotes registrados (aun no pasa por
+// Compras/Lotes) o hay un problema de unidades incompatibles, retorna null y
+// el descuento de inventario sigue funcionando igual, simplemente sin dato
+// de costo/lote para esa salida (Fase 3 es una capa adicional, no un requisito).
+const consumeFifoBatches = async (ingredientName, requiredQty, inventoryUnit) => {
+  if (!requiredQty || requiredQty <= 0) return null
+
+  const stockItemName = normalizeName(ingredientName)
+  const allocations = await PurchaseAllocation.find({
+    stockItemName,
+    remainingQuantity: { $gt: 0 }
+  }).sort({ allocationDate: 1 })
+
+  if (allocations.length === 0) return null
+
+  let needed = requiredQty
+  const used = []
+  const bulkOps = []
+
+  for (const allocation of allocations) {
+    if (needed <= 0.0001) break
+
+    let factor
+    try {
+      factor = convertAmountToCatalogUnit(1, allocation.producedUnit, inventoryUnit)
+    } catch (err) {
+      // Unidad del lote incompatible con la unidad del producto en Stock:
+      // no podemos costear FIFO con este lote, seguimos con el siguiente.
+      continue
+    }
+
+    const remainingInInventoryUnit = round(allocation.remainingQuantity * factor)
+    if (remainingInInventoryUnit <= 0) continue
+
+    const takeInInventoryUnit = Math.min(needed, remainingInInventoryUnit)
+    const takeInProducedUnit = round(takeInInventoryUnit / factor)
+    if (takeInProducedUnit <= 0) continue
+
+    const cost = round(takeInProducedUnit * allocation.costPerProducedUnit)
+
+    used.push({
+      allocation: allocation._id,
+      purchase: allocation.purchase,
+      quantityConsumed: takeInProducedUnit,
+      unit: allocation.producedUnit,
+      costPerUnit: allocation.costPerProducedUnit,
+      cost
+    })
+
+    const newRemaining = round(allocation.remainingQuantity - takeInProducedUnit)
+    const depleted = newRemaining <= 0.001
+    bulkOps.push({
+      updateOne: {
+        filter: { _id: allocation._id },
+        update: { $set: { remainingQuantity: depleted ? 0 : newRemaining, isDepleted: depleted } }
+      }
+    })
+
+    needed = round(needed - takeInInventoryUnit)
+  }
+
+  if (used.length === 0) return null
+  if (bulkOps.length > 0) await PurchaseAllocation.bulkWrite(bulkOps)
+
+  const uncoveredQty = Math.max(round(needed), 0)
+  const coveredQty = round(requiredQty - uncoveredQty)
+  const totalCost = round(used.reduce((sum, u) => sum + u.cost, 0))
+
+  return {
+    sourceAllocations: used,
+    totalCost,
+    costPerUnit: coveredQty > 0 ? round(totalCost / coveredQty) : null,
+    coveredQty,
+    uncoveredQty
+  }
+}
+
 export const discountInventoryForOrder = async (items = [], orderId, actor, sauceTemperature = 'CALIENTE') => {
   const { ok, shortages, consumption } = await validateInventoryAvailability(items, sauceTemperature)
   if (!ok) {
@@ -288,6 +371,13 @@ export const discountInventoryForOrder = async (items = [], orderId, actor, sauc
       )
 
       if (previousItem) {
+        let fifo = null
+        try {
+          fifo = await consumeFifoBatches(previousItem.name, qty, previousItem.unit)
+        } catch (err) {
+          fifo = null
+        }
+
         logs.push({
           ingredient: previousItem._id,
           ingredientName: previousItem.name,
@@ -298,7 +388,20 @@ export const discountInventoryForOrder = async (items = [], orderId, actor, sauc
           orderId,
           userId: actor?._id,
           userName: actor?.name,
-          reason: `Venta - Orden ${orderId}`
+          reason: `Venta - Orden ${orderId}`,
+          ...(fifo
+            ? {
+                costPerUnit: fifo.costPerUnit,
+                totalCost: fifo.totalCost,
+                sourceAllocations: fifo.sourceAllocations.map((u) => ({
+                  allocation: u.allocation,
+                  purchase: u.purchase,
+                  quantityConsumed: u.quantityConsumed,
+                  unit: u.unit,
+                  costPerUnit: u.costPerUnit
+                }))
+              }
+            : {})
         })
       }
     })

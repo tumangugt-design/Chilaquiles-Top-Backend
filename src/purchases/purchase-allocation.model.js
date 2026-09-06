@@ -51,6 +51,18 @@ const purchaseAllocationSchema = new mongoose.Schema({
     required: true,
     trim: true
   },
+  // Cuanto de este producto transformado sigue disponible para consumo FIFO
+  // en ventas (Fase 3). Arranca igual a producedQuantity y se descuenta a
+  // medida que las ordenes consumen de este lote especifico.
+  remainingQuantity: {
+    type: Number,
+    required: true,
+    min: 0
+  },
+  isDepleted: {
+    type: Boolean,
+    default: false
+  },
   // Costo heredado de la Purchase en bruto, proporcional a rawQuantityUsed
   // sobre purchase.quantity. Se calcula y se guarda al crear el registro;
   // nunca se recalcula despues (mismo principio que el costo por porcion).
@@ -89,6 +101,7 @@ const purchaseAllocationSchema = new mongoose.Schema({
 }, { timestamps: true });
 
 purchaseAllocationSchema.index({ stockItemName: 1, allocationDate: 1 });
+purchaseAllocationSchema.index({ stockItemName: 1, remainingQuantity: 1, allocationDate: 1 });
 purchaseAllocationSchema.index({ purchase: 1 });
 
 export default mongoose.model('PurchaseAllocation', purchaseAllocationSchema);

@@ -131,6 +131,7 @@ export const createPurchaseAllocation = async (req, res) => {
       stockItemName,
       producedQuantity,
       producedUnit,
+      remainingQuantity: producedQuantity,
       inheritedCost,
       costPerProducedUnit,
       allocationDate: req.body.allocationDate || Date.now(),

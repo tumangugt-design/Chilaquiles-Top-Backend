@@ -72,6 +72,29 @@ const inventoryLogSchema = new mongoose.Schema({
     type: Number,
     default: null
   },
+  // --- Fase 3 (Compras/Lotes): costeo FIFO real de la salida ---
+  // Para salidas (type: 'OUT') que pudieron rastrearse a lotes concretos via
+  // PurchaseAllocation. costPerUnit/totalCost cubren solo la parte de `amount`
+  // que sí tenía lote conocido (ver sourceAllocations); si el consumo excede
+  // lo disponible en lotes, el resto queda sin costo asociado (null/omitido).
+  costPerUnit: {
+    type: Number,
+    default: null
+  },
+  totalCost: {
+    type: Number,
+    default: null
+  },
+  sourceAllocations: {
+    type: [{
+      allocation: { type: mongoose.Schema.Types.ObjectId, ref: 'PurchaseAllocation' },
+      purchase: { type: mongoose.Schema.Types.ObjectId, ref: 'Purchase' },
+      quantityConsumed: Number,
+      unit: String,
+      costPerUnit: Number
+    }],
+    default: []
+  },
   reason: {
     type: String,
     trim: true,
