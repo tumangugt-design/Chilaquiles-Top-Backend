@@ -22,7 +22,11 @@ const purchaseAllocationSchema = new mongoose.Schema({
   // tomarse de mas de un lote de Compra (FIFO).
   rawInputs: {
     type: [{
-      purchase: { type: mongoose.Schema.Types.ObjectId, ref: 'Purchase', required: true },
+      // Lote de Compra del que salio (materia prima). Cuando el insumo es un
+      // INSUMO_LISTO ya acreditado a Stock, el origen es un lote de Stock
+      // (sourceAllocation) y no una Compra cruda, por eso ninguno es obligatorio.
+      purchase: { type: mongoose.Schema.Types.ObjectId, ref: 'Purchase', default: null },
+      sourceAllocation: { type: mongoose.Schema.Types.ObjectId, ref: 'PurchaseAllocation', default: null },
       ingredientName: { type: String, required: true, trim: true, lowercase: true },
       quantityUsed: { type: Number, required: true, min: 0 },
       unit: { type: String, required: true, trim: true },
@@ -82,6 +86,46 @@ const purchaseAllocationSchema = new mongoose.Schema({
     type: Number,
     required: true,
     min: 0
+  },
+  // --- Jerarquia: proceso y/o receta (regla dura) ---
+  // Un producto terminado SOLO puede nacer de una transformacion con proceso
+  // seleccionado y/o receta. `processNames` guarda que se le hizo (picado,
+  // desvenado, licuado...) y `recipe` la configuracion guardada usada, si la hubo.
+  processNames: {
+    type: [String],
+    default: []
+  },
+  recipe: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Recipe',
+    default: null
+  },
+  recipeName: {
+    type: String,
+    trim: true,
+    default: ''
+  },
+  // --- Merma real del lote ---
+  // totalInputQuantity: suma de los insumos convertidos a producedUnit (solo
+  // se puede calcular cuando todos son convertibles; si no, queda en null).
+  // mermaQuantity = totalInputQuantity - producedQuantity.
+  totalInputQuantity: {
+    type: Number,
+    default: null
+  },
+  mermaQuantity: {
+    type: Number,
+    default: null
+  },
+  mermaPct: {
+    type: Number,
+    default: null
+  },
+  // Compra directa de insumo listo: no hubo transformacion real, el lote se
+  // crea solo para mantener la trazabilidad de costo FIFO hacia la venta.
+  isPassThrough: {
+    type: Boolean,
+    default: false
   },
   allocationDate: {
     type: Date,

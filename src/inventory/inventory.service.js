@@ -2,7 +2,17 @@ import Inventory from './inventory.model.js'
 import InventoryLog from './inventoryLog.model.js'
 import Portion from './portion.model.js'
 import PurchaseAllocation from '../purchases/purchase-allocation.model.js'
-import { DEFAULT_RECIPE_CONSUMPTION, PACKAGING_CONSUMPTION, INVENTORY_CATALOG, INVENTORY_CATALOG_MAP } from '../helpers/constants.js'
+import TransformationProcess from './transformation-process.model.js'
+import {
+  DEFAULT_RECIPE_CONSUMPTION,
+  PACKAGING_CONSUMPTION,
+  INVENTORY_CATALOG,
+  INVENTORY_CATALOG_MAP,
+  TRANSFORMATION_PROCESS_CATALOG,
+  ITEM_TYPES,
+  resolveStockName,
+  toDisplayLabel
+} from '../helpers/constants.js'
 
 const round = (value) => Math.round(value * 1000) / 1000
 const normalizeName = (value = '') => value.trim().toLowerCase()
@@ -128,7 +138,7 @@ const getConsumptionForItem = (item, portionMap, inventoryMap, sauceTemperature 
       consumption['salsa verde'] = round(getQty('salsa verde') / 2)
       saucePlates = getQty('plato de 4 onz') // configurado en Recetario (hoy: 2)
     } else if (sauce) {
-      const dbSauceName = sauce.toLowerCase().replace(/_/g, ' ')
+      const dbSauceName = resolveStockName(sauce.toLowerCase().replace(/_/g, ' '))
       consumption[dbSauceName] = getQty(dbSauceName)
     }
     const proteinPlates = 1
@@ -149,25 +159,30 @@ const getConsumptionForItem = (item, portionMap, inventoryMap, sauceTemperature 
       consumption['plato de 4 onz'] = getQty('plato de 4 onz')
       consumption['tapadera de 4 onz'] = getQty('tapadera de 4 onz')
     } else if (sauce) {
-      const dbSauceName = sauce.toLowerCase().replace(/_/g, ' ')
+      const dbSauceName = resolveStockName(sauce.toLowerCase().replace(/_/g, ' '))
       consumption[dbSauceName] = getQty(dbSauceName)
       consumption['plato de 8 onz'] = getQty('plato de 8 onz')
       consumption['tapadera de 8 onz'] = getQty('tapadera de 8 onz')
     }
   }
 
-  const hardcodedProteins = { STEAK: 'steak', POLLO: 'pollo', CHORIZO: 'chorizo', PULLED_PORK: 'pulled pork' }
+  // Las opciones del menu conservan su valor historico (CHORIZO, AGUACATE...),
+  // pero lo que se descuenta ya es el PRODUCTO TERMINADO, nunca la materia
+  // prima: resolveStockName traduce cebolla->cebolla picada, chorizo->chorizo
+  // argentino, aguacate->aguacate hass, etc.
+  const hardcodedProteins = { STEAK: 'steak', POLLO: 'pollo', CHORIZO: 'chorizo argentino', PULLED_PORK: 'pulled pork' }
   if (protein) {
     if (hardcodedProteins[protein]) {
       consumption[hardcodedProteins[protein]] = getQty(hardcodedProteins[protein])
     } else {
-      const dbName = protein.toLowerCase().replace(/_/g, ' ')
+      const dbName = resolveStockName(protein.toLowerCase().replace(/_/g, ' '))
       consumption[dbName] = getQty(dbName)
     }
   }
 
   const hardcodedComplements = {
-    AGUACATE: 'aguacate',
+    AGUACATE: 'aguacate hass',
+    AGUACATE_HASS: 'aguacate hass',
     CEBOLLA_CARAMELIZADA: 'cebolla caramelizada',
     QUESO_EXTRA: 'queso extra'
   }
@@ -175,13 +190,15 @@ const getConsumptionForItem = (item, portionMap, inventoryMap, sauceTemperature 
     if (hardcodedComplements[complement]) {
       consumption[hardcodedComplements[complement]] = getQty(hardcodedComplements[complement])
     } else {
-      const dbName = complement.toLowerCase().replace(/_/g, ' ')
+      const dbName = resolveStockName(complement.toLowerCase().replace(/_/g, ' '))
       consumption[dbName] = getQty(dbName)
     }
   }
 
-  if (item.baseRecipe?.onion) consumption['cebolla'] = getQty('cebolla')
-  if (item.baseRecipe?.cilantro) consumption['cilantro'] = getQty('cilantro')
+  // La base del plato lleva cebolla y cilantro YA PICADOS (producto terminado),
+  // no la materia prima cruda.
+  if (item.baseRecipe?.onion) consumption['cebolla picada'] = getQty('cebolla picada')
+  if (item.baseRecipe?.cilantro) consumption['cilantro picado'] = getQty('cilantro picado')
   if (item.baseRecipe?.cream) consumption['crema'] = getQty('crema')
 
   // Fixed packaging
@@ -283,7 +300,7 @@ export const validateInventoryAvailability = async (items = [], sauceTemperature
 // Compras/Lotes) o hay un problema de unidades incompatibles, retorna null y
 // el descuento de inventario sigue funcionando igual, simplemente sin dato
 // de costo/lote para esa salida (Fase 3 es una capa adicional, no un requisito).
-const consumeFifoBatches = async (ingredientName, requiredQty, inventoryUnit) => {
+export const consumeFifoBatches = async (ingredientName, requiredQty, inventoryUnit) => {
   if (!requiredQty || requiredQty <= 0) return null
 
   const stockItemName = normalizeName(ingredientName)
@@ -536,13 +553,16 @@ export const getAvailablePlatesCount = async () => {
 
   const sauceLimit = getMaxSaucePlatesDynamic(rojaStock, verdeStock)
 
+  // Solo insumo listo y producto terminado pueden sostener un plato: la
+  // materia prima (ej. lomo de cerdo crudo) no cuenta como disponibilidad.
+  const isSellable = (item) => item.itemType !== ITEM_TYPES.MATERIA_PRIMA
   const proteinNames = inventory
-    .filter(item => item.category === 'Proteínas')
+    .filter(item => item.category === 'Proteínas' && isSellable(item))
     .map(item => item.name)
   const proteinLimit = proteinNames.reduce((sum, name) => sum + Math.floor(getRawStock(name) / getRequiredPortionQty(name)), 0)
 
   const complementNames = inventory
-    .filter(item => item.category === 'Complementos')
+    .filter(item => item.category === 'Complementos' && isSellable(item))
     .map(item => item.name)
   const complementLimit = complementNames.reduce((sum, name) => sum + Math.floor(getRawStock(name) / getRequiredPortionQty(name)), 0)
 
@@ -703,62 +723,164 @@ export const recalculatePortionPrices = async () => {
   }
 }
 
+export const seedTransformationProcesses = async () => {
+  const report = { created: [], updated: [] }
+  for (const process of TRANSFORMATION_PROCESS_CATALOG) {
+    const existing = await TransformationProcess.findOne({ name: process.name })
+    if (!existing) {
+      await TransformationProcess.create({
+        name: process.name,
+        displayLabel: process.label,
+        description: process.description || '',
+        expectedLossPct: process.expectedLossPct || 0,
+        isActive: true
+      })
+      report.created.push(process.name)
+      continue
+    }
+    let changed = false
+    if (existing.displayLabel !== process.label) { existing.displayLabel = process.label; changed = true }
+    if (!existing.description && process.description) { existing.description = process.description; changed = true }
+    if (changed) {
+      await existing.save()
+      report.updated.push(process.name)
+    }
+  }
+  return report
+}
+
 export const seedPortions = async () => {
   for (const item of INVENTORY_CATALOG) {
+    // La materia prima no se sirve en plato: no lleva porcion.
+    if (item.itemType === ITEM_TYPES.MATERIA_PRIMA) continue
+
     const normalizedName = normalizeName(item.name)
     const existing = await Portion.findOne({ name: normalizedName })
-    
+
     if (!existing) {
       const invItem = await Inventory.findOne({ name: normalizedName })
       const price = invItem?.lastPrice || 0
-      
+
       await Portion.create({
         name: normalizedName,
         usedPerPlate: item.usedPerPlate || 1,
         unit: item.unit,
-        price
+        price,
+        consumptionType: item.consumptionType || 'plate'
       })
       console.log(`Portion seeded: ${normalizedName} (${item.usedPerPlate} ${item.unit}, price: Q${price})`)
+    } else if (item.consumptionType && existing.consumptionType !== item.consumptionType) {
+      existing.consumptionType = item.consumptionType
+      await existing.save()
     }
   }
   // Recalculate and fix any wrong legacy prices in database on start
   await recalculatePortionPrices()
 }
 
-export const seedInventory = async () => {
+// Siembra/normaliza el catalogo maestro. Es IDEMPOTENTE: se puede correr las
+// veces que sea. El catalogo (helpers/constants.js) es la fuente de verdad de
+// la taxonomia — tipo de item, etiqueta visible, categoria, unidad y proceso —
+// para que la jerarquia quede pareja en toda la app y no queden cabos sueltos.
+export const seedInventory = async ({ silent = false } = {}) => {
+  const report = { created: [], updated: [], unchanged: [], processes: null }
+
   for (const ingredient of INVENTORY_CATALOG) {
     const normalizedName = normalizeName(ingredient.name)
     const existing = await Inventory.findOne({ name: normalizedName })
-    
+
     if (!existing) {
       await Inventory.create({
         name: normalizedName,
         unit: ingredient.unit,
         category: ingredient.category || 'Otros',
+        itemType: ingredient.itemType,
+        displayLabel: ingredient.label,
+        processName: ingredient.process || '',
         stock: 0,
-        minimumStock: 5,
-        isActive: true
+        minimumStock: ingredient.itemType === ITEM_TYPES.MATERIA_PRIMA ? 0 : 5,
+        isActive: true,
+        sourceType: ingredient.itemType === ITEM_TYPES.PRODUCTO_TERMINADO ? 'preparado_interno' : 'comprado'
       })
-      console.log(`Inventory seeded: ${normalizedName} (0 ${ingredient.unit})`)
+      report.created.push(normalizedName)
+      if (!silent) console.log(`Inventory seeded: ${normalizedName} [${ingredient.itemType}] (0 ${ingredient.unit})`)
+      continue
+    }
+
+    const changes = []
+
+    if (existing.itemType !== ingredient.itemType) {
+      changes.push(`tipo: ${existing.itemType || '—'} → ${ingredient.itemType}`)
+      existing.itemType = ingredient.itemType
+    }
+    if (existing.displayLabel !== ingredient.label) {
+      changes.push('etiqueta')
+      existing.displayLabel = ingredient.label
+    }
+    if ((existing.category || '') !== (ingredient.category || 'Otros')) {
+      changes.push(`categoría: ${existing.category || '—'} → ${ingredient.category}`)
+      existing.category = ingredient.category || 'Otros'
+    }
+    if ((existing.processName || '') !== (ingredient.process || '')) {
+      changes.push('proceso')
+      existing.processName = ingredient.process || ''
+    }
+    // La unidad solo se corrige si el producto todavia no tiene existencia ni
+    // historia: cambiarla con stock adentro reescribiria costos ya cerrados.
+    if (existing.unit !== ingredient.unit && Number(existing.stock || 0) === 0) {
+      changes.push(`unidad: ${existing.unit} → ${ingredient.unit}`)
+      existing.unit = ingredient.unit
+    }
+    // El producto terminado nunca se compra: su origen es preparacion interna.
+    const expectedSource = ingredient.itemType === ITEM_TYPES.PRODUCTO_TERMINADO ? 'preparado_interno' : 'comprado'
+    if (existing.sourceType !== expectedSource) {
+      changes.push(`origen: ${existing.sourceType} → ${expectedSource}`)
+      existing.sourceType = expectedSource
+    }
+    if (ingredient.category === 'Empaque' && existing.isActive === false) {
+      changes.push('reactivado')
+      existing.isActive = true
+    }
+
+    if (changes.length > 0) {
+      await existing.save()
+      report.updated.push({ name: normalizedName, changes })
+      if (!silent) console.log(`Inventory normalized: ${normalizedName} — ${changes.join(', ')}`)
     } else {
-      let shouldSave = false
-
-      if (!existing.category) {
-        existing.category = ingredient.category || 'Otros'
-        shouldSave = true
-      }
-
-      if (ingredient.category === 'Empaque' && existing.isActive === false) {
-        existing.isActive = true
-        shouldSave = true
-      }
-
-      if (shouldSave) {
-        await existing.save()
-      }
+      report.unchanged.push(normalizedName)
     }
   }
 
+  // Productos fuera del catalogo base (creados a mano por el admin): se les
+  // garantiza tipo y etiqueta para que nunca se muestren en minuscula ni
+  // queden sin jerarquia.
+  const offCatalog = await Inventory.find({ name: { $nin: INVENTORY_CATALOG.map((i) => i.name) } })
+  for (const item of offCatalog) {
+    const changes = []
+    if (!item.itemType) {
+      item.itemType = item.sourceType === 'preparado_interno' ? ITEM_TYPES.PRODUCTO_TERMINADO : ITEM_TYPES.INSUMO_LISTO
+      changes.push('tipo asignado')
+    }
+    if (!item.displayLabel) {
+      item.displayLabel = toDisplayLabel(item.name)
+      changes.push('etiqueta')
+    }
+    if (changes.length > 0) {
+      await item.save()
+      report.updated.push({ name: item.name, changes })
+    }
+  }
+
+  // La materia prima no se sirve por plato: si arrastraba una porcion de la
+  // configuracion anterior, se retira para que no ensucie el Recetario.
+  const rawMaterialNames = INVENTORY_CATALOG.filter((i) => i.itemType === ITEM_TYPES.MATERIA_PRIMA).map((i) => i.name)
+  const removedPortions = await Portion.deleteMany({ name: { $in: rawMaterialNames } })
+  report.removedPortions = removedPortions?.deletedCount || 0
+
+  report.processes = await seedTransformationProcesses()
+
   // Seed Portion sizes/prices
   await seedPortions()
+
+  return report
 }

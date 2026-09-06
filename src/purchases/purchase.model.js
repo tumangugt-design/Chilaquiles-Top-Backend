@@ -15,6 +15,15 @@ const purchaseSchema = new mongoose.Schema({
     trim: true,
     lowercase: true
   },
+  // Snapshot del tipo de item comprado. Solo MATERIA_PRIMA e INSUMO_LISTO
+  // pueden aparecer en Compras: un PRODUCTO_TERMINADO no se compra, nace de un
+  // lote de produccion con proceso y/o receta.
+  itemType: {
+    type: String,
+    enum: ['MATERIA_PRIMA', 'INSUMO_LISTO'],
+    default: 'MATERIA_PRIMA',
+    index: true
+  },
   quantity: {
     type: Number,
     required: true,

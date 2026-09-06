@@ -3,7 +3,7 @@ import InventoryLog from './inventoryLog.model.js'
 import Portion from './portion.model.js'
 import Supplier from '../suppliers/supplier.model.js'
 import { getAggregatedConsumption, validateInventoryAvailability, manualStockAdjustment, getAvailablePlatesCount, convertAmountToCatalogUnit, peekCurrentBatchCosts } from './inventory.service.js'
-import { INVENTORY_CATALOG, INVENTORY_CATALOG_MAP } from '../helpers/constants.js'
+import { INVENTORY_CATALOG, INVENTORY_CATALOG_MAP, ITEM_TYPES, ITEM_TYPE_VALUES, toDisplayLabel } from '../helpers/constants.js'
 
 const PROTECTED_PACKAGING_NAMES = INVENTORY_CATALOG
   .filter((item) => item.category === 'Empaque')
@@ -72,7 +72,12 @@ const getRequiredStockForPublicOption = async (item) => {
 
 export const getPublicInventoryOptions = async (req, res) => {
   try {
-    const items = await Inventory.find({}, 'name stock unit category isActive').sort({ name: 1 })
+    // La materia prima nunca se ofrece al cliente: al plato solo llegan
+    // insumos listos y productos terminados.
+    const items = await Inventory.find(
+      { itemType: { $ne: ITEM_TYPES.MATERIA_PRIMA } },
+      'name displayLabel stock unit category itemType isActive'
+    ).sort({ name: 1 })
 
     const publicItems = await Promise.all(items.map(async (item) => {
       const required = await getRequiredStockForPublicOption(item)
@@ -84,6 +89,8 @@ export const getPublicInventoryOptions = async (req, res) => {
       return {
         _id: item._id,
         name: item.name,
+        displayLabel: item.displayLabel || toDisplayLabel(item.name),
+        itemType: item.itemType,
         stock,
         unit: item.unit,
         category: item.category,
@@ -111,7 +118,18 @@ export const getInventoryItems = async (req, res) => {
       { $set: { isActive: true } }
     )
 
-    const items = await Inventory.find().sort({ name: 1 })
+    // Filtro por jerarquia: cada micro-seccion pide solo lo que le toca.
+    //   ?itemType=MATERIA_PRIMA                 -> Compras (materia prima)
+    //   ?itemType=MATERIA_PRIMA,INSUMO_LISTO    -> insumos de un lote
+    //   ?itemType=PRODUCTO_TERMINADO            -> resultado de una transformacion
+    //   ?itemType=INSUMO_LISTO,PRODUCTO_TERMINADO -> platos y promociones
+    const filter = {}
+    if (req.query.itemType) {
+      const requested = String(req.query.itemType).split(',').map((t) => t.trim().toUpperCase()).filter((t) => ITEM_TYPE_VALUES.includes(t))
+      if (requested.length > 0) filter.itemType = { $in: requested }
+    }
+
+    const items = await Inventory.find(filter).sort({ name: 1 })
 
     // currentBatchCost = costo real del lote FIFO vigente (Compras/Lotes),
     // expresado en la unidad del producto. Cuando el producto aun no tiene
@@ -121,8 +139,13 @@ export const getInventoryItems = async (req, res) => {
 
     const withLiveCost = items.map((item) => {
       const peek = peeks.get(item.name)
+      const plain = item.toObject()
       return {
-        ...item.toObject(),
+        ...plain,
+        // Nunca se muestra la llave interna en minuscula: displayLabel es lo
+        // que la interfaz debe renderizar siempre.
+        displayLabel: plain.displayLabel || toDisplayLabel(plain.name),
+        itemType: plain.itemType || ITEM_TYPES.INSUMO_LISTO,
         currentBatchCost: peek ? peek.costPerCatalogUnit : null,
         currentBatchDate: peek ? peek.allocationDate : null
       }
@@ -139,6 +162,23 @@ export const saveInventoryItem = async (req, res) => {
     const name = String(req.body.name || '').trim().toLowerCase()
     const rawAmount = Number(req.body.amount ?? req.body.stock ?? 0)
     
+    // --- Jerarquia: que puede entrar por "Entrada directa" ---
+    // Solo INSUMO_LISTO. La materia prima entra por Compras (necesita lote
+    // para el costeo FIFO) y el producto terminado SOLO puede nacer de un
+    // proceso de transformacion con procedimiento y/o receta.
+    const existingForType = await Inventory.findOne({ name })
+    const resolvedType = existingForType?.itemType || INVENTORY_CATALOG_MAP[name]?.itemType
+    if (resolvedType === ITEM_TYPES.PRODUCTO_TERMINADO) {
+      return res.status(400).json({
+        message: `"${existingForType?.displayLabel || toDisplayLabel(name)}" es un Producto Terminado: no se puede ingresar como entrada directa. Solo nace de un lote de producción con proceso de transformación y/o receta.`
+      })
+    }
+    if (resolvedType === ITEM_TYPES.MATERIA_PRIMA) {
+      return res.status(400).json({
+        message: `"${existingForType?.displayLabel || toDisplayLabel(name)}" es Materia Prima: regístrala en Compras para que quede su lote y su costo real, no como entrada directa.`
+      })
+    }
+
     let catalogItem = INVENTORY_CATALOG_MAP[name]
     if (!catalogItem) {
       const dbItem = await Inventory.findOne({ name })
@@ -216,6 +256,8 @@ export const saveInventoryItem = async (req, res) => {
         name,
         unit: catalogItem.unit,
         category: catalogItem.category || 'Otros',
+        itemType: catalogItem.itemType || ITEM_TYPES.INSUMO_LISTO,
+        displayLabel: catalogItem.label || toDisplayLabel(name),
         stock: 0,
         minimumStock: 5,
         isActive: true

@@ -28,6 +28,30 @@ const inventoryItemSchema = new mongoose.Schema({
     type: Boolean,
     default: true
   },
+  // Jerarquia de inventario. Ver ITEM_TYPES en helpers/constants.js:
+  // MATERIA_PRIMA solo se compra y debe transformarse; INSUMO_LISTO se compra
+  // y ya sirve para plato/promocion; PRODUCTO_TERMINADO no se puede comprar,
+  // solo nace de un lote de produccion con proceso y/o receta.
+  itemType: {
+    type: String,
+    enum: ['MATERIA_PRIMA', 'INSUMO_LISTO', 'PRODUCTO_TERMINADO'],
+    default: 'INSUMO_LISTO',
+    index: true
+  },
+  // Proceso de transformacion asignado (obligatorio de facto para todo
+  // PRODUCTO_TERMINADO: es donde se registra la merma aunque no haya receta).
+  processName: {
+    type: String,
+    trim: true,
+    lowercase: true,
+    default: ''
+  },
+  // Receta por defecto del producto terminado, cuando existe.
+  defaultRecipe: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Recipe',
+    default: null
+  },
   category: {
     type: String,
     trim: true,

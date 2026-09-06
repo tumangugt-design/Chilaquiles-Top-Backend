@@ -19,6 +19,15 @@ import {
   createPackagingProduct,
   getIngredientCostHistory
 } from './inventory.controller.js';
+import {
+  getTransformationProcesses,
+  saveTransformationProcess,
+  getRecipes,
+  saveRecipe,
+  deleteRecipe,
+  seedCatalog,
+  getMermaSummary
+} from './transformation.controller.js';
 import { verifyAuthToken } from '../middlewares/auth.middleware.js';
 import { requireApprovedStatus, requireRole } from '../middlewares/role.middleware.js';
 import { USER_ROLES } from '../helpers/constants.js';
@@ -31,6 +40,18 @@ router.get('/public-options', getPublicInventoryOptions);
 router.use(verifyAuthToken, requireApprovedStatus);
 router.get('/', requireRole([USER_ROLES.ADMIN, USER_ROLES.CHEF]), getInventoryItems);
 router.get('/logs', requireRole([USER_ROLES.ADMIN]), getInventoryLogs);
+
+// --- Jerarquia: procesos de transformacion y recetas ---
+// Todo producto terminado nace de un proceso (donde se mide la merma) y/o de
+// una receta (configuracion de transformacion guardada).
+router.get('/processes', requireRole([USER_ROLES.ADMIN, USER_ROLES.CHEF]), getTransformationProcesses);
+router.post('/processes', requireRole([USER_ROLES.ADMIN]), saveTransformationProcess);
+router.get('/recipes', requireRole([USER_ROLES.ADMIN, USER_ROLES.CHEF]), getRecipes);
+router.post('/recipes', requireRole([USER_ROLES.ADMIN]), saveRecipe);
+router.put('/recipes/:id', requireRole([USER_ROLES.ADMIN]), saveRecipe);
+router.delete('/recipes/:id', requireRole([USER_ROLES.ADMIN]), deleteRecipe);
+router.get('/merma-summary', requireRole([USER_ROLES.ADMIN]), getMermaSummary);
+router.post('/catalog/seed', requireRole([USER_ROLES.ADMIN]), seedCatalog);
 router.get('/last-purchases', requireRole([USER_ROLES.ADMIN]), getLastPurchases);
 router.get('/:name/cost-history', requireRole([USER_ROLES.ADMIN]), getIngredientCostHistory);
 router.get('/portions', requireRole([USER_ROLES.ADMIN]), getPortions);
