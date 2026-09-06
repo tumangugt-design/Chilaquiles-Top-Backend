@@ -124,14 +124,26 @@ export const createPurchase = async (req, res) => {
     let allocation = null;
 
     if (itemType === ITEM_TYPES.INSUMO_LISTO) {
-      // Insumo listo: no hay transformación. Se consume el lote crudo completo
-      // hacia un lote de Stock equivalente para que el costeo FIFO de la venta
-      // siga funcionando igual que con un producto terminado.
-      const plan = await planPurchaseConsumption(ingredientName, roundQty(quantity), unit);
-      await commitPurchaseConsumption(plan);
+      // Insumo listo: no hay transformación. El lote recién creado se traslada
+      // COMPLETO a un lote de Stock equivalente para que el costeo FIFO de la
+      // venta siga funcionando igual que con un producto terminado.
+      //
+      // Se toma explícitamente esta Compra (no un consumo FIFO general) porque
+      // el FIFO tomaría primero un lote más viejo del mismo producto y dejaría
+      // este intacto, mezclando costos que no corresponden.
+      await Purchase.updateOne(
+        { _id: purchase._id },
+        { $set: { remainingQuantity: 0, isDepleted: true } }
+      );
 
       allocation = await PurchaseAllocation.create({
-        rawInputs: plan.consumed,
+        rawInputs: [{
+          purchase: purchase._id,
+          ingredientName,
+          quantityUsed: roundQty(quantity),
+          unit,
+          cost: roundMoney(totalCost)
+        }],
         stockItemName: ingredientName,
         producedQuantity: roundQty(quantity),
         producedUnit: unit,
