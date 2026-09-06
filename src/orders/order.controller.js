@@ -1,4 +1,4 @@
-import { createOrderRecord, getOrdersByRole, getOrderHistoryForAdmin, updateOrderStatusRecord, hideDeliveredOrdersRecord, getOrderForTracking, getOrderConfirmation } from './order.service.js'
+import { createOrderRecord, getOrdersByRole, getOrderHistoryForAdmin, updateOrderStatusRecord, hideDeliveredOrdersRecord, getOrderForTracking, getOrderConfirmation, getDispatchBoard, assignOrderToDriver, getDeliveryPayouts, settleDeliveryPayout } from './order.service.js'
 import { isOperatingNow } from '../settings/settings.service.js'
 import { USER_ROLES } from '../helpers/constants.js'
 
@@ -177,5 +177,56 @@ export const clearDeliveredOrders = async (req, res) => {
     return res.status(200).json({ message: 'Pedidos entregados archivados de la vista', result })
   } catch (error) {
     return res.status(500).json({ message: 'No se pudieron limpiar los pedidos', error: error.message })
+  }
+}
+
+
+export const getDispatchOrders = async (req, res) => {
+  try {
+    const orders = await getDispatchBoard()
+    res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate')
+    return res.status(200).json(orders)
+  } catch (error) {
+    return res.status(500).json({ message: 'No se pudo cargar el tablero de reparto', error: error.message })
+  }
+}
+
+export const assignDriver = async (req, res) => {
+  try {
+    const order = await assignOrderToDriver({
+      orderId: req.params.orderId,
+      repartidorId: req.body.repartidorId || null,
+    })
+
+    if (!order) return res.status(404).json({ message: 'Pedido no encontrado' })
+
+    return res.status(200).json({
+      message: req.body.repartidorId ? 'Pedido asignado' : 'Asignacion retirada',
+      order,
+    })
+  } catch (error) {
+    return res.status(error.statusCode || 500).json({ message: error.message || 'No se pudo asignar el pedido' })
+  }
+}
+
+export const getDeliveryPayoutsController = async (req, res) => {
+  try {
+    const payouts = await getDeliveryPayouts({ from: req.query.from, to: req.query.to })
+    res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate')
+    return res.status(200).json(payouts)
+  } catch (error) {
+    return res.status(500).json({ message: 'No se pudo calcular la liquidacion', error: error.message })
+  }
+}
+
+export const settleDeliveryPayoutController = async (req, res) => {
+  try {
+    const result = await settleDeliveryPayout({
+      repartidorId: req.body.repartidorId,
+      orderIds: req.body.orderIds,
+    })
+    return res.status(200).json({ message: 'Pagos marcados como liquidados', result })
+  } catch (error) {
+    return res.status(error.statusCode || 500).json({ message: error.message || 'No se pudo liquidar' })
   }
 }

@@ -1,5 +1,5 @@
 
-import { listUsersByRole, createLocalStaffUser, updateStaffUser, deleteUser, findCustomerProfileByPhone } from './user.service.js';
+import { listUsersByRole, createLocalStaffUser, updateStaffUser, deleteUser, findCustomerProfileByPhone, createOtpDriver, updateOtpDriver } from './user.service.js';
 
 export const createStaffUser = async (req, res) => {
   try {
@@ -62,5 +62,24 @@ export const getCustomerByPhone = async (req, res) => {
     return res.status(200).json({ customer });
   } catch (error) {
     return res.status(500).json({ message: 'Error al buscar cliente por teléfono', error: error.message });
+  }
+};
+
+
+export const createDriver = async (req, res) => {
+  try {
+    const user = await createOtpDriver({ name: req.body.name, phone: req.body.phone });
+    return res.status(201).json({ message: 'Repartidor preautorizado', user });
+  } catch (error) {
+    return res.status(400).json({ message: error.message || 'No se pudo crear el repartidor' });
+  }
+};
+
+export const patchDriver = async (req, res) => {
+  try {
+    const user = await updateOtpDriver(req.params.id, req.body);
+    return res.status(200).json({ message: 'Repartidor actualizado', user });
+  } catch (error) {
+    return res.status(400).json({ message: error.message || 'No se pudo actualizar el repartidor' });
   }
 };

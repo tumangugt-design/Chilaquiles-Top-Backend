@@ -6,7 +6,7 @@ import { hashPassword, verifyPassword } from '../helpers/password.helper.js'
 
 export const findUserByUsername = async (username) => User.findOne({ username: String(username || '').toLowerCase().trim() })
 
-const buildPhoneMatchQuery = (phone) => {
+export const buildPhoneMatchQuery = (phone) => {
   const normalizedPhone = normalizePhone(phone)
   const digits = String(phone || '').replace(/\D/g, '')
   const localDigits = digits.startsWith('502') ? digits.slice(3) : digits
@@ -206,7 +206,9 @@ export const listUsersByRole = async (role) => {
   if (!allowedRoles.includes(role)) return []
 
   const query = { role }
-  if (role !== USER_ROLES.CLIENT) query.status = USER_STATUS.APPROVED
+  // Los repartidores se dan de alta y de baja seguido (son motoristas de plataformas,
+  // no planilla). El admin tiene que poder ver a los desactivados para reactivarlos.
+  if (role === USER_ROLES.CHEF) query.status = USER_STATUS.APPROVED
   return User.find(query).sort({ createdAt: -1 })
 }
 
@@ -266,3 +268,74 @@ export const updateStaffUser = async (userId, { name, phone, role, password }) =
   return user
 }
 
+
+
+// ---------------------------------------------------------------------------
+// REPARTIDORES (modelo apalancado)
+//
+// No son planilla ni tienen usuario y contrasena: son motoristas que ya reparten
+// para plataformas y toman pedidos nuestros como ingreso adicional. El admin los
+// preautoriza con nombre y telefono; ellos entran con ese telefono y un codigo de
+// WhatsApp. Sin preautorizacion no se manda ni el codigo.
+// ---------------------------------------------------------------------------
+
+export const findDriverByPhone = async (phone) => {
+  const { phoneConditions } = buildPhoneMatchQuery(phone)
+  if (phoneConditions.length === 0) return null
+
+  return User.findOne({ role: USER_ROLES.REPARTIDOR, $or: phoneConditions })
+    .sort({ updatedAt: -1, createdAt: -1 })
+}
+
+export const createOtpDriver = async ({ name, phone }) => {
+  const normalizedPhone = normalizePhone(phone)
+  if (!normalizedPhone) throw new Error('El telefono es obligatorio')
+
+  const existing = await findDriverByPhone(normalizedPhone)
+  if (existing) throw new Error('Ese telefono ya esta registrado como repartidor')
+
+  return User.create({
+    authProvider: 'OTP',
+    phone: normalizedPhone,
+    name: String(name || '').trim(),
+    role: USER_ROLES.REPARTIDOR,
+    status: USER_STATUS.APPROVED,
+  })
+}
+
+export const updateOtpDriver = async (userId, { name, phone, status }) => {
+  const user = await User.findById(userId)
+  if (!user || user.role !== USER_ROLES.REPARTIDOR) throw new Error('Repartidor no encontrado')
+
+  if (name !== undefined) user.name = String(name || '').trim()
+
+  if (phone !== undefined) {
+    const normalizedPhone = normalizePhone(phone)
+    if (!normalizedPhone) throw new Error('El telefono es obligatorio')
+    const duplicate = await findDriverByPhone(normalizedPhone)
+    if (duplicate && duplicate._id.toString() !== user._id.toString()) {
+      throw new Error('Ese telefono ya esta registrado como repartidor')
+    }
+    user.phone = normalizedPhone
+  }
+
+  if (status !== undefined) {
+    if (![USER_STATUS.APPROVED, USER_STATUS.REJECTED].includes(status)) {
+      throw new Error('Estado no valido')
+    }
+    user.status = status
+  }
+
+  await user.save()
+  return user
+}
+
+// Se llama la primera vez que el repartidor entra: el admin lo dio de alta con
+// telefono y el nombre puede venir vacio.
+export const setDriverNameIfMissing = async (user, name) => {
+  const cleanName = String(name || '').trim()
+  if (!cleanName || user.name) return user
+  user.name = cleanName
+  await user.save()
+  return user
+}

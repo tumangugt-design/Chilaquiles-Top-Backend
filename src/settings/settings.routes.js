@@ -13,7 +13,9 @@ import {
   getCampaignHistory,
   generateMarketing,
   getTaxConfig,
-  updateTaxConfig
+  updateTaxConfig,
+  getDeliveryConfig,
+  updateDeliveryConfig
 } from './settings.controller.js'
 import { verifyAuthToken } from '../middlewares/auth.middleware.js'
 import { requireApprovedStatus, requireRole } from '../middlewares/role.middleware.js'
@@ -36,6 +38,9 @@ router.patch('/calculator-costs', verifyAuthToken, requireApprovedStatus, requir
 router.get('/coupons', verifyAuthToken, requireApprovedStatus, requireRole([USER_ROLES.ADMIN]), getCoupons)
 router.patch('/coupons', verifyAuthToken, requireApprovedStatus, requireRole([USER_ROLES.ADMIN]), updateCoupons)
 router.post('/validate-coupon', validateCoupon)
+
+router.get('/delivery-config', verifyAuthToken, requireApprovedStatus, requireRole([USER_ROLES.ADMIN]), getDeliveryConfig)
+router.patch('/delivery-config', verifyAuthToken, requireApprovedStatus, requireRole([USER_ROLES.ADMIN]), updateDeliveryConfig)
 
 router.get('/tax-config', verifyAuthToken, requireApprovedStatus, requireRole([USER_ROLES.ADMIN]), getTaxConfig)
 router.patch('/tax-config', verifyAuthToken, requireApprovedStatus, requireRole([USER_ROLES.ADMIN]), updateTaxConfig)

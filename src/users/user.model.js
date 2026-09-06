@@ -9,7 +9,7 @@ const locationSchema = new mongoose.Schema({
 const userSchema = new mongoose.Schema({
   authProvider: {
     type: String,
-    enum: ['LOCAL', 'GUEST'],
+    enum: ['LOCAL', 'GUEST', 'OTP'],
     default: 'LOCAL',
   },
   providerUid: {

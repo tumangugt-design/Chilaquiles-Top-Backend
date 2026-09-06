@@ -1,4 +1,4 @@
-import { getOperatingHoursSetting, isOperatingNow, updateOperatingHoursSetting, deactivateExpiredPromotions, validatePromotionsPayload } from './settings.service.js'
+import { getOperatingHoursSetting, isOperatingNow, updateOperatingHoursSetting, deactivateExpiredPromotions, validatePromotionsPayload, getDeliveryConfig as getDeliveryConfigService, updateDeliveryConfig as updateDeliveryConfigService } from './settings.service.js'
 import Setting from './settings.model.js'
 import { getTaxConfig as getTaxConfigService, updateTaxConfig as updateTaxConfigService } from '../finances/finances.service.js'
 import { sendPromotionBlastMessage } from '../bot/whatsapp.service.js'
@@ -358,5 +358,25 @@ export const updateTaxConfig = async (req, res) => {
     return res.status(200).json(updated)
   } catch (error) {
     return res.status(500).json({ message: 'No se pudo guardar la configuracion fiscal', error: error.message })
+  }
+}
+
+
+export const getDeliveryConfig = async (req, res) => {
+  try {
+    const config = await getDeliveryConfigService()
+    res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate')
+    return res.status(200).json(config)
+  } catch (error) {
+    return res.status(500).json({ message: 'No se pudo cargar la configuracion de reparto', error: error.message })
+  }
+}
+
+export const updateDeliveryConfig = async (req, res) => {
+  try {
+    const updated = await updateDeliveryConfigService(req.body || {})
+    return res.status(200).json(updated)
+  } catch (error) {
+    return res.status(500).json({ message: 'No se pudo guardar la configuracion de reparto', error: error.message })
   }
 }

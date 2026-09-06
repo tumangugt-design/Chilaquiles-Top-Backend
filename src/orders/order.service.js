@@ -2,7 +2,8 @@
 import Order from './order.model.js';
 import Setting from '../settings/settings.model.js';
 import { buildMapsLink, calculateOrderTotal, normalizePhone } from '../helpers/order.helper.js';
-import { ORDER_STATUS, USER_ROLES, CHEF_ALLOWED_TRANSITIONS, DELIVERY_ALLOWED_TRANSITIONS } from '../helpers/constants.js';
+import { ORDER_STATUS, USER_ROLES, CHEF_ALLOWED_TRANSITIONS, DELIVERY_ALLOWED_TRANSITIONS, DELIVERY_PAYOUT_STATUS } from '../helpers/constants.js';
+import { getDeliveryConfig } from '../settings/settings.service.js';
 import { discountInventoryForOrder, validateInventoryAvailability } from '../inventory/inventory.service.js';
 import { publishOrderRealtimeEvent } from '../realtime/realtime.service.js';
 import { getGuatemalaOrderDatePrefix, getGuatemalaParts } from '../helpers/timezone.helper.js';
@@ -491,16 +492,14 @@ export const getOrdersByRole = async (user, statusFilter = null) => {
       ];
     }
   } else if (user.role === USER_ROLES.REPARTIDOR) {
-    if (statusFilter === 'delivered') {
-      query.repartidorId = user._id;
-      query.status = ORDER_STATUS.ENTREGADO;
-    } else {
-      query.$or = [
-        { status: ORDER_STATUS.LISTO_PARA_DESPACHO, repartidorId: { $exists: false } },
-        { status: ORDER_STATUS.LISTO_PARA_DESPACHO, repartidorId: null },
-        { repartidorId: user._id, status: { $in: [ORDER_STATUS.RECOLECTADO, ORDER_STATUS.EN_CAMINO] } }
-      ];
-    }
+    // Ya no hay pool abierto. El admin asigna cada pedido a un repartidor concreto
+    // despues de confirmarlo por WhatsApp, y el repartidor solo ve lo suyo. Ademas
+    // de ordenar la operacion, evita exponer nombre, telefono y direccion del
+    // cliente a repartidores que no van a llevar ese pedido.
+    query.repartidorId = user._id;
+    query.status = statusFilter === 'delivered'
+      ? ORDER_STATUS.ENTREGADO
+      : { $in: [ORDER_STATUS.LISTO_PARA_DESPACHO, ORDER_STATUS.RECOLECTADO, ORDER_STATUS.EN_CAMINO] };
   } else if (user.role === USER_ROLES.ADMIN) {
     if (statusFilter && statusFilter !== 'all') {
       query.status = statusFilter;
@@ -556,12 +555,16 @@ export const updateOrderStatusRecord = async ({ orderId, nextStatus, actor }) =>
   }
 
   if (actor.role === USER_ROLES.REPARTIDOR) {
-    if (order.repartidorId && order.repartidorId.toString() !== actor._id.toString()) {
-      const error = new Error('Esta orden ya fue tomada por otro Repartidor');
+    if (!order.repartidorId) {
+      const error = new Error('Este pedido todavia no te fue asignado');
+      error.statusCode = 403;
+      throw error;
+    }
+    if (order.repartidorId.toString() !== actor._id.toString()) {
+      const error = new Error('Este pedido esta asignado a otro repartidor');
       error.statusCode = 409;
       throw error;
     }
-    if (!order.repartidorId) order.repartidorId = actor._id;
   }
 
   const isValidTransition = validateStatusTransition({
@@ -628,4 +631,180 @@ export const hideDeliveredOrdersRecord = async () => {
     { status: ORDER_STATUS.ENTREGADO, hiddenForAdmin: { $ne: true } },
     { $set: { hiddenForAdmin: true } }
   );
+};
+
+
+// ---------------------------------------------------------------------------
+// DESPACHO Y ASIGNACION
+//
+// El chef libera el pedido (listo_para_despacho) y cae al tablero de Distribucion.
+// El admin confirma por WhatsApp quien lo lleva y se lo asigna a mano. Hasta ese
+// momento el pedido no le aparece a nadie mas.
+// ---------------------------------------------------------------------------
+
+export const getDispatchBoard = async () => {
+  return Order.find({
+    status: { $in: [ORDER_STATUS.LISTO_PARA_DESPACHO, ORDER_STATUS.RECOLECTADO, ORDER_STATUS.EN_CAMINO] }
+  })
+    .populate('repartidorId', 'name phone')
+    .sort({ updatedAt: 1 });
+};
+
+export const assignOrderToDriver = async ({ orderId, repartidorId }) => {
+  const order = await Order.findById(orderId);
+  if (!order) return null;
+
+  const allowedStatuses = [ORDER_STATUS.LISTO_PARA_DESPACHO, ORDER_STATUS.RECOLECTADO, ORDER_STATUS.EN_CAMINO];
+  if (!allowedStatuses.includes(order.status)) {
+    const error = new Error('Solo se puede asignar un pedido que ya salio de cocina y aun no fue entregado');
+    error.statusCode = 400;
+    throw error;
+  }
+
+  if (!repartidorId) {
+    // Desasignar: el motorista se arrepintio o no llego. Vuelve al tablero.
+    if (order.status !== ORDER_STATUS.LISTO_PARA_DESPACHO) {
+      const error = new Error('No se puede quitar el repartidor de un pedido que ya recolecto');
+      error.statusCode = 400;
+      throw error;
+    }
+    order.repartidorId = null;
+    order.assignedAt = null;
+    order.deliveryFee = 0;
+    order.set('deliveryPayout', { status: DELIVERY_PAYOUT_STATUS.PENDIENTE, paidAt: null });
+    await order.save();
+    await publishOrderRealtimeEvent(order);
+    return order;
+  }
+
+  const { default: User } = await import('../users/user.model.js');
+  const driver = await User.findById(repartidorId);
+  if (!driver || driver.role !== USER_ROLES.REPARTIDOR) {
+    const error = new Error('Repartidor no valido');
+    error.statusCode = 400;
+    throw error;
+  }
+  if (driver.status !== 'approved') {
+    const error = new Error('Ese repartidor esta desactivado');
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const isNewAssignment = !order.repartidorId || order.repartidorId.toString() !== driver._id.toString();
+
+  order.repartidorId = driver._id;
+
+  if (isNewAssignment) {
+    order.assignedAt = new Date();
+    // La tarifa se congela aqui: subirla manana no reescribe lo que ya se debe.
+    if (order.deliveryPayout?.status !== DELIVERY_PAYOUT_STATUS.PAGADO) {
+      const config = await getDeliveryConfig();
+      order.deliveryFee = Number(config.feePerOrder || 0);
+    }
+  }
+
+  await order.save();
+  await publishOrderRealtimeEvent(order);
+  return order;
+};
+
+// ---------------------------------------------------------------------------
+// LIQUIDACION
+//
+// Cada entrega genera una cuenta por pagar al motorista. Sin este registro el
+// pago por reparto seria un gasto invisible para Finanzas.
+// ---------------------------------------------------------------------------
+
+export const getDeliveryPayouts = async ({ from, to } = {}) => {
+  const query = {
+    status: ORDER_STATUS.ENTREGADO,
+    repartidorId: { $ne: null },
+    deliveryFee: { $gt: 0 }
+  };
+
+  if (from || to) {
+    query.deliveredAt = {};
+    if (from) query.deliveredAt.$gte = new Date(from);
+    if (to) query.deliveredAt.$lte = new Date(to);
+  }
+
+  const orders = await Order.find(query)
+    .select('orderNumber deliveredAt deliveryFee deliveryPayout repartidorId total')
+    .populate('repartidorId', 'name phone')
+    .sort({ deliveredAt: -1 });
+
+  const byDriver = new Map();
+
+  for (const order of orders) {
+    const driver = order.repartidorId;
+    if (!driver) continue;
+    const key = driver._id.toString();
+
+    if (!byDriver.has(key)) {
+      byDriver.set(key, {
+        repartidorId: key,
+        name: driver.name || 'Sin nombre',
+        phone: driver.phone || '',
+        deliveries: 0,
+        totalFee: 0,
+        pendingFee: 0,
+        pendingOrders: [],
+        lastDeliveryAt: null,
+      });
+    }
+
+    const entry = byDriver.get(key);
+    const fee = Number(order.deliveryFee || 0);
+    entry.deliveries += 1;
+    entry.totalFee += fee;
+
+    if (order.deliveryPayout?.status !== DELIVERY_PAYOUT_STATUS.PAGADO) {
+      entry.pendingFee += fee;
+      entry.pendingOrders.push({
+        _id: order._id,
+        orderNumber: order.orderNumber,
+        deliveredAt: order.deliveredAt,
+        deliveryFee: fee,
+      });
+    }
+
+    if (!entry.lastDeliveryAt || (order.deliveredAt && order.deliveredAt > entry.lastDeliveryAt)) {
+      entry.lastDeliveryAt = order.deliveredAt;
+    }
+  }
+
+  const drivers = Array.from(byDriver.values()).sort((a, b) => b.pendingFee - a.pendingFee);
+
+  return {
+    drivers,
+    totals: {
+      deliveries: drivers.reduce((sum, d) => sum + d.deliveries, 0),
+      totalFee: drivers.reduce((sum, d) => sum + d.totalFee, 0),
+      pendingFee: drivers.reduce((sum, d) => sum + d.pendingFee, 0),
+    },
+  };
+};
+
+export const settleDeliveryPayout = async ({ repartidorId, orderIds }) => {
+  const query = {
+    status: ORDER_STATUS.ENTREGADO,
+    'deliveryPayout.status': DELIVERY_PAYOUT_STATUS.PENDIENTE,
+  };
+
+  if (Array.isArray(orderIds) && orderIds.length > 0) {
+    query._id = { $in: orderIds };
+  } else if (repartidorId) {
+    query.repartidorId = repartidorId;
+  } else {
+    const error = new Error('Indica el repartidor o los pedidos a liquidar');
+    error.statusCode = 400;
+    throw error;
+  }
+
+  return Order.updateMany(query, {
+    $set: {
+      'deliveryPayout.status': DELIVERY_PAYOUT_STATUS.PAGADO,
+      'deliveryPayout.paidAt': new Date(),
+    },
+  });
 };

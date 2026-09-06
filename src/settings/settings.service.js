@@ -1,5 +1,6 @@
 import Setting from './settings.model.js'
 import { getGuatemalaParts } from '../helpers/timezone.helper.js'
+import { DEFAULT_DELIVERY_FEE, DELIVERY_CONFIG_KEY } from '../helpers/constants.js'
 
 export const DEFAULT_OPERATING_HOURS = {
   weekly: {
@@ -243,4 +244,56 @@ export const seedSettings = async () => {
     await Setting.create({ key: 'coupons', value: [] })
     console.log('Settings seeded: coupons')
   }
+
+  // Regla de infraestructura: un seed nunca debe poder tumbar el arranque.
+  try {
+    const existingDelivery = await Setting.findOne({ key: DELIVERY_CONFIG_KEY })
+    if (!existingDelivery) {
+      await Setting.create({ key: DELIVERY_CONFIG_KEY, value: DEFAULT_DELIVERY_CONFIG })
+      console.log('Settings seeded: delivery-config')
+    }
+  } catch (error) {
+    console.error('No se pudo sembrar delivery-config:', error.message)
+  }
+}
+
+
+// ---------------------------------------------------------------------------
+// REPARTO
+//
+// No hay flota propia ni piloto dedicado. Se le paga una tarifa fija por pedido
+// entregado a motoristas que ya trabajan en plataformas de delivery. La tarifa
+// vive aqui para poder subirla o bajarla sin desplegar, pero se COPIA al pedido
+// en el momento de asignarlo: lo que ya se debe no se recalcula.
+// ---------------------------------------------------------------------------
+
+export const DEFAULT_DELIVERY_CONFIG = {
+  feePerOrder: DEFAULT_DELIVERY_FEE,
+  driverPanelUrl: 'https://repartidor.chilaquilestop.com',
+}
+
+const normalizeDeliveryConfig = (value = {}) => {
+  const fee = Number(value?.feePerOrder)
+  const url = String(value?.driverPanelUrl || '').trim()
+
+  return {
+    feePerOrder: Number.isFinite(fee) && fee >= 0 ? fee : DEFAULT_DELIVERY_CONFIG.feePerOrder,
+    driverPanelUrl: url || DEFAULT_DELIVERY_CONFIG.driverPanelUrl,
+  }
+}
+
+export const getDeliveryConfig = async () => {
+  const existing = await Setting.findOne({ key: DELIVERY_CONFIG_KEY })
+  if (!existing) return { ...DEFAULT_DELIVERY_CONFIG }
+  return normalizeDeliveryConfig(existing.value || {})
+}
+
+export const updateDeliveryConfig = async (payload = {}) => {
+  const normalized = normalizeDeliveryConfig(payload)
+  const updated = await Setting.findOneAndUpdate(
+    { key: DELIVERY_CONFIG_KEY },
+    { $set: { value: normalized } },
+    { new: true, upsert: true }
+  )
+  return normalizeDeliveryConfig(updated.value)
 }

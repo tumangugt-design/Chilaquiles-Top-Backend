@@ -47,6 +47,18 @@ export const ORDER_PRICING = {
   3: 120
 }
 
+// Reparto apalancado: no hay flota propia. Se le paga una tarifa fija por pedido
+// entregado a motoristas que ya trabajan en plataformas de delivery. La tarifa se
+// configura en Ajustes y se CONGELA en el pedido al momento de asignarlo, para que
+// un cambio de tarifa no reescriba lo que ya se debe.
+export const DEFAULT_DELIVERY_FEE = 30
+export const DELIVERY_CONFIG_KEY = 'delivery_config'
+
+export const DELIVERY_PAYOUT_STATUS = {
+  PENDIENTE: 'PENDIENTE',
+  PAGADO: 'PAGADO'
+}
+
 export const SAUCE_FULL_PORTION_ML = 200
 export const SAUCE_HALF_PORTION_ML = 100
 

@@ -1,5 +1,5 @@
 import mongoose from 'mongoose';
-import { ORDER_STATUS } from '../helpers/constants.js';
+import { ORDER_STATUS, DELIVERY_PAYOUT_STATUS } from '../helpers/constants.js';
 
 const locationSchema = new mongoose.Schema({
   lat: Number,
@@ -88,6 +88,18 @@ const orderSchema = new mongoose.Schema({
   repartidorId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User'
+  },
+  // Momento en que el admin asigno el pedido a un repartidor concreto.
+  assignedAt: { type: Date, default: null },
+  // Tarifa pactada con el repartidor por ESTE pedido. Se congela al asignar.
+  deliveryFee: { type: Number, default: 0 },
+  deliveryPayout: {
+    status: {
+      type: String,
+      enum: Object.values(DELIVERY_PAYOUT_STATUS),
+      default: DELIVERY_PAYOUT_STATUS.PENDIENTE
+    },
+    paidAt: { type: Date, default: null }
   },
   hiddenForAdmin: { type: Boolean, default: false },
   deliveredAt: { type: Date, default: null },
