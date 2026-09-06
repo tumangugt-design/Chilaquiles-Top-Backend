@@ -107,6 +107,11 @@ const getConsumptionForItem = (item, portionMap, inventoryMap, sauceTemperature 
   const isFrio = sauceTemperature === 'FRIO'
 
   if (isFrio) {
+    // En frio la salsa siempre va en plato(s)/tapadera(s) de 4 onz (nunca 8 onz).
+    // Divorciados usa 2 (1 roja + 1 verde, configurado en Recetario). Salsa unica usa 1.
+    // Ademas, TODO pedido frio lleva un plato/tapadera de 4 onz adicional, aparte,
+    // exclusivo para la proteina - independiente del tipo de salsa (ajuste Denilson).
+    let saucePlates = 1
     if (sauce === 'ROJA') {
       consumption['salsa roja'] = getQty('salsa roja')
     } else if (sauce === 'VERDE') {
@@ -114,12 +119,14 @@ const getConsumptionForItem = (item, portionMap, inventoryMap, sauceTemperature 
     } else if (sauce === 'DIVORCIADOS') {
       consumption['salsa roja'] = round(getQty('salsa roja') / 2)
       consumption['salsa verde'] = round(getQty('salsa verde') / 2)
+      saucePlates = getQty('plato de 4 onz') // configurado en Recetario (hoy: 2)
     } else if (sauce) {
       const dbSauceName = sauce.toLowerCase().replace(/_/g, ' ')
       consumption[dbSauceName] = getQty(dbSauceName)
     }
-    consumption['plato de 4 onz'] = getQty('plato de 4 onz') * 3
-    consumption['tapadera de 4 onz'] = getQty('tapadera de 4 onz') * 3
+    const proteinPlates = 1
+    consumption['plato de 4 onz'] = saucePlates + proteinPlates
+    consumption['tapadera de 4 onz'] = saucePlates + proteinPlates
   } else {
     if (sauce === 'ROJA') {
       consumption['salsa roja'] = getQty('salsa roja')
