@@ -10,6 +10,15 @@ export const getSummary = async (req, res) => {
   }
 }
 
+export const getPromotionsProfitability = async (req, res) => {
+  try {
+    const report = await financeService.getPromotionsProfitabilityReport()
+    res.status(200).json({ success: true, data: report })
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message })
+  }
+}
+
 
 
 export const handleRecurrenteWebhook = async (req, res) => {

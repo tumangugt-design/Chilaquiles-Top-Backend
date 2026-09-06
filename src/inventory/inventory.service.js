@@ -355,6 +355,55 @@ const consumeFifoBatches = async (ingredientName, requiredQty, inventoryUnit) =>
   }
 }
 
+// "Asoma" (sin consumir) el costo del lote FIFO mas antiguo con existencia
+// para un producto de Stock. A diferencia de consumeFifoBatches, esto NO
+// descuenta remainingQuantity ni escribe nada - es de solo lectura, pensado
+// para mostrar "cuanto cuesta ahora mismo lo que se va a vender" (ej. en la
+// calculadora de Promociones) sin tocar inventario.
+//
+// Devuelve null si el producto todavia no tiene lotes registrados (aun no
+// paso por Compras/Lotes) - en ese caso el llamador debe usar su propio
+// respaldo (ej. Inventory.lastPrice).
+export const peekCurrentBatchCost = async (ingredientName, catalogUnit) => {
+  const stockItemName = normalizeName(ingredientName)
+  const allocation = await PurchaseAllocation.findOne({
+    stockItemName,
+    remainingQuantity: { $gt: 0 }
+  }).sort({ allocationDate: 1 })
+
+  if (!allocation) return null
+
+  try {
+    const factor = convertAmountToCatalogUnit(1, allocation.producedUnit, catalogUnit)
+    if (!factor) return null
+
+    return {
+      costPerCatalogUnit: round(allocation.costPerProducedUnit / factor),
+      allocationId: allocation._id,
+      allocationDate: allocation.allocationDate,
+      remainingQuantity: allocation.remainingQuantity,
+      producedUnit: allocation.producedUnit
+    }
+  } catch (err) {
+    // Unidad del lote incompatible con la unidad catalogo del producto:
+    // no se puede expresar el costo vivo en esa unidad, se deja en null.
+    return null
+  }
+}
+
+// Version en lote de peekCurrentBatchCost, para no hacer N consultas
+// secuenciales cuando se listan todos los productos de Stock a la vez.
+export const peekCurrentBatchCosts = async (items = []) => {
+  const results = new Map()
+  await Promise.all(
+    items.map(async ({ name, unit }) => {
+      const peek = await peekCurrentBatchCost(name, unit)
+      results.set(normalizeName(name), peek)
+    })
+  )
+  return results
+}
+
 export const discountInventoryForOrder = async (items = [], orderId, actor, sauceTemperature = 'CALIENTE') => {
   const { ok, shortages, consumption } = await validateInventoryAvailability(items, sauceTemperature)
   if (!ok) {

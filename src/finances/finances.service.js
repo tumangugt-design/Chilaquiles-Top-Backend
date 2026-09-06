@@ -333,3 +333,95 @@ export const getFinancialSummary = async () => {
     }
   }
 }
+
+// Rentabilidad REAL por promocion (Fase Costeo por Lotes): junta lo que ya
+// existia por separado - Order.appliedPromo(s).id y el costo real trazado
+// (InventoryLog OUT con FIFO) de cada orden - para responder "esta promo,
+// en la practica, dio la utilidad que se penso al crearla?". No reemplaza
+// el margen que se muestra al crear/editar la promocion (ese sigue siendo
+// una proyeccion); esto es lo que realmente paso, orden por orden.
+export const getPromotionsProfitabilityReport = async () => {
+  const orders = await Order.find({
+    status: { $ne: 'cancelado' },
+    $or: [
+      { 'appliedPromo.id': { $ne: null } },
+      { 'appliedPromos.0': { $exists: true } }
+    ]
+  }).select('_id appliedPromo appliedPromos')
+
+  if (orders.length === 0) {
+    return { promotions: [], notas: 'Todavia no hay ordenes que hayan usado una promocion.' }
+  }
+
+  const orderIds = orders.map((o) => o._id)
+  const outLogs = await InventoryLog.find({ type: 'OUT', orderId: { $in: orderIds } }).select('orderId totalCost')
+
+  const realCostByOrder = new Map()
+  outLogs.forEach((log) => {
+    if (log.totalCost === null || log.totalCost === undefined) return
+    const key = String(log.orderId)
+    realCostByOrder.set(key, round2((realCostByOrder.get(key) || 0) + Number(log.totalCost || 0)))
+  })
+
+  const byPromo = new Map()
+
+  orders.forEach((order) => {
+    const promos = Array.isArray(order.appliedPromos) && order.appliedPromos.length > 0
+      ? order.appliedPromos
+      : (order.appliedPromo?.id ? [order.appliedPromo] : [])
+
+    if (promos.length === 0) return
+
+    const orderRealCost = realCostByOrder.get(String(order._id))
+    // Si la orden combina mas de una promo, el costo real de la orden no se
+    // puede partir por linea (FIFO descuenta por ingrediente, no por promo) -
+    // se reparte por partes iguales entre las promos de esa orden y se marca
+    // como "compartida" para que quede claro que es una aproximacion.
+    const shareCount = promos.length
+    const isShared = shareCount > 1
+
+    promos.forEach((promo) => {
+      const key = String(promo.id)
+      if (!byPromo.has(key)) {
+        byPromo.set(key, {
+          promotionId: key,
+          name: promo.name || 'Promoción',
+          ordersCount: 0,
+          ordersWithRealCost: 0,
+          ordersShared: 0,
+          revenue: 0,
+          realCost: 0,
+        })
+      }
+      const entry = byPromo.get(key)
+      entry.ordersCount += 1
+      entry.revenue += Number(promo.promoPrice || 0)
+      if (isShared) entry.ordersShared += 1
+      if (orderRealCost !== undefined) {
+        entry.ordersWithRealCost += 1
+        entry.realCost += orderRealCost / shareCount
+      }
+    })
+  })
+
+  const promotions = Array.from(byPromo.values())
+    .map((entry) => {
+      const hasRealCost = entry.ordersWithRealCost > 0
+      const realProfit = hasRealCost ? entry.revenue - entry.realCost : null
+      const realMargin = (realProfit !== null && entry.revenue > 0) ? round2((realProfit / entry.revenue) * 100) : null
+      return {
+        ...entry,
+        revenue: round2(entry.revenue),
+        realCost: round2(entry.realCost),
+        realProfit: realProfit === null ? null : round2(realProfit),
+        realMargin,
+        coberturaCostoRealPct: entry.ordersCount > 0 ? round2((entry.ordersWithRealCost / entry.ordersCount) * 100) : 0
+      }
+    })
+    .sort((a, b) => b.ordersCount - a.ordersCount)
+
+  return {
+    promotions,
+    notas: 'realCost solo cubre ordenes cuyos ingredientes ya pasaron por Compras -> Lotes FIFO (ver coberturaCostoRealPct por promocion). Cuando una orden combino mas de una promocion, su costo real se reparte en partes iguales entre ellas (ver ordersShared).'
+  }
+}

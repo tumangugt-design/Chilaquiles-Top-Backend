@@ -149,6 +149,82 @@ export const isOperatingNow = async () => {
   return { ...schedule, isCurrentlyOpen }
 }
 
+// Validacion de forma minima antes de guardar promociones. No impone reglas
+// de negocio nuevas (ej. no obliga precio, porque el formulario actual
+// permite dejarlo vacio mientras se arma la promo) - solo evita que quede
+// guardado un arreglo con ids duplicados, sin nombre, o con rango de fechas
+// invertido, que es lo que puede corromper silenciosamente el Setting
+// completo (updatePromotions reemplaza el arreglo entero cada vez).
+export const validatePromotionsPayload = (promotions) => {
+  const errors = []
+  const seenIds = new Set()
+
+  promotions.forEach((promo, index) => {
+    const label = `Promocion #${index + 1}`
+
+    if (!promo || typeof promo !== 'object' || Array.isArray(promo)) {
+      errors.push(`${label}: debe ser un objeto.`)
+      return
+    }
+
+    const id = promo.id !== undefined && promo.id !== null ? String(promo.id) : ''
+    if (!id) {
+      errors.push(`${label}: falta id.`)
+    } else if (seenIds.has(id)) {
+      errors.push(`${label}: id duplicado (${id}).`)
+    } else {
+      seenIds.add(id)
+    }
+
+    if (!promo.name || !String(promo.name).trim()) {
+      errors.push(`${label} (${id || 'sin id'}): falta nombre.`)
+    }
+
+    const price = promo.promoPrice ?? promo.price
+    if (price !== undefined && price !== null && price !== '' && (Number.isNaN(Number(price)) || Number(price) < 0)) {
+      errors.push(`${label} (${id || 'sin id'}): precio invalido.`)
+    }
+
+    if (promo.startDate && promo.endDate && String(promo.startDate) > String(promo.endDate)) {
+      errors.push(`${label} (${id || 'sin id'}): la fecha de inicio es posterior a la de fin.`)
+    }
+  })
+
+  return { ok: errors.length === 0, errors }
+}
+
+// Promociones vencidas nunca se "eliminan": se desactivan solas la primera vez
+// que alguien pide la lista (admin, Location o Size), usando la fecha de
+// Guatemala. Esto evita depender de un cron en proceso (deshabilitado en este
+// backend, ver survey.cron.js) y evita que cada pantalla reimplemente su
+// propia comparacion de fechas -> una sola fuente de verdad.
+export const deactivateExpiredPromotions = async () => {
+  const doc = await Setting.findOne({ key: 'promotions' })
+  const promos = Array.isArray(doc?.value) ? doc.value : []
+  if (promos.length === 0) return promos
+
+  const today = getGuatemalaParts().dateString
+  let changed = false
+
+  const updated = promos.map((promo) => {
+    if (promo && promo.isActive && promo.endDate && today > promo.endDate) {
+      changed = true
+      return { ...promo, isActive: false, deactivatedReason: 'expired' }
+    }
+    return promo
+  })
+
+  if (!changed) return promos
+
+  const saved = await Setting.findOneAndUpdate(
+    { key: 'promotions' },
+    { $set: { value: updated } },
+    { new: true }
+  )
+
+  return saved.value
+}
+
 export const seedSettings = async () => {
   const existing = await Setting.findOne({ key: OPERATING_HOURS_KEY })
   if (!existing) {

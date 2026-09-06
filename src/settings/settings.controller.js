@@ -1,4 +1,4 @@
-import { getOperatingHoursSetting, isOperatingNow, updateOperatingHoursSetting } from './settings.service.js'
+import { getOperatingHoursSetting, isOperatingNow, updateOperatingHoursSetting, deactivateExpiredPromotions, validatePromotionsPayload } from './settings.service.js'
 import Setting from './settings.model.js'
 import { getTaxConfig as getTaxConfigService, updateTaxConfig as updateTaxConfigService } from '../finances/finances.service.js'
 import { sendPromotionBlastMessage } from '../bot/whatsapp.service.js'
@@ -74,9 +74,11 @@ export const updateOperatingHours = async (req, res) => {
 
 export const getPromotions = async (req, res) => {
   try {
-    const doc = await Setting.findOne({ key: 'promotions' })
-    const promos = doc ? doc.value : []
-    
+    // Antes de responder, apaga sola cualquier promocion cuya fecha de fin ya
+    // paso -> admin, Location y Size reciben siempre el mismo estado real,
+    // sin que cada pantalla tenga que revisar fechas por su cuenta.
+    const promos = await deactivateExpiredPromotions()
+
     res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate')
     res.set('Pragma', 'no-cache')
     res.set('Expires', '0')
@@ -94,9 +96,25 @@ export const updatePromotions = async (req, res) => {
       return res.status(400).json({ message: 'El formato de promociones debe ser un arreglo' })
     }
 
+    const { ok, errors } = validatePromotionsPayload(promotions)
+    if (!ok) {
+      return res.status(400).json({ message: 'Las promociones no tienen una estructura valida', errors })
+    }
+
+    // Si una promocion se guarda activa de nuevo (ej. se extendio la fecha
+    // de fin), se quita la marca de "vencida" para que el panel no la siga
+    // mostrando como vencida cuando en realidad ya fue reactivada a mano.
+    const sanitized = promotions.map((promo) => {
+      if (promo?.isActive && promo?.deactivatedReason) {
+        const { deactivatedReason, ...rest } = promo
+        return rest
+      }
+      return promo
+    })
+
     const updated = await Setting.findOneAndUpdate(
       { key: 'promotions' },
-      { $set: { value: promotions } },
+      { $set: { value: sanitized } },
       { new: true, upsert: true }
     )
 

@@ -14,5 +14,6 @@ router.use(verifyAuthToken)
 router.use(requireRole([USER_ROLES.ADMIN]))
 
 router.get('/summary', financeController.getSummary)
+router.get('/promotions-profitability', financeController.getPromotionsProfitability)
 
 export default router

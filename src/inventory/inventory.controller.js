@@ -2,7 +2,7 @@ import Inventory from './inventory.model.js'
 import InventoryLog from './inventoryLog.model.js'
 import Portion from './portion.model.js'
 import Supplier from '../suppliers/supplier.model.js'
-import { getAggregatedConsumption, validateInventoryAvailability, manualStockAdjustment, getAvailablePlatesCount, convertAmountToCatalogUnit } from './inventory.service.js'
+import { getAggregatedConsumption, validateInventoryAvailability, manualStockAdjustment, getAvailablePlatesCount, convertAmountToCatalogUnit, peekCurrentBatchCosts } from './inventory.service.js'
 import { INVENTORY_CATALOG, INVENTORY_CATALOG_MAP } from '../helpers/constants.js'
 
 const PROTECTED_PACKAGING_NAMES = INVENTORY_CATALOG
@@ -112,7 +112,23 @@ export const getInventoryItems = async (req, res) => {
     )
 
     const items = await Inventory.find().sort({ name: 1 })
-    return res.status(200).json(items)
+
+    // currentBatchCost = costo real del lote FIFO vigente (Compras/Lotes),
+    // expresado en la unidad del producto. Cuando el producto aun no tiene
+    // lotes registrados queda en null y quien consuma este endpoint debe
+    // usar lastPrice como respaldo (ver Promociones: getProductPortionConfig).
+    const peeks = await peekCurrentBatchCosts(items.map((item) => ({ name: item.name, unit: item.unit })))
+
+    const withLiveCost = items.map((item) => {
+      const peek = peeks.get(item.name)
+      return {
+        ...item.toObject(),
+        currentBatchCost: peek ? peek.costPerCatalogUnit : null,
+        currentBatchDate: peek ? peek.allocationDate : null
+      }
+    })
+
+    return res.status(200).json(withLiveCost)
   } catch (error) {
     return res.status(500).json({ message: 'Error fetching inventory', error: error.message })
   }

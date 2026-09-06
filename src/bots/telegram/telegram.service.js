@@ -4,7 +4,7 @@ import InventoryLog from '../../inventory/inventoryLog.model.js';
 import Portion from '../../inventory/portion.model.js';
 import User from '../../users/user.model.js';
 import Setting from '../../settings/settings.model.js';
-import { isOperatingNow, getOperatingHoursSetting, updateOperatingHoursSetting } from '../../settings/settings.service.js';
+import { isOperatingNow, getOperatingHoursSetting, updateOperatingHoursSetting, deactivateExpiredPromotions } from '../../settings/settings.service.js';
 import { getAdminAICompletion, prepareAdminBotContext } from './telegram.ai.js';
 import TelegramBotMemory from './bot_memory.model.js';
 import { getFinancialSummary } from '../../finances/finances.service.js';
@@ -171,8 +171,10 @@ const executeTool = async (toolCall) => {
     }
 
     else if (name === 'getPromotions') {
-      const doc = await Setting.findOne({ key: 'promotions' });
-      return JSON.stringify(doc ? doc.value : []);
+      // Misma fuente de verdad que el panel admin y la app de pedidos: apaga
+      // solas las promociones vencidas antes de responder.
+      const promos = await deactivateExpiredPromotions();
+      return JSON.stringify(promos);
     }
 
     else if (name === 'getCoupons') {
