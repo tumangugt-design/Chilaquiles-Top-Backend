@@ -26,7 +26,8 @@ import {
   saveRecipe,
   deleteRecipe,
   seedCatalog,
-  getMermaSummary
+  getMermaSummary,
+  deletePortion
 } from './transformation.controller.js';
 import { verifyAuthToken } from '../middlewares/auth.middleware.js';
 import { requireApprovedStatus, requireRole } from '../middlewares/role.middleware.js';
@@ -56,6 +57,7 @@ router.get('/last-purchases', requireRole([USER_ROLES.ADMIN]), getLastPurchases)
 router.get('/:name/cost-history', requireRole([USER_ROLES.ADMIN]), getIngredientCostHistory);
 router.get('/portions', requireRole([USER_ROLES.ADMIN]), getPortions);
 router.put('/portions/:name', requireRole([USER_ROLES.ADMIN]), updatePortion);
+router.delete('/portions/:name', requireRole([USER_ROLES.ADMIN]), deletePortion);
 router.post('/packaging', requireRole([USER_ROLES.ADMIN]), createPackagingProduct);
 router.post('/', requireRole([USER_ROLES.ADMIN]), saveInventoryItem);
 router.post('/sync', requireRole([USER_ROLES.ADMIN]), syncInventory);

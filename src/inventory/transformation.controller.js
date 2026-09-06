@@ -1,4 +1,5 @@
 import Inventory from './inventory.model.js';
+import Portion from './portion.model.js';
 import Recipe from './recipe.model.js';
 import TransformationProcess from './transformation-process.model.js';
 import PurchaseAllocation from '../purchases/purchase-allocation.model.js';
@@ -169,6 +170,29 @@ export const deleteRecipe = async (req, res) => {
     return res.status(200).json({ message: 'Receta eliminada' });
   } catch (error) {
     return res.status(500).json({ message: 'Error deleting recipe', error: error.message });
+  }
+};
+
+// Quita la porcion por plato de un producto SIN borrar el producto.
+// Un producto puede existir en Stock y no consumirse por plato (ej. Picante
+// mientras no se decida cuanto lleva). Tambien sirve para limpiar porciones
+// huerfanas que quedaron de configuraciones viejas.
+export const deletePortion = async (req, res) => {
+  try {
+    const name = normalize(req.params.name);
+    const portion = await Portion.findOne({ name });
+    if (!portion) {
+      return res.status(404).json({ message: 'Esa porción no existe.' });
+    }
+    await Portion.deleteOne({ _id: portion._id });
+    const stillInStock = await Inventory.exists({ name });
+    return res.status(200).json({
+      message: stillInStock
+        ? `"${toDisplayLabel(name)}" ya no se consume por plato. Sigue existiendo en Stock.`
+        : `Porción "${toDisplayLabel(name)}" eliminada.`
+    });
+  } catch (error) {
+    return res.status(500).json({ message: 'Error deleting portion', error: error.message });
   }
 };
 

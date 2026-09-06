@@ -865,6 +865,10 @@ export const seedPortions = async () => {
   for (const item of INVENTORY_CATALOG) {
     // La materia prima no se sirve en plato: no lleva porcion.
     if (item.itemType === ITEM_TYPES.MATERIA_PRIMA) continue
+    // Sin usedPerPlate definido no se inventa una porcion: el producto existe
+    // en Stock pero no entra al consumo por plato hasta que alguien decida
+    // cuanto lleva (ej. Picante).
+    if (item.usedPerPlate === undefined || item.usedPerPlate === null) continue
 
     const normalizedName = normalizeName(item.name)
     const existing = await Portion.findOne({ name: normalizedName })
@@ -996,6 +1000,16 @@ export const seedInventory = async ({ silent = false } = {}) => {
   } catch (migrationError) {
     console.error('[MIGRATION v1] Falló el traslado de existencia:', migrationError.message)
     report.migration = { error: migrationError.message }
+  }
+
+  // Porciones huerfanas: una porcion sin producto en Inventory es
+  // configuracion muerta (restos de pruebas). Se limpian para que el
+  // Recetario no muestre filas que no corresponden a nada.
+  const inventoryNames = (await Inventory.find({}, 'name')).map((i) => i.name)
+  const orphanPortions = await Portion.deleteMany({ name: { $nin: inventoryNames } })
+  report.removedOrphanPortions = orphanPortions?.deletedCount || 0
+  if (report.removedOrphanPortions > 0) {
+    console.log(`[seed] Porciones huérfanas eliminadas: ${report.removedOrphanPortions}`)
   }
 
   // La materia prima no se sirve por plato: si arrastraba una porcion de la

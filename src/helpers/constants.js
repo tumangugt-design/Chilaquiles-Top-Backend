@@ -170,7 +170,11 @@ export const INVENTORY_CATALOG = [
   { name: 'pollo', label: 'Pollo', unit: 'g', category: 'Proteínas', itemType: ITEM_TYPES.PRODUCTO_TERMINADO, usedPerPlate: 60, process: 'cocido' },
   { name: 'pulled pork', label: 'Pulled Pork', unit: 'g', category: 'Proteínas', itemType: ITEM_TYPES.PRODUCTO_TERMINADO, usedPerPlate: 60, process: 'deshebrado' },
   { name: 'chorizo argentino', label: 'Chorizo Argentino', unit: 'g', category: 'Proteínas', itemType: ITEM_TYPES.PRODUCTO_TERMINADO, usedPerPlate: 60, process: 'asado' },
-  { name: 'picante', label: 'Picante', unit: 'ml', category: 'Otros', itemType: ITEM_TYPES.PRODUCTO_TERMINADO, usedPerPlate: 30, process: 'licuado' }
+  // Sin usedPerPlate a proposito: cuanto picante lleva un plato es una
+  // decision de negocio que todavia no esta tomada. Sin porcion no entra al
+  // consumo por plato ni a las alertas de stock — se le asigna desde
+  // Produccion > Ensamblaje cuando se defina.
+  { name: 'picante', label: 'Picante', unit: 'ml', category: 'Otros', itemType: ITEM_TYPES.PRODUCTO_TERMINADO, process: 'licuado' }
 ]
 
 export const INVENTORY_CATALOG_MAP = Object.fromEntries(INVENTORY_CATALOG.map((item) => [item.name, item]))
