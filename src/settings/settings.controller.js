@@ -1,5 +1,6 @@
 import { getOperatingHoursSetting, isOperatingNow, updateOperatingHoursSetting } from './settings.service.js'
 import Setting from './settings.model.js'
+import { getTaxConfig as getTaxConfigService, updateTaxConfig as updateTaxConfigService } from '../finances/finances.service.js'
 import { sendPromotionBlastMessage } from '../bot/whatsapp.service.js'
 import User from '../users/user.model.js'
 import { Campaign } from './campaign.model.js'
@@ -321,5 +322,23 @@ export const getCampaignHistory = async (req, res) => {
     return res.status(200).json(campaigns);
   } catch (error) {
     return res.status(500).json({ message: 'Error al obtener el historial', error: error.message });
+  }
+}
+
+export const getTaxConfig = async (req, res) => {
+  try {
+    const config = await getTaxConfigService()
+    return res.status(200).json(config)
+  } catch (error) {
+    return res.status(500).json({ message: 'No se pudo cargar la configuracion fiscal', error: error.message })
+  }
+}
+
+export const updateTaxConfig = async (req, res) => {
+  try {
+    const updated = await updateTaxConfigService(req.body || {})
+    return res.status(200).json(updated)
+  } catch (error) {
+    return res.status(500).json({ message: 'No se pudo guardar la configuracion fiscal', error: error.message })
   }
 }
