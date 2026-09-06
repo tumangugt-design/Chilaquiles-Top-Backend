@@ -1,46 +1,51 @@
 import mongoose from 'mongoose';
 
-// "Asignacion" (Fase 1 del sistema de Compras/Lotes).
-// Registra que una parte de una Compra en bruto (Purchase) se transformo en
-// un producto concreto de Stock/Inventario (ej. 5 lbs de cebolla cruda -> 3
-// lbs de cebolla caramelizada).
+// "Asignacion" / lote de produccion (Fase 1-4 del sistema de Compras/Lotes).
+// Registra que uno o mas ingredientes EN BRUTO (cada uno tomado de sus
+// propios lotes de Compra, en orden FIFO) se combinaron para producir un
+// producto concreto de Stock/Inventario.
 //
-// El costo (inheritedCost) se calcula UNA VEZ, de forma proporcional al costo
-// total en bruto de la Purchase, y se congela aqui — nunca se recalcula
-// despues, sin importar el rendimiento/merma real de la transformacion. Esa
-// es la inversion real: "no importa en cuanto se transforme, el costo
-// inicial es el mismo" (Denilson).
+// Por que rawInputs es un arreglo y no un solo `purchase`: algunos productos
+// de Stock (ej. salsa) se hacen mezclando varios ingredientes crudos a la
+// vez y el resultado ya no se puede separar por ingrediente (se licua todo
+// junto) - lo unico medible es cuanto de cada ingrediente entro y cuanto
+// salio en total. Un producto simple (ej. cebolla caramelizada, un solo
+// ingrediente) es simplemente un rawInputs de un solo elemento.
 //
-// Fase 1 solo define el modelo. Fase 2 construye la pantalla "Compras" para
-// crear estos registros (y descontar remainingQuantity de la Purchase). Fase
-// 3 conecta el consumo FIFO real de los lotes al descuento de pedidos.
+// El costo (inheritedCost) es la suma de lo que costo cada rawInput (segun
+// el/los lote(s) de Compra de los que salio, FIFO) y se calcula UNA VEZ, al
+// crear el registro - nunca se recalcula despues (mismo principio que
+// Portion.price en Entradas).
 const purchaseAllocationSchema = new mongoose.Schema({
-  purchase: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'Purchase',
-    required: true
-  },
-  // Cuanto material EN BRUTO se tomo de esa Purchase para esta transformacion.
-  rawQuantityUsed: {
-    type: Number,
+  // Uno por cada ingrediente en bruto usado en este lote de produccion. Un
+  // mismo ingrediente puede aparecer en mas de una entrada si tuvo que
+  // tomarse de mas de un lote de Compra (FIFO).
+  rawInputs: {
+    type: [{
+      purchase: { type: mongoose.Schema.Types.ObjectId, ref: 'Purchase', required: true },
+      ingredientName: { type: String, required: true, trim: true, lowercase: true },
+      quantityUsed: { type: Number, required: true, min: 0 },
+      unit: { type: String, required: true, trim: true },
+      // Costo heredado de ese lote de Compra especifico, proporcional a
+      // quantityUsed sobre la cantidad total de esa Compra.
+      cost: { type: Number, required: true, min: 0 }
+    }],
     required: true,
-    min: 0
-  },
-  rawUnit: {
-    type: String,
-    required: true,
-    trim: true
+    validate: {
+      validator: (v) => Array.isArray(v) && v.length > 0,
+      message: 'rawInputs debe tener al menos un ingrediente.'
+    }
   },
   // Nombre del producto de Stock que resulta de la transformacion (debe
   // coincidir con el nombre normalizado usado en Inventory/Portion, ej.
-  // "cebolla caramelizada").
+  // "cebolla caramelizada" o "salsa roja").
   stockItemName: {
     type: String,
     required: true,
     trim: true,
     lowercase: true
   },
-  // Rendimiento real: cuanto producto transformado se obtuvo.
+  // Rendimiento real: cuanto producto transformado se obtuvo en total.
   producedQuantity: {
     type: Number,
     required: true,
@@ -63,8 +68,7 @@ const purchaseAllocationSchema = new mongoose.Schema({
     type: Boolean,
     default: false
   },
-  // Costo heredado de la Purchase en bruto, proporcional a rawQuantityUsed
-  // sobre purchase.quantity. Se calcula y se guarda al crear el registro;
+  // Suma de rawInputs[].cost. Se calcula y se guarda al crear el registro;
   // nunca se recalcula despues (mismo principio que el costo por porcion).
   inheritedCost: {
     type: Number,
@@ -72,8 +76,8 @@ const purchaseAllocationSchema = new mongoose.Schema({
     min: 0
   },
   // inheritedCost / producedQuantity — el costo por unidad que este lote
-  // transformado le hereda a Stock. Es lo que Fase 3 usara como costo de
-  // salida cuando el consumo FIFO tome de este lote.
+  // transformado le hereda a Stock. Es lo que Fase 3 usa como costo de
+  // salida cuando el consumo FIFO toma de este lote.
   costPerProducedUnit: {
     type: Number,
     required: true,
@@ -102,6 +106,6 @@ const purchaseAllocationSchema = new mongoose.Schema({
 
 purchaseAllocationSchema.index({ stockItemName: 1, allocationDate: 1 });
 purchaseAllocationSchema.index({ stockItemName: 1, remainingQuantity: 1, allocationDate: 1 });
-purchaseAllocationSchema.index({ purchase: 1 });
+purchaseAllocationSchema.index({ 'rawInputs.purchase': 1 });
 
 export default mongoose.model('PurchaseAllocation', purchaseAllocationSchema);

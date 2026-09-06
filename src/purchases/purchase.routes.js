@@ -4,7 +4,7 @@ import {
   createPurchase,
   getAllocationsByStockItem,
   getPurchaseAllocations,
-  createPurchaseAllocation
+  createProductionBatch
 } from './purchase.controller.js';
 import { verifyAuthToken } from '../middlewares/auth.middleware.js';
 import { requireApprovedStatus, requireRole } from '../middlewares/role.middleware.js';
@@ -17,6 +17,6 @@ router.get('/', getPurchases);
 router.post('/', createPurchase);
 router.get('/allocations', getAllocationsByStockItem);
 router.get('/:id/allocations', getPurchaseAllocations);
-router.post('/:id/allocations', createPurchaseAllocation);
+router.post('/production-batches', createProductionBatch);
 
 export default router;

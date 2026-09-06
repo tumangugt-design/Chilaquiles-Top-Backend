@@ -88,7 +88,6 @@ const inventoryLogSchema = new mongoose.Schema({
   sourceAllocations: {
     type: [{
       allocation: { type: mongoose.Schema.Types.ObjectId, ref: 'PurchaseAllocation' },
-      purchase: { type: mongoose.Schema.Types.ObjectId, ref: 'Purchase' },
       quantityConsumed: Number,
       unit: String,
       costPerUnit: Number

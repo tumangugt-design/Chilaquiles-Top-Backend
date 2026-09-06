@@ -1,5 +1,6 @@
 import Purchase from './purchase.model.js';
 import PurchaseAllocation from './purchase-allocation.model.js';
+import { planPurchaseConsumption, commitPurchaseConsumption } from './purchase.service.js';
 
 const roundMoney = (value) => Math.round(Number(value || 0) * 100) / 100;
 const roundQty = (value) => Math.round(Number(value || 0) * 1000) / 1000;
@@ -62,17 +63,20 @@ export const createPurchase = async (req, res) => {
 };
 
 // GET /api/purchases/:id/allocations
+// Historial de lotes de produccion que tomaron (al menos en parte) de ESTA
+// Compra especifica. Cada allocation puede tener otros ingredientes ademas
+// de este (rawInputs), por eso el front resalta solo la entrada de este lote.
 export const getPurchaseAllocations = async (req, res) => {
   try {
-    const allocations = await PurchaseAllocation.find({ purchase: req.params.id }).sort({ allocationDate: -1 });
+    const allocations = await PurchaseAllocation.find({ 'rawInputs.purchase': req.params.id }).sort({ allocationDate: -1 });
     return res.status(200).json(allocations);
   } catch (error) {
     return res.status(500).json({ message: 'Error fetching allocations', error: error.message });
   }
 };
 
-// GET /api/purchases/allocations?stockItemName=cebolla+caramelizada
-// Historial de transformaciones que alimentaron un producto de Stock especifico.
+// GET /api/purchases/allocations?stockItemName=salsa+roja
+// Historial de lotes de produccion que alimentaron un producto de Stock especifico.
 export const getAllocationsByStockItem = async (req, res) => {
   try {
     const stockItemName = String(req.query.stockItemName || '').trim().toLowerCase();
@@ -80,7 +84,7 @@ export const getAllocationsByStockItem = async (req, res) => {
       return res.status(400).json({ message: 'stockItemName es requerido' });
     }
     const allocations = await PurchaseAllocation.find({ stockItemName })
-      .populate('purchase', 'ingredientName unit purchaseDate')
+      .populate('rawInputs.purchase', 'ingredientName unit purchaseDate')
       .sort({ allocationDate: -1 });
     return res.status(200).json(allocations);
   } catch (error) {
@@ -88,27 +92,25 @@ export const getAllocationsByStockItem = async (req, res) => {
   }
 };
 
-// POST /api/purchases/:id/allocations
-// Transforma parte de una Compra en bruto hacia un producto de Stock concreto.
-// El costo se calcula UNA VEZ, proporcional al costo total en bruto, y se congela
-// (inheritedCost / costPerProducedUnit) - nunca se recalcula despues.
-export const createPurchaseAllocation = async (req, res) => {
+// POST /api/purchases/production-batches
+// Produce un lote de un producto de Stock a partir de uno o mas ingredientes
+// en bruto (cada uno consumido FIFO de sus propios lotes de Compra). Cubre
+// tanto el caso simple (un solo ingrediente, ej. cebolla -> cebolla
+// caramelizada) como el compuesto (varios ingredientes que se combinan y ya
+// no se pueden separar, ej. salsa = tomate + cebolla + chile -> litros de salsa).
+//
+// El costo se calcula UNA VEZ, sumando lo que costo cada ingrediente segun
+// el/los lote(s) de Compra de los que salio, y se congela (inheritedCost /
+// costPerProducedUnit) - nunca se recalcula despues.
+export const createProductionBatch = async (req, res) => {
   try {
-    const purchase = await Purchase.findById(req.params.id);
-    if (!purchase) {
-      return res.status(404).json({ message: 'Compra no encontrada' });
-    }
-
-    const rawQuantityUsed = roundQty(Number(req.body.rawQuantityUsed));
     const stockItemName = String(req.body.stockItemName || '').trim().toLowerCase();
     const producedQuantity = roundQty(Number(req.body.producedQuantity));
     const producedUnit = String(req.body.producedUnit || '').trim();
+    const inputs = Array.isArray(req.body.inputs) ? req.body.inputs : [];
 
-    if (!rawQuantityUsed || rawQuantityUsed <= 0) {
-      return res.status(400).json({ message: 'La cantidad en bruto usada debe ser mayor a 0.' });
-    }
     if (!stockItemName) {
-      return res.status(400).json({ message: 'El producto de Stock destino es requerido.' });
+      return res.status(400).json({ message: 'El producto de Stock resultante es requerido.' });
     }
     if (!producedQuantity || producedQuantity <= 0) {
       return res.status(400).json({ message: 'El rendimiento (cantidad producida) debe ser mayor a 0.' });
@@ -116,19 +118,49 @@ export const createPurchaseAllocation = async (req, res) => {
     if (!producedUnit) {
       return res.status(400).json({ message: 'La unidad del producto transformado es requerida.' });
     }
-    if (rawQuantityUsed > purchase.remainingQuantity + 0.001) {
-      return res.status(400).json({
-        message: `No hay suficiente cantidad disponible en este lote. Restante: ${purchase.remainingQuantity} ${purchase.unit}`
-      });
+    if (inputs.length === 0) {
+      return res.status(400).json({ message: 'Agrega al menos un ingrediente en bruto.' });
     }
 
-    const inheritedCost = roundMoney((rawQuantityUsed / purchase.quantity) * purchase.totalCost);
+    const normalizedInputs = inputs.map((inp) => ({
+      ingredientName: String(inp?.ingredientName || '').trim().toLowerCase(),
+      quantity: roundQty(Number(inp?.quantity)),
+      unit: String(inp?.unit || '').trim()
+    }));
+
+    for (const inp of normalizedInputs) {
+      if (!inp.ingredientName) {
+        return res.status(400).json({ message: 'Cada ingrediente en bruto es requerido.' });
+      }
+      if (!inp.quantity || inp.quantity <= 0) {
+        return res.status(400).json({ message: `La cantidad de "${inp.ingredientName}" debe ser mayor a 0.` });
+      }
+      if (!inp.unit) {
+        return res.status(400).json({ message: `La unidad de "${inp.ingredientName}" es requerida.` });
+      }
+    }
+
+    // Fase 1: planear el consumo FIFO de CADA ingrediente sin escribir nada
+    // todavia - si alguno no alcanza, no se descuenta nada de ningun lote.
+    const plans = [];
+    for (const inp of normalizedInputs) {
+      const plan = await planPurchaseConsumption(inp.ingredientName, inp.quantity, inp.unit);
+      plans.push(plan);
+    }
+
+    // Fase 2: ya validado todo, se comprometen los descuentos y se arma el
+    // detalle de rawInputs con lo que realmente salio de cada lote.
+    const rawInputs = [];
+    for (const plan of plans) {
+      await commitPurchaseConsumption(plan);
+      rawInputs.push(...plan.consumed);
+    }
+
+    const inheritedCost = roundMoney(rawInputs.reduce((sum, r) => sum + r.cost, 0));
     const costPerProducedUnit = roundMoney(inheritedCost / producedQuantity);
 
     const allocation = await PurchaseAllocation.create({
-      purchase: purchase._id,
-      rawQuantityUsed,
-      rawUnit: purchase.unit,
+      rawInputs,
       stockItemName,
       producedQuantity,
       producedUnit,
@@ -141,13 +173,8 @@ export const createPurchaseAllocation = async (req, res) => {
       notes: req.body.notes || ''
     });
 
-    const newRemaining = roundQty(purchase.remainingQuantity - rawQuantityUsed);
-    purchase.remainingQuantity = newRemaining <= 0.001 ? 0 : newRemaining;
-    purchase.isDepleted = purchase.remainingQuantity <= 0;
-    await purchase.save();
-
-    return res.status(200).json({ message: 'Asignación registrada exitosamente', allocation, purchase });
+    return res.status(200).json({ message: 'Lote de producción registrado exitosamente', allocation });
   } catch (error) {
-    return res.status(500).json({ message: 'Error creating allocation', error: error.message });
+    return res.status(error.statusCode || 500).json({ message: error.message || 'Error creating production batch' });
   }
 };

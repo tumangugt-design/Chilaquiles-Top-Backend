@@ -321,7 +321,6 @@ const consumeFifoBatches = async (ingredientName, requiredQty, inventoryUnit) =>
 
     used.push({
       allocation: allocation._id,
-      purchase: allocation.purchase,
       quantityConsumed: takeInProducedUnit,
       unit: allocation.producedUnit,
       costPerUnit: allocation.costPerProducedUnit,
@@ -401,7 +400,6 @@ export const discountInventoryForOrder = async (items = [], orderId, actor, sauc
                 totalCost: fifo.totalCost,
                 sourceAllocations: fifo.sourceAllocations.map((u) => ({
                   allocation: u.allocation,
-                  purchase: u.purchase,
                   quantityConsumed: u.quantityConsumed,
                   unit: u.unit,
                   costPerUnit: u.costPerUnit
