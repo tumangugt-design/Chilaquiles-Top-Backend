@@ -1,7 +1,8 @@
 import Inventory from './inventory.model.js'
 import InventoryLog from './inventoryLog.model.js'
 import Portion from './portion.model.js'
-import { getAggregatedConsumption, validateInventoryAvailability, manualStockAdjustment, getAvailablePlatesCount, convertAmountToCatalogUnit } from './inventory.service.js'
+import Supplier from '../suppliers/supplier.model.js'
+import { getAggregatedConsumption, validateInventoryAvailability, manualStockAdjustment, getAvailablePlatesCount, convertAmountToCatalogUnit, recalculatePortionCost } from './inventory.service.js'
 import { INVENTORY_CATALOG, INVENTORY_CATALOG_MAP } from '../helpers/constants.js'
 
 const PROTECTED_PACKAGING_NAMES = INVENTORY_CATALOG
@@ -226,12 +227,170 @@ export const previewRecipeConsumption = async (req, res) => {
 
 export const deleteInventoryItem = async (req, res) => {
   try {
-    const { name } = req.params
-    await Inventory.findOneAndDelete({ name: name.toLowerCase() })
-    await Portion.findOneAndDelete({ name: name.toLowerCase() })
-    return res.status(200).json({ message: 'Item deleted from inventory' })
+    const normalizedName = String(req.params.name || '').trim().toLowerCase()
+    const { reason } = req.body
+
+    if (!reason || !String(reason).trim()) {
+      return res.status(400).json({ message: 'El motivo de la eliminación es requerido.' })
+    }
+
+    const item = await Inventory.findOne({ name: normalizedName })
+    if (!item) {
+      return res.status(404).json({ message: 'Producto no encontrado' })
+    }
+
+    const isCatalogItem = !!INVENTORY_CATALOG_MAP[normalizedName]
+
+    if (isCatalogItem) {
+      const stock = Number(item.stock || 0)
+      const hasHistory = await InventoryLog.exists({ ingredient: item._id })
+      if (stock !== 0 || hasHistory) {
+        return res.status(400).json({
+          message: 'Este es un producto del catálogo base. Solo se puede eliminar si su stock es 0 y no tiene historial de movimientos. Considera desactivarlo en su lugar.'
+        })
+      }
+    }
+
+    await InventoryLog.create({
+      ingredient: item._id,
+      ingredientName: item.name,
+      type: 'ADJUSTMENT',
+      amount: item.stock,
+      previousStock: item.stock,
+      newStock: 0,
+      userId: req.user?._id,
+      userName: req.user?.name,
+      reason: `Producto eliminado del inventario: ${reason.trim()}`
+    })
+
+    await Inventory.findOneAndDelete({ name: normalizedName })
+    await Portion.findOneAndDelete({ name: normalizedName })
+
+    return res.status(200).json({ message: 'Producto eliminado del inventario' })
   } catch (error) {
     return res.status(500).json({ message: 'Error deleting item', error: error.message })
+  }
+}
+
+export const renameInventoryItem = async (req, res) => {
+  try {
+    const currentName = String(req.params.name || '').trim().toLowerCase()
+    const newName = String(req.body.newName || '').trim().toLowerCase()
+    const { reason } = req.body
+
+    if (!newName) {
+      return res.status(400).json({ message: 'El nuevo nombre es requerido.' })
+    }
+    if (!reason || !String(reason).trim()) {
+      return res.status(400).json({ message: 'El motivo del cambio es requerido.' })
+    }
+    if (INVENTORY_CATALOG_MAP[currentName]) {
+      return res.status(400).json({ message: 'Los productos del catálogo base no se pueden renombrar. Usa la etiqueta de visualización en su lugar.' })
+    }
+
+    const existing = await Inventory.findOne({ name: newName })
+    if (existing) {
+      return res.status(400).json({ message: 'Ya existe un producto con ese nombre.' })
+    }
+
+    const item = await Inventory.findOne({ name: currentName })
+    if (!item) {
+      return res.status(404).json({ message: 'Producto no encontrado' })
+    }
+
+    item.name = newName
+    await item.save()
+
+    await Portion.findOneAndUpdate({ name: currentName }, { $set: { name: newName } })
+
+    await InventoryLog.create({
+      ingredient: item._id,
+      ingredientName: newName,
+      type: 'ADJUSTMENT',
+      amount: 0,
+      previousStock: item.stock,
+      newStock: item.stock,
+      userId: req.user?._id,
+      userName: req.user?.name,
+      reason: `Producto renombrado de "${currentName}" a "${newName}": ${reason.trim()}`
+    })
+
+    return res.status(200).json({ message: 'Producto renombrado exitosamente', item })
+  } catch (error) {
+    return res.status(500).json({ message: 'Error renaming item', error: error.message })
+  }
+}
+
+export const updateInventoryItemDetails = async (req, res) => {
+  try {
+    const normalizedName = String(req.params.name || '').trim().toLowerCase()
+    const { supplierId, sourceType, minimumStock, displayLabel, reason } = req.body
+
+    if (!reason || !String(reason).trim()) {
+      return res.status(400).json({ message: 'El motivo del cambio es requerido.' })
+    }
+
+    const item = await Inventory.findOne({ name: normalizedName })
+    if (!item) {
+      return res.status(404).json({ message: 'Producto no encontrado' })
+    }
+
+    const changes = []
+    const update = {}
+
+    if (sourceType !== undefined) {
+      if (!['comprado', 'preparado_interno'].includes(sourceType)) {
+        return res.status(400).json({ message: 'Tipo de origen inválido.' })
+      }
+      if (sourceType !== item.sourceType) changes.push(`origen: ${item.sourceType} → ${sourceType}`)
+      update.sourceType = sourceType
+      if (sourceType === 'preparado_interno') update.supplierId = null
+    }
+
+    if (supplierId !== undefined && (update.sourceType || item.sourceType) !== 'preparado_interno') {
+      if (supplierId) {
+        const supplier = await Supplier.findById(supplierId)
+        if (!supplier) {
+          return res.status(400).json({ message: 'Proveedor no encontrado.' })
+        }
+      }
+      if (String(supplierId || '') !== String(item.supplierId || '')) changes.push('proveedor actualizado')
+      update.supplierId = supplierId || null
+    }
+
+    if (minimumStock !== undefined) {
+      const min = Number(minimumStock)
+      if (Number.isNaN(min) || min < 0) {
+        return res.status(400).json({ message: 'El umbral de bajo stock debe ser un número válido mayor o igual a cero.' })
+      }
+      if (min !== item.minimumStock) changes.push(`umbral de bajo stock: ${item.minimumStock} → ${min}`)
+      update.minimumStock = min
+    }
+
+    if (displayLabel !== undefined) {
+      const label = String(displayLabel || '').trim()
+      if (label !== (item.displayLabel || '')) changes.push('etiqueta de visualización actualizada')
+      update.displayLabel = label
+    }
+
+    Object.assign(item, update)
+    await item.save()
+
+    await InventoryLog.create({
+      ingredient: item._id,
+      ingredientName: item.name,
+      type: 'ADJUSTMENT',
+      amount: 0,
+      previousStock: item.stock,
+      newStock: item.stock,
+      userId: req.user?._id,
+      userName: req.user?.name,
+      reason: `${changes.length ? changes.join(', ') : 'Detalles actualizados'}: ${reason.trim()}`
+    })
+
+    return res.status(200).json({ message: 'Detalles actualizados correctamente', item })
+  } catch (error) {
+    return res.status(500).json({ message: 'Error updating item details', error: error.message })
   }
 }
 
@@ -319,6 +478,10 @@ export const updateInventoryItemStock = async (req, res) => {
       return res.status(400).json({ message: 'El stock debe ser un número válido mayor o igual a cero.' })
     }
 
+    if (!req.body.reason || !String(req.body.reason).trim()) {
+      return res.status(400).json({ message: 'El motivo del ajuste es requerido (ej. conteo físico, merma, corrección de error).' })
+    }
+
     const inputUnit = catalogItem.category === 'Empaque' ? 'und' : (req.body.inputUnit || req.body.unit || catalogItem.unit)
     const nextStock = convertAmountToCatalogUnit(rawStock, inputUnit, catalogItem.unit)
 
@@ -362,7 +525,7 @@ export const updateInventoryItemStock = async (req, res) => {
         newStock: nextStock,
         userId: req.user?._id,
         userName: req.user?.name,
-        reason: req.body.reason || `Edición directa de stock: ${rawStock} ${inputUnit} → ${nextStock} ${catalogItem.unit}`
+        reason: `${req.body.reason.trim()} (${rawStock} ${inputUnit} → ${nextStock} ${catalogItem.unit})`
       })
     }
 
@@ -379,76 +542,31 @@ export const updateInventoryItemStock = async (req, res) => {
 export const updateInventoryItemPrice = async (req, res) => {
   try {
     const normalizedName = String(req.params.name || '').trim().toLowerCase()
-    const price = Number(req.body.price)
-    
-    let catalogItem = INVENTORY_CATALOG_MAP[normalizedName]
-    if (!catalogItem) {
-      const dbItem = await Inventory.findOne({ name: normalizedName })
-      if (dbItem) {
-        const dbPortion = await Portion.findOne({ name: normalizedName })
-        catalogItem = {
-          name: dbItem.name,
-          label: dbItem.name.charAt(0).toUpperCase() + dbItem.name.slice(1),
-          unit: dbItem.unit || 'g',
-          category: dbItem.category || 'Otros',
-          usedPerPlate: dbPortion?.usedPerPlate || 1
-        }
-      }
-    }
-    let isEmpaque = catalogItem?.category === 'Empaque' || req.body.category === 'Empaque'
 
-    if (!catalogItem && !isEmpaque) {
-      const dbItem = await Inventory.findOne({ name: normalizedName })
-      if (dbItem?.category === 'Empaque') {
-        isEmpaque = true
-      }
+    const item = await Inventory.findOne({ name: normalizedName })
+    if (!item) {
+      return res.status(404).json({ message: 'Producto no encontrado' })
     }
 
-    if (!catalogItem && isEmpaque) {
-      catalogItem = {
-        name: normalizedName,
-        label: req.body.label || req.body.name || normalizedName,
-        unit: 'und',
-        category: 'Empaque',
-        usedPerPlate: 1
-      }
-    }
+    const newPrice = await recalculatePortionCost(normalizedName)
 
-    if (!catalogItem) {
-      return res.status(400).json({ message: 'Producto no permitido en inventario.' })
-    }
+    await InventoryLog.create({
+      ingredient: item._id,
+      ingredientName: item.name,
+      type: 'ADJUSTMENT',
+      amount: 0,
+      previousStock: item.stock,
+      newStock: item.stock,
+      userId: req.user?._id,
+      userName: req.user?.name,
+      reason: req.body.reason && String(req.body.reason).trim()
+        ? `Recálculo de costo por porción: ${req.body.reason.trim()} (nuevo costo Q${newPrice})`
+        : `Recálculo automático de costo por porción basado en la última compra (nuevo costo Q${newPrice})`
+    })
 
-    if (Number.isNaN(price) || price < 0) {
-      return res.status(400).json({ message: 'El precio debe ser un número válido mayor o igual a cero.' })
-    }
-
-    const item = await Inventory.findOneAndUpdate(
-      { name: normalizedName },
-      {
-        $set: {
-          unit: catalogItem.unit,
-          category: catalogItem.category || 'Otros',
-          lastPrice: price,
-          ...(catalogItem.category === 'Empaque' ? { isActive: true } : {})
-        },
-        $setOnInsert: {
-          name: normalizedName,
-          stock: 0,
-          minimumStock: 5
-        }
-      },
-      { new: true, upsert: true, setDefaultsOnInsert: true }
-    )
-
-    await Portion.findOneAndUpdate(
-      { name: normalizedName },
-      { $set: { price } },
-      { new: true, upsert: true, setDefaultsOnInsert: true }
-    )
-
-    return res.status(200).json({ message: 'Precio actualizado correctamente', item })
+    return res.status(200).json({ message: 'Costo por porción recalculado correctamente', price: newPrice, item })
   } catch (error) {
-    return res.status(500).json({ message: 'Error updating item price', error: error.message })
+    return res.status(error.statusCode || 500).json({ message: error.message || 'Error recalculating item price', error: error.message })
   }
 }
 
@@ -698,7 +816,7 @@ export const getPortions = async (req, res) => {
 export const updatePortion = async (req, res) => {
   try {
     const { name } = req.params
-    const { usedPerPlate, unit, price } = req.body
+    const { usedPerPlate, unit, consumptionType, reason } = req.body
     const normalizedName = String(name || '').trim().toLowerCase()
 
     if (usedPerPlate === undefined || usedPerPlate <= 0) {
@@ -709,18 +827,48 @@ export const updatePortion = async (req, res) => {
       return res.status(400).json({ message: 'La unidad es requerida' })
     }
 
+    if (!reason || !String(reason).trim()) {
+      return res.status(400).json({ message: 'El motivo del cambio es requerido.' })
+    }
+
+    const normalizedConsumptionType = ['plate', 'order'].includes(consumptionType) ? consumptionType : 'plate'
+    const previousPortion = await Portion.findOne({ name: normalizedName })
+
     const portion = await Portion.findOneAndUpdate(
       { name: normalizedName },
-      { $set: { usedPerPlate: Number(usedPerPlate), unit, price: Number(price || 0) } },
+      { $set: { usedPerPlate: Number(usedPerPlate), unit, consumptionType: normalizedConsumptionType } },
       { new: true, upsert: true }
     )
 
-    await Inventory.findOneAndUpdate(
-      { name: normalizedName },
-      { $set: { lastPrice: Number(price || 0) } }
-    )
+    // El costo por porción ya no se edita a mano: se recalcula solo a partir
+    // de la última compra registrada, para no desalinear promociones vigentes.
+    let recalculatedPrice = portion.price
+    try {
+      recalculatedPrice = await recalculatePortionCost(normalizedName)
+    } catch (e) {
+      // Sin compras registradas todavía: se conserva el último costo conocido.
+    }
 
-    return res.status(200).json({ message: 'Porción actualizada exitosamente', portion })
+    const invItem = await Inventory.findOne({ name: normalizedName })
+    if (invItem) {
+      const previousLabel = previousPortion ? `${previousPortion.usedPerPlate} ${previousPortion.unit}` : '—'
+      await InventoryLog.create({
+        ingredient: invItem._id,
+        ingredientName: invItem.name,
+        type: 'ADJUSTMENT',
+        amount: 0,
+        previousStock: invItem.stock,
+        newStock: invItem.stock,
+        userId: req.user?._id,
+        userName: req.user?.name,
+        reason: `Receta actualizada (${previousLabel} → ${usedPerPlate} ${unit}, ${normalizedConsumptionType === 'order' ? 'por orden' : 'por plato'}): ${reason.trim()}`
+      })
+    }
+
+    return res.status(200).json({
+      message: 'Porción actualizada exitosamente',
+      portion: { ...portion.toObject(), price: recalculatedPrice }
+    })
   } catch (error) {
     return res.status(500).json({ message: 'Error updating portion', error: error.message })
   }

@@ -21,6 +21,11 @@ const portionSchema = new mongoose.Schema({
   price: {
     type: Number,
     default: 0
+  },
+  consumptionType: {
+    type: String,
+    enum: ['plate', 'order'],
+    default: 'plate'
   }
 }, { timestamps: true });
 

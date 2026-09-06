@@ -74,7 +74,8 @@ const inventoryLogSchema = new mongoose.Schema({
   },
   reason: {
     type: String,
-    trim: true
+    trim: true,
+    required: true
   }
 }, { timestamps: true });
 

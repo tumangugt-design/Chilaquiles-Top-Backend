@@ -33,6 +33,21 @@ const inventoryItemSchema = new mongoose.Schema({
     trim: true,
     default: 'Otros'
   },
+  sourceType: {
+    type: String,
+    enum: ['comprado', 'preparado_interno'],
+    default: 'comprado'
+  },
+  supplierId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Supplier',
+    default: null
+  },
+  displayLabel: {
+    type: String,
+    trim: true,
+    default: ''
+  },
   lastPrice: {
     type: Number,
     default: 0
