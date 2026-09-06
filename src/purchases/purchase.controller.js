@@ -50,6 +50,7 @@ export const createPurchase = async (req, res) => {
       remainingQuantity: roundQty(quantity),
       totalCost: roundMoney(totalCost),
       supplier: req.body.supplier || null,
+      contactName: req.body.contactName || '',
       purchaseDate: req.body.purchaseDate || Date.now(),
       notes: req.body.notes || ''
     });

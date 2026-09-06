@@ -22,11 +22,23 @@ export const createSupplier = async (req, res) => {
       return res.status(400).json({ message: 'Ya existe un proveedor con ese nombre.' });
     }
 
+    const contacts = Array.isArray(req.body.contacts)
+      ? req.body.contacts
+          .map((c) => ({
+            name: String(c?.name || '').trim(),
+            phone: String(c?.phone || '').trim(),
+            email: String(c?.email || '').trim(),
+            notes: String(c?.notes || '').trim()
+          }))
+          .filter((c) => c.name || c.phone || c.email || c.notes)
+      : [];
+
     const supplier = await Supplier.create({
       name,
       contactName: req.body.contactName || '',
       phone: req.body.phone || '',
       email: req.body.email || '',
+      contacts,
       notes: req.body.notes || ''
     });
 
@@ -56,6 +68,18 @@ export const updateSupplier = async (req, res) => {
     if (req.body.contactName !== undefined) update.contactName = req.body.contactName;
     if (req.body.phone !== undefined) update.phone = req.body.phone;
     if (req.body.email !== undefined) update.email = req.body.email;
+    if (req.body.contacts !== undefined) {
+      update.contacts = Array.isArray(req.body.contacts)
+        ? req.body.contacts
+            .map((c) => ({
+              name: String(c?.name || '').trim(),
+              phone: String(c?.phone || '').trim(),
+              email: String(c?.email || '').trim(),
+              notes: String(c?.notes || '').trim()
+            }))
+            .filter((c) => c.name || c.phone || c.email || c.notes)
+        : [];
+    }
     if (req.body.notes !== undefined) update.notes = req.body.notes;
     if (req.body.isActive !== undefined) update.isActive = !!req.body.isActive;
 

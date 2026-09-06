@@ -29,6 +29,12 @@ const UNIT_ALIASES = {
   lbs: 'lb',
   libra: 'lb',
   libras: 'lb',
+  kg: 'kg',
+  kgs: 'kg',
+  kilo: 'kg',
+  kilos: 'kg',
+  kilogramo: 'kg',
+  kilogramos: 'kg',
   oz: 'oz',
   onza: 'oz',
   onzas: 'oz',
@@ -61,7 +67,7 @@ export const convertAmountToCatalogUnit = (amount, inputUnit, catalogUnit) => {
   const sourceUnit = UNIT_ALIASES[normalizeUnit(inputUnit || catalogUnit)] || normalizeUnit(inputUnit || catalogUnit)
 
   const conversions = {
-    g: { g: 1, lb: 453.59237, oz: 28.349523125 },
+    g: { g: 1, lb: 453.59237, oz: 28.349523125, kg: 1000 },
     ml: { ml: 1, l: 1000, oz: 29.5735295625 },
     und: { und: 1 }
   }

@@ -43,6 +43,16 @@ const purchaseSchema = new mongoose.Schema({
     ref: 'Supplier',
     default: null
   },
+  // Snapshot del nombre del contacto del proveedor usado en esta compra
+  // (un proveedor puede tener varios contactos - ej. Cenma). Se guarda como
+  // texto y no como referencia porque es trazabilidad historica: si el
+  // contacto se edita o elimina despues, esta compra debe seguir mostrando
+  // con quien se hizo en su momento.
+  contactName: {
+    type: String,
+    trim: true,
+    default: ''
+  },
   purchaseDate: {
     type: Date,
     default: Date.now
