@@ -111,7 +111,10 @@ export const confirmOrderPaymentByCheckout = async ({ checkoutId, successUrl }) 
     const trackingLink = `https://pedidos.chilaquilestop.com/pedido/${order.orderNumber}`;
     const result = await sendPaymentConfirmedMessage(order.phone, {
       orderNumber: order.orderNumber,
-      trackingLink
+      trackingLink,
+      customerName: order.name,
+      orderSummary: generateOrderSummary(order.items),
+      orderTotal: `Q${order.total.toFixed(2)}`
     });
     order.whatsappMessages.paymentConfirmed = {
       sent: result.sent,

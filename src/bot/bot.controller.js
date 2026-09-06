@@ -1,7 +1,7 @@
 import { processIncomingMessage } from './bot.service.js';
 import Order from '../orders/order.model.js';
 import { generateOrderSummary } from '../orders/order.service.js';
-import { sendOrderReceivedMessage, sendOrderEnRouteMessage, sendOrderDeliveredMessage, sendWhatsAppTemplate } from './whatsapp.service.js';
+import { sendOrderReceivedMessage, sendOrderEnRouteMessage, sendOrderDeliveredMessage, sendWhatsAppTemplate, sendPaymentConfirmedMessage } from './whatsapp.service.js';
 
 // ==========================================
 // WHATSAPP WEBHOOK CONTROLLERS (DEDICATED)
@@ -104,7 +104,8 @@ export const handleWhatsAppWebhook = async (req, res) => {
                 { 'whatsappMessages.survey.wamid': failedWamid },
                 { 'whatsappMessages.orderDelivered.wamid': failedWamid },
                 { 'whatsappMessages.orderOnTheWay.wamid': failedWamid },
-                { 'whatsappMessages.orderReceived.wamid': failedWamid }
+                { 'whatsappMessages.orderReceived.wamid': failedWamid },
+                { 'whatsappMessages.paymentConfirmed.wamid': failedWamid }
               ]
             });
 
@@ -144,6 +145,16 @@ export const handleWhatsAppWebhook = async (req, res) => {
                 console.log(`[WhatsApp Webhook Recv] Failed message was RECEIVED for order ${exactOrder.orderNumber}. Triggering template fallback...`);
                 const result = await sendOrderReceivedMessage(`+${phone}`, data, true);
                 exactOrder.set('whatsappMessages.orderReceived', { sent: result.sent, sentAt: new Date(), method: result.method, error: result.error, wamid: result.wamid });
+              } else if (exactOrder.whatsappMessages?.paymentConfirmed?.wamid === failedWamid) {
+                console.log(`[WhatsApp Webhook Recv] Failed message was PAYMENT_CONFIRMED for order ${exactOrder.orderNumber}. Triggering template fallback...`);
+                const result = await sendPaymentConfirmedMessage(`+${phone}`, {
+                  orderNumber: exactOrder.orderNumber,
+                  trackingLink: `https://pedidos.chilaquilestop.com/pedido/${exactOrder.orderNumber}`,
+                  customerName: exactOrder.name,
+                  orderSummary: summary,
+                  orderTotal: `Q${exactOrder.total.toFixed(2)}`
+                }, true);
+                exactOrder.set('whatsappMessages.paymentConfirmed', { sent: result.sent, sentAt: new Date(), method: result.method, error: result.error, wamid: result.wamid });
               }
               await exactOrder.save();
               console.log(`[WhatsApp Webhook Recv] Exact fallback completed and order saved.`);
@@ -187,6 +198,16 @@ export const handleWhatsAppWebhook = async (req, res) => {
                   console.log(`[WhatsApp Webhook Recv] Legacy fallback: Resending RECEIVED for order ${order.orderNumber}`);
                   const result = await sendOrderReceivedMessage(`+${phone}`, data, true);
                   order.set('whatsappMessages.orderReceived', { sent: result.sent, sentAt: new Date(), method: result.method, error: result.error, wamid: result.wamid });
+                } else if (order.status === 'recibido' && order.paymentMethod === 'tarjeta' && order.whatsappMessages?.paymentConfirmed?.method === 'normal') {
+                  console.log(`[WhatsApp Webhook Recv] Legacy fallback: Resending PAYMENT_CONFIRMED for order ${order.orderNumber}`);
+                  const result = await sendPaymentConfirmedMessage(`+${phone}`, {
+                    orderNumber: order.orderNumber,
+                    trackingLink: `https://pedidos.chilaquilestop.com/pedido/${order.orderNumber}`,
+                    customerName: order.name,
+                    orderSummary: summary,
+                    orderTotal: `Q${order.total.toFixed(2)}`
+                  }, true);
+                  order.set('whatsappMessages.paymentConfirmed', { sent: result.sent, sentAt: new Date(), method: result.method, error: result.error, wamid: result.wamid });
                 }
                 
                 await order.save();

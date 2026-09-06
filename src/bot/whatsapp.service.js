@@ -122,15 +122,45 @@ export const sendOrderReceivedMessage = async (to, data, forceTemplate = false) 
   }
 };
 
-export const sendPaymentConfirmedMessage = async (to, data) => {
-  const { orderNumber, trackingLink } = data;
+export const sendPaymentConfirmedMessage = async (to, data, forceTemplate = false) => {
+  const { orderNumber, trackingLink, customerName, orderSummary, orderTotal } = data;
 
   const text = `¡Pago recibido! ✅\n\nTu pedido #${orderNumber} ya está pagado y confirmado.\n\nConsulta el estado de tu pedido en tiempo real aquí:\n${trackingLink}\n\n¡Gracias por elegir Chilaquiles Top! 🌶️`;
 
   try {
+    if (forceTemplate) {
+      const err = new Error('Forced template');
+      err.code = 131047;
+      throw err;
+    }
     const result = await sendWhatsAppMessage(to, text);
     return { sent: true, method: 'normal', error: null, wamid: result?.messages?.[0]?.id };
   } catch (error) {
+    if (error.code === 131047) {
+      // No existe (todavia) una plantilla aprobada por Meta especifica para "pago
+      // recibido". Reutilizamos la plantilla ya aprobada de "pedido_recibido" para
+      // no perder el mensaje en silencio cuando la ventana de 24h esta cerrada.
+      console.log('[Fallback] 24h window closed, trying template pedido_recibido (pago confirmado)');
+      try {
+        const result = await sendWhatsAppTemplate(to, 'pedido_recibido', [
+          {
+            type: "body",
+            parameters: [
+              { type: "text", text: String(customerName || 'cliente') },
+              { type: "text", text: String(orderNumber) },
+              { type: "text", text: String(orderSummary || '') },
+              { type: "text", text: String(orderTotal || '') },
+              { type: "text", text: 'Tarjeta (pagado)' },
+              { type: "text", text: `Da seguimiento a tu pedido aquí: ${trackingLink}` }
+            ]
+          }
+        ], 'es_MX');
+        return { sent: true, method: 'template', error: null, wamid: result?.messages?.[0]?.id };
+      } catch (templateError) {
+        console.error('[WhatsApp] Payment confirmed template fallback failed:', templateError.message);
+        return { sent: false, method: 'template', error: templateError.message };
+      }
+    }
     console.error('[WhatsApp] Failed to send payment confirmed message:', error.message);
     return { sent: false, method: 'normal', error: error.message };
   }
