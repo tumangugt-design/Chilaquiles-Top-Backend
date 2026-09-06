@@ -3,6 +3,7 @@ import InventoryLog from './inventoryLog.model.js'
 import Portion from './portion.model.js'
 import PurchaseAllocation from '../purchases/purchase-allocation.model.js'
 import TransformationProcess from './transformation-process.model.js'
+import Setting from '../settings/settings.model.js'
 import {
   DEFAULT_RECIPE_CONSUMPTION,
   PACKAGING_CONSUMPTION,
@@ -11,7 +12,8 @@ import {
   TRANSFORMATION_PROCESS_CATALOG,
   ITEM_TYPES,
   resolveStockName,
-  toDisplayLabel
+  toDisplayLabel,
+  LEGACY_STOCK_NAME_MAP
 } from '../helpers/constants.js'
 
 const round = (value) => Math.round(value * 1000) / 1000
@@ -723,6 +725,105 @@ export const recalculatePortionPrices = async () => {
   }
 }
 
+// Migracion de una sola vez (v1 de la jerarquia).
+//
+// Antes el plato descontaba materia prima directamente (cebolla, cilantro,
+// chorizo, aguacate). Ahora descuenta el producto terminado equivalente
+// (cebolla picada, cilantro picado, chorizo argentino, aguacate hass). Si no
+// se traslada la existencia, el dia del despliegue toda orden con esos
+// ingredientes se rechazaria por "stock insuficiente" hasta producir un lote.
+//
+// Por eso se mueve UNA VEZ la existencia (y el costo por porcion) del producto
+// viejo al nuevo, dejando rastro en InventoryLog. Denilson puede ajustar
+// despues desde Stock lo que fisicamente siga crudo.
+export const migrateLegacyStockToFinishedGoods = async () => {
+  const FLAG = 'hierarchy_migration_v1'
+  const existingFlag = await Setting.findOne({ key: FLAG })
+  if (existingFlag?.value?.done) return { skipped: true }
+
+  const moved = []
+
+  for (const [legacyName, finishedName] of Object.entries(LEGACY_STOCK_NAME_MAP)) {
+    const legacy = await Inventory.findOne({ name: legacyName })
+    const finished = await Inventory.findOne({ name: finishedName })
+    if (!legacy || !finished) continue
+
+    const legacyStock = Number(legacy.stock || 0)
+    const finishedStock = Number(finished.stock || 0)
+
+    // Solo se traslada si el producto terminado todavia esta en cero: si ya
+    // tiene existencia propia, la migracion no debe tocarlo.
+    if (legacyStock <= 0 || finishedStock > 0) continue
+
+    let amount = legacyStock
+    if (legacy.unit !== finished.unit) {
+      try {
+        amount = convertAmountToCatalogUnit(legacyStock, legacy.unit, finished.unit)
+      } catch (err) {
+        continue
+      }
+    }
+
+    await Inventory.updateOne({ _id: legacy._id }, { $set: { stock: 0 } })
+    await Inventory.updateOne(
+      { _id: finished._id },
+      {
+        $set: {
+          stock: round(amount),
+          lastPrice: legacy.lastPrice || finished.lastPrice || 0,
+          lastPurchaseQty: legacy.lastPurchaseQty ?? null,
+          lastPurchaseUnit: legacy.lastPurchaseUnit ?? null,
+          lastPurchaseTotalPrice: legacy.lastPurchaseTotalPrice ?? null
+        }
+      }
+    )
+
+    // El costo por porcion tambien se hereda para no perder el costeo del plato.
+    const legacyPortion = await Portion.findOne({ name: legacyName })
+    if (legacyPortion?.price) {
+      await Portion.findOneAndUpdate({ name: finishedName }, { $set: { price: legacyPortion.price } })
+    }
+
+    const reason = `Migración de jerarquía: la existencia de "${toDisplayLabel(legacyName)}" (materia prima) se trasladó a "${toDisplayLabel(finishedName)}" (producto terminado), que es lo que ahora consume el plato.`
+
+    await InventoryLog.insertMany([
+      {
+        ingredient: legacy._id,
+        ingredientName: legacy.name,
+        type: 'ADJUSTMENT',
+        amount: legacyStock,
+        previousStock: legacyStock,
+        newStock: 0,
+        userId: null,
+        userName: 'Sistema',
+        reason
+      },
+      {
+        ingredient: finished._id,
+        ingredientName: finished.name,
+        type: 'ADJUSTMENT',
+        amount: round(amount),
+        previousStock: 0,
+        newStock: round(amount),
+        userId: null,
+        userName: 'Sistema',
+        reason
+      }
+    ])
+
+    moved.push({ from: legacyName, to: finishedName, amount: round(amount), unit: finished.unit })
+    console.log(`[MIGRATION v1] ${legacyName} → ${finishedName}: ${round(amount)} ${finished.unit}`)
+  }
+
+  await Setting.findOneAndUpdate(
+    { key: FLAG },
+    { $set: { value: { done: true, movedAt: new Date(), moved } } },
+    { upsert: true }
+  )
+
+  return { skipped: false, moved }
+}
+
 export const seedTransformationProcesses = async () => {
   const report = { created: [], updated: [] }
   for (const process of TRANSFORMATION_PROCESS_CATALOG) {
@@ -871,16 +972,20 @@ export const seedInventory = async ({ silent = false } = {}) => {
     }
   }
 
+  report.processes = await seedTransformationProcesses()
+
+  // Seed Portion sizes/prices
+  await seedPortions()
+
+  // Traslado de existencia de materia prima al producto terminado que ahora
+  // consume el plato (solo la primera vez).
+  report.migration = await migrateLegacyStockToFinishedGoods()
+
   // La materia prima no se sirve por plato: si arrastraba una porcion de la
   // configuracion anterior, se retira para que no ensucie el Recetario.
   const rawMaterialNames = INVENTORY_CATALOG.filter((i) => i.itemType === ITEM_TYPES.MATERIA_PRIMA).map((i) => i.name)
   const removedPortions = await Portion.deleteMany({ name: { $in: rawMaterialNames } })
   report.removedPortions = removedPortions?.deletedCount || 0
-
-  report.processes = await seedTransformationProcesses()
-
-  // Seed Portion sizes/prices
-  await seedPortions()
 
   return report
 }
