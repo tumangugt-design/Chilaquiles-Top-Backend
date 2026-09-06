@@ -1,7 +1,9 @@
 import Purchase from './purchase.model.js';
 import PurchaseAllocation from './purchase-allocation.model.js';
 import Inventory from '../inventory/inventory.model.js';
-import { planPurchaseConsumption, commitPurchaseConsumption } from './purchase.service.js';
+import Portion from '../inventory/portion.model.js';
+import { manualStockAdjustment } from '../inventory/inventory.service.js';
+import { planPurchaseConsumption, commitPurchaseConsumption, convertBetweenUnits } from './purchase.service.js';
 
 const roundMoney = (value) => Math.round(Number(value || 0) * 100) / 100;
 const roundQty = (value) => Math.round(Number(value || 0) * 1000) / 1000;
@@ -194,7 +196,81 @@ export const createProductionBatch = async (req, res) => {
       notes: req.body.notes || ''
     });
 
-    return res.status(200).json({ message: 'Lote de producción registrado exitosamente', allocation });
+    // --- Acreditar el producto transformado a Stock (Inventory) ---
+    // Antes, "Producir lote" solo dejaba el costeo FIFO en PurchaseAllocation
+    // pero nunca sumaba producedQuantity a Inventory.stock: el producto
+    // quedaba costeado pero invisible para venta/disponibilidad, obligando a
+    // registrar una segunda "Entrada" manual para el mismo lote. Se corrige
+    // aqui para que Producir lote sea una sola accion completa, igual que
+    // una Entrada/Compra directa (mismo patron que saveInventoryItem).
+    let stockCredit = null;
+    try {
+      let stockItem = await Inventory.findOne({ name: stockItemName });
+      if (!stockItem) {
+        stockItem = await Inventory.create({
+          name: stockItemName,
+          unit: producedUnit,
+          category: 'Otros',
+          stock: 0,
+          minimumStock: 0,
+          isActive: true,
+          sourceType: 'preparado_interno'
+        });
+      }
+
+      let portionItem = await Portion.findOne({ name: stockItemName });
+      if (!portionItem) {
+        portionItem = await Portion.create({
+          name: stockItemName,
+          usedPerPlate: 1,
+          unit: producedUnit,
+          price: 0
+        });
+      }
+
+      const storedUnit = stockItem.unit || producedUnit;
+      let amountInStoredUnit = producedQuantity;
+      try {
+        amountInStoredUnit = roundQty(convertBetweenUnits(producedQuantity, producedUnit, storedUnit));
+      } catch (conversionError) {
+        amountInStoredUnit = producedQuantity;
+      }
+
+      const unitPriceInStoredUnit = amountInStoredUnit > 0 ? roundMoney(inheritedCost / amountInStoredUnit) : 0;
+      let portionInStoredUnit = portionItem.usedPerPlate;
+      if (portionItem.unit !== storedUnit) {
+        try {
+          portionInStoredUnit = convertBetweenUnits(portionItem.usedPerPlate, portionItem.unit, storedUnit);
+        } catch (conversionError) {
+          portionInStoredUnit = portionItem.usedPerPlate;
+        }
+      }
+      const portionPrice = roundMoney(unitPriceInStoredUnit * portionInStoredUnit);
+
+      const updatedItem = await manualStockAdjustment({
+        name: stockItemName,
+        amount: amountInStoredUnit,
+        type: 'IN',
+        totalPrice: inheritedCost,
+        portionPrice,
+        inputAmount: producedQuantity,
+        inputUnit: producedUnit,
+        storedUnit,
+        actor: req.user,
+        reason: `Producción de lote: ${rawInputs.map((r) => `${r.quantityUsed} ${r.unit} ${r.ingredientName}`).join(' + ')} → ${producedQuantity} ${producedUnit} de ${stockItemName} | Costo Total Q${inheritedCost} | Costo unitario Q${unitPriceInStoredUnit}/${storedUnit} | Lote ${allocation._id}`
+      });
+
+      stockCredit = { item: updatedItem, amountInStoredUnit, storedUnit, portionPrice };
+    } catch (creditError) {
+      // No revertimos la Compra/Allocation ya comprometida (el consumo FIFO
+      // de materia prima ya paso) - pero avisamos explicitamente en la
+      // respuesta para que no quede una discrepancia silenciosa entre lo
+      // producido y lo que quedo visible en Stock.
+      console.error('[createProductionBatch] Error acreditando stock del producto transformado:', creditError.message);
+      stockCredit = { error: creditError.message || 'No se pudo acreditar el stock automáticamente.' };
+    }
+
+    return res.status(200).json({ message: 'Lote de producción registrado exitosamente', allocation, stockCredit });
   } catch (error) {
     return res.status(error.statusCode || 500).json({ message: error.message || 'Error creating production batch' });
   }
