@@ -8,7 +8,7 @@ export const sendInstagramMessage = async (recipientId, text) => {
     throw new Error('IG_ACCESS_TOKEN is not configured');
   }
 
-  const url = 'https://graph.facebook.com/v23.0/me/messages';
+  const url = 'https://graph.instagram.com/v23.0/me/messages';
 
   console.log('[Instagram Send] Target URL:', url);
   console.log('[Instagram Send] Recipient ID:', recipientId);
