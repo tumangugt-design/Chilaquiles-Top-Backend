@@ -12,6 +12,8 @@ import {
   sendPromotionBlast,
   getCampaignHistory,
   generateMarketing,
+  costPromotionPreview,
+  proposePromotionPackaging,
   getTaxConfig,
   updateTaxConfig,
   getDeliveryConfig,
@@ -31,6 +33,10 @@ router.patch('/promotions', verifyAuthToken, requireApprovedStatus, requireRole(
 router.post('/promotions/send-blast', verifyAuthToken, requireApprovedStatus, requireRole([USER_ROLES.ADMIN]), sendPromotionBlast)
 router.get('/promotions/campaigns', verifyAuthToken, requireApprovedStatus, requireRole([USER_ROLES.ADMIN]), getCampaignHistory)
 router.post('/promotions/generate-marketing', verifyAuthToken, requireApprovedStatus, requireRole([USER_ROLES.ADMIN]), generateMarketing)
+
+// Costeo en vivo: el formulario y el agente preguntan aqui antes de guardar.
+router.post('/promotions/cost', verifyAuthToken, requireApprovedStatus, requireRole([USER_ROLES.ADMIN]), costPromotionPreview)
+router.post('/promotions/packaging-proposal', verifyAuthToken, requireApprovedStatus, requireRole([USER_ROLES.ADMIN]), proposePromotionPackaging)
 
 router.get('/calculator-costs', getCalculatorCosts)
 router.patch('/calculator-costs', verifyAuthToken, requireApprovedStatus, requireRole([USER_ROLES.ADMIN]), updateCalculatorCosts)

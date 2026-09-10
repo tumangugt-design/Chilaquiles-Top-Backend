@@ -5,6 +5,7 @@ import { sendPromotionBlastMessage } from '../bot/whatsapp.service.js'
 import User from '../users/user.model.js'
 import { Campaign } from './campaign.model.js'
 import { generateMarketingMessage } from '../bot/ai.service.js'
+import { costPromotion, validatePromotionMargin, proposePackaging } from './promotion-costing.service.js'
 
 const ALLOWED_PROMOTION_IMAGE_MIME_TYPES = ['image/jpeg', 'image/png', 'image/webp']
 
@@ -104,13 +105,62 @@ export const updatePromotions = async (req, res) => {
     // Si una promocion se guarda activa de nuevo (ej. se extendio la fecha
     // de fin), se quita la marca de "vencida" para que el panel no la siga
     // mostrando como vencida cuando en realidad ya fue reactivada a mano.
-    const sanitized = promotions.map((promo) => {
+    const cleaned = promotions.map((promo) => {
       if (promo?.isActive && promo?.deactivatedReason) {
         const { deactivatedReason, ...rest } = promo
         return rest
       }
       return promo
     })
+
+    // El costo lo calcula el servidor, no el navegador. Antes llegaban
+    // estimatedTotalCost / estimatedProfit / estimatedMargin ya masticados
+    // por el cliente y se guardaban sin verificar: nada impedia guardar una
+    // promo a perdida, y ningun agente podia crear una costeada.
+    const sanitized = []
+    const rejected = []
+
+    for (const promo of cleaned) {
+      const plates = Array.isArray(promo?.plates) ? promo.plates : []
+
+      // Promo de formato legado sin plates[]: no hay como costearla, se
+      // guarda tal cual para no romper historial.
+      if (plates.length === 0) {
+        sanitized.push(promo)
+        continue
+      }
+
+      const verdict = await validatePromotionMargin(plates, {
+        price: promo.promoPrice ?? promo.price,
+        minMarginPercent: promo.minMarginAlertPercent,
+        allowLowMargin: promo.allowLowMargin === true,
+        packagingMode: promo.packagingMode || 'porPlato',
+        sharedPackaging: promo.packaging || null,
+      })
+
+      if (!verdict.ok) {
+        rejected.push({ id: promo.id, name: promo.name, reason: verdict.reason, message: verdict.message, margin: verdict.costing.margin })
+        continue
+      }
+
+      const { costing } = verdict
+      sanitized.push({
+        ...promo,
+        estimatedTotalCost: costing.totalCost,
+        estimatedProfit: costing.profit,
+        estimatedMargin: costing.margin,
+        costCoverage: costing.coverage,
+        costedAt: costing.costedAt,
+      })
+    }
+
+    if (rejected.length > 0) {
+      return res.status(400).json({
+        message: 'Hay promociones que no cumplen el margen minimo',
+        rejected,
+        hint: 'Subi el precio, ajusta la composicion, o guarda con allowLowMargin: true si es intencional.',
+      })
+    }
 
     const updated = await Setting.findOneAndUpdate(
       { key: 'promotions' },
@@ -125,6 +175,83 @@ export const updatePromotions = async (req, res) => {
     return res.status(200).json(updated.value)
   } catch (error) {
     return res.status(500).json({ message: 'No se pudieron guardar las promociones', error: error.message })
+  }
+}
+
+/**
+ * Costeo de una promocion sin guardarla.
+ *
+ * Es el mismo calculo que corre al guardar, expuesto aparte para que el
+ * formulario muestre costo, utilidad y margen en vivo mientras se arma la
+ * promo, y para que el agente pueda proponer un precio antes de crearla.
+ * Una sola fuente de verdad: si aqui pasa, al guardar pasa.
+ *
+ * body: { plates[], price, packagingMode, sharedPackaging, minMarginPercent, allowLowMargin }
+ */
+export const costPromotionPreview = async (req, res) => {
+  try {
+    const { plates, price, packagingMode = 'porPlato', sharedPackaging, minMarginPercent, allowLowMargin } = req.body || {}
+
+    if (!Array.isArray(plates) || plates.length === 0) {
+      return res.status(400).json({ message: 'Se necesita al menos un plato para costear la promocion' })
+    }
+
+    // Empaque compartido sin lista: el servidor la propone. Asi el formulario
+    // no tiene que adivinar cuantos vasitos van; solo muestra la propuesta y
+    // deja ajustarla.
+    let proposal = null
+    let packaging = sharedPackaging || null
+    if (packagingMode === 'compartido' && !packaging) {
+      proposal = proposePackaging(plates, 'compartido')
+      packaging = proposal.items
+    }
+
+    const verdict = await validatePromotionMargin(plates, {
+      price,
+      minMarginPercent,
+      allowLowMargin: allowLowMargin === true,
+      packagingMode,
+      sharedPackaging: packaging,
+    })
+
+    res.set('Cache-Control', 'no-store')
+
+    return res.status(200).json({
+      costing: verdict.costing,
+      ok: verdict.ok,
+      reason: verdict.reason || null,
+      message: verdict.message || null,
+      threshold: verdict.threshold ?? null,
+      proposal,
+    })
+  } catch (error) {
+    return res.status(500).json({ message: 'No se pudo costear la promocion', error: error.message })
+  }
+}
+
+/**
+ * Propuesta de empaque para un conjunto de platos, con el porque de cada
+ * linea. No cuesta nada ni guarda nada: sirve para que el formulario (o el
+ * agente) muestre "esto es lo que se necesita" antes de decidir.
+ *
+ * body: { plates[], mode }
+ */
+export const proposePromotionPackaging = async (req, res) => {
+  try {
+    const { plates, mode = 'compartido' } = req.body || {}
+
+    if (!Array.isArray(plates) || plates.length === 0) {
+      return res.status(400).json({ message: 'Se necesita al menos un plato para proponer el empaque' })
+    }
+
+    const { items, reasoning } = proposePackaging(plates, mode)
+    const costing = await costPromotion(plates, { packagingMode: 'compartido', sharedPackaging: items })
+
+    res.set('Cache-Control', 'no-store')
+
+    return res.status(200).json({ mode, items, reasoning, packagingCost: costing.sharedPackaging })
+  } catch (error) {
+    return res.status(500).json({ message: 'No se pudo proponer el empaque', error: error.message })
   }
 }
 
