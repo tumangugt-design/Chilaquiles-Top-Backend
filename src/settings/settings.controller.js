@@ -106,7 +106,10 @@ const costAndStampPromotion = async (promo) => {
   const verdict = await validatePromotionMargin(plates, {
     price: promo.promoPrice ?? promo.price,
     minMarginPercent: promo.minMarginAlertPercent,
-    allowLowMargin: promo.allowLowMargin === true,
+    // Una promo pausada no puede perder plata: no esta a la venta. Bloquear
+    // su guardado por margen impediria justamente apagarla, que es lo que hay
+    // que hacer con una promo que no cierra.
+    allowLowMargin: promo.allowLowMargin === true || promo.isActive === false,
     packagingMode: promo.packagingMode || 'porPlato',
     sharedPackaging: promo.packaging || null,
     paymentMethod: promo.paymentMethod || 'tarjeta',
