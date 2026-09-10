@@ -90,6 +90,70 @@ export const getPromotions = async (req, res) => {
   }
 }
 
+/**
+ * Cuesta una promo con el lote FIFO vigente, la valida contra el margen neto
+ * y le sella el resultado. Es el unico lugar donde se decide si una promo
+ * puede guardarse: lo usan tanto el guardado masivo como el de una sola, para
+ * que no existan dos reglas distintas para la misma decision.
+ */
+const costAndStampPromotion = async (promo) => {
+  const plates = Array.isArray(promo?.plates) ? promo.plates : []
+
+  // Promo de formato legado sin plates[]: no hay como costearla, se guarda
+  // tal cual para no romper historial.
+  if (plates.length === 0) return { ok: true, promo }
+
+  const verdict = await validatePromotionMargin(plates, {
+    price: promo.promoPrice ?? promo.price,
+    minMarginPercent: promo.minMarginAlertPercent,
+    allowLowMargin: promo.allowLowMargin === true,
+    packagingMode: promo.packagingMode || 'porPlato',
+    sharedPackaging: promo.packaging || null,
+    paymentMethod: promo.paymentMethod || 'tarjeta',
+  })
+
+  if (!verdict.ok) {
+    return {
+      ok: false,
+      rejection: {
+        id: promo.id,
+        name: promo.name,
+        reason: verdict.reason,
+        message: verdict.message,
+        margin: verdict.costing.margin,
+        netMargin: verdict.costing.netMargin,
+        breakdown: verdict.breakdown,
+      },
+    }
+  }
+
+  const { costing } = verdict
+  return {
+    ok: true,
+    promo: {
+      ...promo,
+      estimatedTotalCost: costing.totalCost,
+      estimatedProfit: costing.profit,
+      estimatedMargin: costing.margin,
+      // Lo que de verdad queda despues del IVA, Recurrente y el ISR.
+      estimatedNetProfit: costing.netProfit,
+      estimatedNetMargin: costing.netMargin,
+      fiscalSnapshot: costing.fiscal,
+      costCoverage: costing.coverage,
+      costedAt: costing.costedAt,
+    },
+  }
+}
+
+/** Quita la marca de "vencida" cuando la promo se guarda activa de nuevo. */
+const clearStaleDeactivation = (promo) => {
+  if (promo?.isActive && promo?.deactivatedReason) {
+    const { deactivatedReason, ...rest } = promo
+    return rest
+  }
+  return promo
+}
+
 export const updatePromotions = async (req, res) => {
   try {
     const promotions = req.body
@@ -102,16 +166,7 @@ export const updatePromotions = async (req, res) => {
       return res.status(400).json({ message: 'Las promociones no tienen una estructura valida', errors })
     }
 
-    // Si una promocion se guarda activa de nuevo (ej. se extendio la fecha
-    // de fin), se quita la marca de "vencida" para que el panel no la siga
-    // mostrando como vencida cuando en realidad ya fue reactivada a mano.
-    const cleaned = promotions.map((promo) => {
-      if (promo?.isActive && promo?.deactivatedReason) {
-        const { deactivatedReason, ...rest } = promo
-        return rest
-      }
-      return promo
-    })
+    const cleaned = promotions.map(clearStaleDeactivation)
 
     // El costo lo calcula el servidor, no el navegador. Antes llegaban
     // estimatedTotalCost / estimatedProfit / estimatedMargin ya masticados
@@ -121,37 +176,9 @@ export const updatePromotions = async (req, res) => {
     const rejected = []
 
     for (const promo of cleaned) {
-      const plates = Array.isArray(promo?.plates) ? promo.plates : []
-
-      // Promo de formato legado sin plates[]: no hay como costearla, se
-      // guarda tal cual para no romper historial.
-      if (plates.length === 0) {
-        sanitized.push(promo)
-        continue
-      }
-
-      const verdict = await validatePromotionMargin(plates, {
-        price: promo.promoPrice ?? promo.price,
-        minMarginPercent: promo.minMarginAlertPercent,
-        allowLowMargin: promo.allowLowMargin === true,
-        packagingMode: promo.packagingMode || 'porPlato',
-        sharedPackaging: promo.packaging || null,
-      })
-
-      if (!verdict.ok) {
-        rejected.push({ id: promo.id, name: promo.name, reason: verdict.reason, message: verdict.message, margin: verdict.costing.margin })
-        continue
-      }
-
-      const { costing } = verdict
-      sanitized.push({
-        ...promo,
-        estimatedTotalCost: costing.totalCost,
-        estimatedProfit: costing.profit,
-        estimatedMargin: costing.margin,
-        costCoverage: costing.coverage,
-        costedAt: costing.costedAt,
-      })
+      const result = await costAndStampPromotion(promo)
+      if (result.ok) sanitized.push(result.promo)
+      else rejected.push(result.rejection)
     }
 
     if (rejected.length > 0) {
@@ -179,6 +206,94 @@ export const updatePromotions = async (req, res) => {
 }
 
 /**
+ * Guarda UNA promocion, sin tocar las demas.
+ *
+ * El guardado masivo (PATCH /promotions) reescribe la lista entera: para
+ * cambiarle el precio a una promo hay que reenviar todas, y desde que el
+ * servidor valida el margen, una promo vieja mal costeada puede bloquear el
+ * guardado de una nueva. Aqui solo se cuesta y se valida la que se manda; el
+ * resto de la lista se conserva tal como esta guardada.
+ *
+ * PUT /settings/promotions/:id  — crea si no existe, reemplaza si existe.
+ */
+export const upsertPromotion = async (req, res) => {
+  try {
+    const { id } = req.params
+    const incoming = req.body
+
+    if (!id) return res.status(400).json({ message: 'Falta el id de la promocion' })
+    if (typeof incoming !== 'object' || incoming === null || Array.isArray(incoming)) {
+      return res.status(400).json({ message: 'El cuerpo debe ser una promocion' })
+    }
+
+    const promo = clearStaleDeactivation({ ...incoming, id })
+
+    const { ok: validShape, errors } = validatePromotionsPayload([promo])
+    if (!validShape) {
+      return res.status(400).json({ message: 'La promocion no tiene una estructura valida', errors })
+    }
+
+    const result = await costAndStampPromotion(promo)
+    if (!result.ok) {
+      return res.status(400).json({
+        message: result.rejection.message,
+        rejected: [result.rejection],
+        hint: 'Subi el precio, ajusta la composicion, o guarda con allowLowMargin: true si es intencional.',
+      })
+    }
+
+    const doc = await Setting.findOne({ key: 'promotions' })
+    const current = Array.isArray(doc?.value) ? doc.value : []
+    const idx = current.findIndex((p) => p?.id === id)
+    const next = idx >= 0
+      ? current.map((p, i) => (i === idx ? result.promo : p))
+      : [...current, result.promo]
+
+    const updated = await Setting.findOneAndUpdate(
+      { key: 'promotions' },
+      { $set: { value: next } },
+      { new: true, upsert: true }
+    )
+
+    res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate')
+    res.set('Pragma', 'no-cache')
+    res.set('Expires', '0')
+
+    return res.status(idx >= 0 ? 200 : 201).json({ promotion: result.promo, promotions: updated.value })
+  } catch (error) {
+    return res.status(500).json({ message: 'No se pudo guardar la promocion', error: error.message })
+  }
+}
+
+/** DELETE /settings/promotions/:id — quita una sola, sin revalidar las demas. */
+export const deletePromotion = async (req, res) => {
+  try {
+    const { id } = req.params
+    if (!id) return res.status(400).json({ message: 'Falta el id de la promocion' })
+
+    const doc = await Setting.findOne({ key: 'promotions' })
+    const current = Array.isArray(doc?.value) ? doc.value : []
+    const next = current.filter((p) => p?.id !== id)
+
+    if (next.length === current.length) {
+      return res.status(404).json({ message: 'Esa promocion ya no existe' })
+    }
+
+    const updated = await Setting.findOneAndUpdate(
+      { key: 'promotions' },
+      { $set: { value: next } },
+      { new: true, upsert: true }
+    )
+
+    res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate')
+
+    return res.status(200).json({ promotions: updated.value })
+  } catch (error) {
+    return res.status(500).json({ message: 'No se pudo eliminar la promocion', error: error.message })
+  }
+}
+
+/**
  * Costeo de una promocion sin guardarla.
  *
  * Es el mismo calculo que corre al guardar, expuesto aparte para que el
@@ -190,7 +305,7 @@ export const updatePromotions = async (req, res) => {
  */
 export const costPromotionPreview = async (req, res) => {
   try {
-    const { plates, price, packagingMode = 'porPlato', sharedPackaging, minMarginPercent, allowLowMargin } = req.body || {}
+    const { plates, price, packagingMode = 'porPlato', sharedPackaging, minMarginPercent, allowLowMargin, paymentMethod = 'tarjeta' } = req.body || {}
 
     if (!Array.isArray(plates) || plates.length === 0) {
       return res.status(400).json({ message: 'Se necesita al menos un plato para costear la promocion' })
@@ -212,6 +327,7 @@ export const costPromotionPreview = async (req, res) => {
       allowLowMargin: allowLowMargin === true,
       packagingMode,
       sharedPackaging: packaging,
+      paymentMethod,
     })
 
     res.set('Cache-Control', 'no-store')
@@ -222,6 +338,7 @@ export const costPromotionPreview = async (req, res) => {
       reason: verdict.reason || null,
       message: verdict.message || null,
       threshold: verdict.threshold ?? null,
+      breakdown: verdict.breakdown ?? null,
       proposal,
     })
   } catch (error) {

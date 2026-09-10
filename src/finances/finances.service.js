@@ -60,7 +60,7 @@ const round2 = (n) => Math.round((Number(n) || 0) * 100) / 100
 
 // Regimen Opcional Simplificado sobre Ingresos de Actividades Lucrativas:
 // definitivo mensual sobre renta bruta (sin deducciones), tramo unico por mes.
-const calculateISR = (rentaBrutaMensual, cfg) => {
+export const calculateISR = (rentaBrutaMensual, cfg) => {
   const base = Math.max(0, rentaBrutaMensual)
   if (base <= cfg.isrTier1Limit) return base * cfg.isrTier1Rate
   return cfg.isrTier1Limit * cfg.isrTier1Rate + (base - cfg.isrTier1Limit) * cfg.isrTier2Rate

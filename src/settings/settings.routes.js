@@ -12,6 +12,8 @@ import {
   sendPromotionBlast,
   getCampaignHistory,
   generateMarketing,
+  upsertPromotion,
+  deletePromotion,
   costPromotionPreview,
   proposePromotionPackaging,
   getTaxConfig,
@@ -33,6 +35,10 @@ router.patch('/promotions', verifyAuthToken, requireApprovedStatus, requireRole(
 router.post('/promotions/send-blast', verifyAuthToken, requireApprovedStatus, requireRole([USER_ROLES.ADMIN]), sendPromotionBlast)
 router.get('/promotions/campaigns', verifyAuthToken, requireApprovedStatus, requireRole([USER_ROLES.ADMIN]), getCampaignHistory)
 router.post('/promotions/generate-marketing', verifyAuthToken, requireApprovedStatus, requireRole([USER_ROLES.ADMIN]), generateMarketing)
+
+// Una promo a la vez: guardar una no reescribe ni revalida la lista entera.
+router.put('/promotions/:id', verifyAuthToken, requireApprovedStatus, requireRole([USER_ROLES.ADMIN]), upsertPromotion)
+router.delete('/promotions/:id', verifyAuthToken, requireApprovedStatus, requireRole([USER_ROLES.ADMIN]), deletePromotion)
 
 // Costeo en vivo: el formulario y el agente preguntan aqui antes de guardar.
 router.post('/promotions/cost', verifyAuthToken, requireApprovedStatus, requireRole([USER_ROLES.ADMIN]), costPromotionPreview)

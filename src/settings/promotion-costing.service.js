@@ -1,5 +1,8 @@
 import Inventory from '../inventory/inventory.model.js';
 import { peekCurrentBatchCost } from '../inventory/inventory.service.js';
+import Order from '../orders/order.model.js';
+import { getTaxConfig, calculateISR } from '../finances/finances.service.js';
+import { getGuatemalaMonthRange } from '../helpers/timezone.helper.js';
 import {
   INVENTORY_CATALOG_MAP,
   DEFAULT_RECIPE_CONSUMPTION,
@@ -125,6 +128,74 @@ const unitCostFor = async (name, invByName) => {
   return { cost: Number(item?.lastPrice || 0), traced: false };
 };
 
+// ============================================================
+// CAPA FISCAL
+//
+// El costo de insumos no es lo unico que se lleva el precio. Una promo se
+// factura como cualquier otro pedido, asi que antes de que quede utilidad
+// pasan por encima el IVA, la comision de Recurrente y el ISR.
+//
+// Misma metodologia que Finanzas (finances.service.js), aplicada a UNA venta
+// en vez de a un periodo, y leyendo la misma taxConfig — si manana la SAT o
+// Recurrente cambian una tarifa, se cambia en un solo lugar.
+//
+// Lo que NO se descuenta, a proposito: el credito fiscal del IVA de compras.
+// Finanzas tampoco lo descuenta, porque todavia no se traza que cada compra
+// tenga factura valida. Eso deja el calculo del lado conservador: el margen
+// real es un poco mejor que el que se muestra, nunca peor.
+// ============================================================
+
+/** Renta bruta acumulada del mes en curso, para saber en que tramo cae el ISR. */
+const monthToDateRentaBruta = async (cfg) => {
+  const { start, end } = getGuatemalaMonthRange(new Date());
+  const orders = await Order.find({
+    createdAt: { $gte: start, $lt: end },
+    status: { $ne: 'cancelado' },
+  }).select('total').lean();
+  const revenue = orders.reduce((s, o) => s + (Number(o.total) || 0), 0);
+  const ivaFactor = cfg.ivaRate / (1 + cfg.ivaRate);
+  return cfg.pricesIncludeIva ? revenue - revenue * ivaFactor : revenue;
+};
+
+/**
+ * Lo que el fisco y Recurrente se llevan de una venta de `price`.
+ *
+ * @param {number} price         precio cobrado al cliente (IVA incluido)
+ * @param {object} cfg           taxConfig
+ * @param {string} paymentMethod 'tarjeta' cobra comision de Recurrente; en efectivo no hay
+ * @param {number} monthRentaBruta  renta bruta que ya lleva el mes, para el tramo del ISR
+ */
+export const applyFiscalLayer = (price, cfg, { paymentMethod = 'tarjeta', monthRentaBruta = 0 } = {}) => {
+  const p = Number(price) || 0;
+  if (p <= 0) return null;
+
+  // El precio al cliente ya trae el IVA adentro: se extrae, no se suma encima.
+  // Ese pedazo del precio nunca fue mio.
+  const ivaFactor = cfg.ivaRate / (1 + cfg.ivaRate);
+  const ivaDebito = cfg.pricesIncludeIva ? p * ivaFactor : p * cfg.ivaRate;
+  const rentaBruta = cfg.pricesIncludeIva ? p - ivaDebito : p;
+
+  const conTarjeta = paymentMethod === 'tarjeta';
+  const comisionRecurrente = conTarjeta ? cfg.recurrenteFeeFixed + p * cfg.recurrenteFeeRate : 0;
+  const facturacionFee = conTarjeta ? cfg.recurrenteInvoiceFee : 0;
+
+  // ISR marginal: no el 5% o el 7% en abstracto, sino cuanto ISR le AGREGA
+  // esta venta al mes que va corriendo. Restar los dos tramos resuelve solo
+  // el caso en que la venta cruza los Q30,000.
+  const isr = calculateISR(monthRentaBruta + rentaBruta, cfg) - calculateISR(monthRentaBruta, cfg);
+
+  return {
+    paymentMethod,
+    ivaDebito: round(ivaDebito),
+    rentaBruta: round(rentaBruta),
+    comisionRecurrente: round(comisionRecurrente),
+    facturacionFee: round(facturacionFee),
+    isr: round(isr),
+    isrRatePct: rentaBruta > 0 ? round((isr / rentaBruta) * 100) : 0,
+    total: round(ivaDebito + comisionRecurrente + facturacionFee + isr),
+  };
+};
+
 /**
  * Costea una promocion completa.
  *
@@ -132,13 +203,15 @@ const unitCostFor = async (name, invByName) => {
  * @param {object} opts
  * @param {number} opts.price        precio promocional, para utilidad y margen
  * @param {string} opts.packagingMode 'porPlato' (default) o 'compartido'
+ * @param {string} opts.paymentMethod 'tarjeta' (default) o 'efectivo' — cambia
+ *        cuanto se lleva Recurrente, y por lo tanto el margen neto
  * @param {object} opts.sharedPackaging  {nombre: cantidad} cuando el empaque
  *        es de toda la promo y no de cada plato — el caso del combo que se
  *        reparte: una caja grande, platos de papel y cubiertos por persona,
  *        en vez de N envases individuales.
  */
 export const costPromotion = async (plates = [], opts = {}) => {
-  const { price, packagingMode = 'porPlato', sharedPackaging = null } = opts;
+  const { price, packagingMode = 'porPlato', sharedPackaging = null, paymentMethod = 'tarjeta' } = opts;
 
   const inventory = await Inventory.find({}).lean();
   const invByName = new Map(inventory.map((i) => [i.name, i]));
@@ -195,6 +268,21 @@ export const costPromotion = async (plates = [], opts = {}) => {
   const profit = priceNum > 0 ? round(priceNum - totalCost) : null;
   const margin = priceNum > 0 ? round(((priceNum - totalCost) / priceNum) * 100) : null;
 
+  // Lo anterior es el margen sobre insumos: util para saber si la receta se
+  // paga sola, pero no es lo que queda en el banco. Esto si.
+  let fiscal = null;
+  let netProfit = null;
+  let netMargin = null;
+  if (priceNum > 0) {
+    const cfg = await getTaxConfig();
+    fiscal = applyFiscalLayer(priceNum, cfg, {
+      paymentMethod,
+      monthRentaBruta: await monthToDateRentaBruta(cfg),
+    });
+    netProfit = round(priceNum - fiscal.total - totalCost);
+    netMargin = round((netProfit / priceNum) * 100);
+  }
+
   return {
     plates: platesOut,
     sharedPackaging: sharedOut,
@@ -203,6 +291,9 @@ export const costPromotion = async (plates = [], opts = {}) => {
     price: priceNum || null,
     profit,
     margin,
+    fiscal,
+    netProfit,
+    netMargin,
     // Cobertura: que porcion del costo viene de un lote real de Compras.
     // Un margen calculado sobre estimaciones no vale lo mismo que uno trazado.
     coverage: lines > 0 ? round(((lines - untraced) / lines) * 100) : 0,
@@ -215,8 +306,16 @@ export const DEFAULT_MARGIN_ALERT_PERCENT = 15;
 
 /**
  * Regla dura al guardar: una promocion no puede salir a perdida ni bajo el
- * umbral, salvo override explicito. Devuelve el costeo junto al veredicto
- * para que el llamador no tenga que calcular dos veces.
+ * umbral, salvo override explicito.
+ *
+ * El umbral se mide contra el margen NETO, no contra el bruto sobre insumos.
+ * Una promo puede dejar 30% sobre ingredientes y aun asi perder plata: de
+ * cada Q100 cobrados con tarjeta, antes de tocar un tomate ya se fueron
+ * ~Q10.71 de IVA, Q2 + 4.5% de Recurrente, Q0.25 de factura y el ISR del
+ * tramo. Validar el bruto era validar una cuenta que nunca llega al banco.
+ *
+ * Se devuelve el costeo completo junto al veredicto para que el llamador no
+ * calcule dos veces.
  */
 export const validatePromotionMargin = async (plates, opts = {}) => {
   const { price, minMarginPercent, allowLowMargin = false } = opts;
@@ -226,69 +325,35 @@ export const validatePromotionMargin = async (plates, opts = {}) => {
     ? Number(minMarginPercent)
     : DEFAULT_MARGIN_ALERT_PERCENT;
 
-  if (costing.margin === null) {
+  if (costing.netMargin === null) {
     return { ok: true, costing, reason: 'sin-precio' };
   }
-  if (costing.margin < threshold && !allowLowMargin) {
+  if (costing.netMargin < threshold && !allowLowMargin) {
+    const f = costing.fiscal;
     return {
       ok: false,
       costing,
-      reason: costing.margin < 0 ? 'perdida' : 'bajo-umbral',
+      reason: costing.netMargin < 0 ? 'perdida' : 'bajo-umbral',
       threshold,
-      message: costing.margin < 0
-        ? `Esta promoción pierde Q${Math.abs(costing.profit).toFixed(2)} por venta (margen ${costing.margin}%).`
-        : `El margen es ${costing.margin}% y el mínimo configurado es ${threshold}%.`,
+      message: costing.netMargin < 0
+        ? `Esta promocion pierde Q${Math.abs(costing.netProfit).toFixed(2)} por venta (margen neto ${costing.netMargin}%).`
+        : `El margen neto es ${costing.netMargin}% y el minimo configurado es ${threshold}%.`,
+      // El desglose viaja con el rechazo para que el panel pueda decir POR QUE
+      // no cierra, en vez de solo negarse.
+      breakdown: f && {
+        precio: costing.price,
+        iva: f.ivaDebito,
+        comisionRecurrente: f.comisionRecurrente,
+        facturacion: f.facturacionFee,
+        isr: f.isr,
+        insumos: costing.totalCost,
+        queda: costing.netProfit,
+      },
     };
   }
   return { ok: true, costing, threshold };
 };
 
-// ============================================================
-// PROPUESTA DE EMPAQUE
-//
-// El empaque de una promocion NO se deriva del plato. Una promo de
-// cuatro que se reparte lleva una caja grande y platos de papel, no
-// cuatro envases individuales. Por eso hoy toca ir plato por plato
-// borrando lo que sobra: hay una regla automatica peleando contra un
-// caso que no le toca.
-//
-// Esto propone la lista de toda la promo, derivada de la composicion.
-// La propuesta NO es la verdad: se guarda con la promo y el admin (o
-// el agente) la ajusta. Lo que se costea es la lista guardada.
-// ============================================================
-
-const PORTIONS_PER_CUP = 2;      // un vasito de 8 oz sirve a dos personas
-const NAPKINS_PER_PERSON = 2;
-
-/** Volumen de cada salsa que consume la promo completa, en ml. */
-const sauceVolumes = (plates) => {
-  const vol = {};
-  for (const p of plates) {
-    for (const row of recipeRowsForPlate(p)) {
-      if (row.name === 'salsa roja' || row.name === 'salsa verde') {
-        vol[row.name] = (vol[row.name] || 0) + row.amount;
-      }
-    }
-  }
-  return vol;
-};
-
-/** Cuenta cuantos platos llevan cada proteina y cada complemento. */
-const countBy = (plates, category) => {
-  const out = {};
-  for (const p of plates) {
-    const value = category === 'Proteínas' ? p.protein : p.complement;
-    const name = toStockName(value, category);
-    if (name) out[name] = (out[name] || 0) + 1;
-  }
-  return out;
-};
-
-/**
- * @param {Array}  plates
- * @param {string} mode 'compartido' (se reparte) o 'porPlato' (individuales)
- * @returns {{items: object, reasoning: Array}} lista y por que de cada linea
- */
 export const proposePackaging = (plates = [], mode = 'compartido') => {
   const people = plates.length;
   const items = {};
