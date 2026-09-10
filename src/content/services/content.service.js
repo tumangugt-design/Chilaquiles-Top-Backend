@@ -1,6 +1,7 @@
 import { ContentDraft } from '../models/ContentDraft.model.js';
 import { generateContentFromIdea, generateDesignSpecWithAI, generateCaptionForImage } from './content-ai.service.js';
 import { renderImageFromSpec } from './render.engine.js';
+import { normalizeFormat, getCanvas } from '../config/brand.config.js';
 import { getFirebaseStorage } from '../../../configs/firebase.js';
 import User from '../../users/user.model.js';
 import { sendPromotionBlastMessage } from '../../bot/whatsapp.service.js';
@@ -8,8 +9,10 @@ import { sendPromotionBlastMessage } from '../../bot/whatsapp.service.js';
 export const createDraftFromIdea = async (ideaData, userId) => {
   const { topic, format, formats, platforms, objective, promotionData, includePlate, includeTopIA, selectedPlate } = ideaData;
 
-  // Determinar formato final
-  const finalFormat = format || (formats && formats[0]) || 'post';
+  // Un solo criterio de formato para todo el flujo: el mismo que usan el
+  // generador de copy y el de arte. Antes cada uno decidia por su cuenta.
+  const finalFormat = normalizeFormat(format, formats);
+  const canvas = getCanvas(finalFormat);
 
   // 1. Generar copy con IA (texto para captions, hashtags, etc.)
   let contentData = null;
@@ -33,14 +36,13 @@ export const createDraftFromIdea = async (ideaData, userId) => {
 
   // 3. Renderizar PNG con Browserless
   let imageUrl = null;
-  const isHistoria = finalFormat === 'historia';
 
   try {
-    console.log('[Content Service] Rendering PNG with Browserless...');
+    console.log(`[Content Service] Rendering PNG ${canvas.width}x${canvas.height} with Browserless...`);
     const pngBuffer = await renderImageFromSpec({
       html: designHtml,
-      width: 1080,
-      height: isHistoria ? 1920 : 1080
+      width: canvas.width,
+      height: canvas.height
     });
     const storage = getFirebaseStorage();
     if (storage) {
@@ -97,7 +99,8 @@ export const createDraftFromIdea = async (ideaData, userId) => {
   return draft;
 };
 
-export const createManualDraft = async (imageBase64, promptText, userId, format = 'post') => {
+export const createManualDraft = async (imageBase64, promptText, userId, rawFormat = 'post') => {
+  const format = normalizeFormat(rawFormat);
   const bucket = getFirebaseStorage();
   let imageUrl = null;
 

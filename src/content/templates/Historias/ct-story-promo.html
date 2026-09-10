@@ -29,6 +29,8 @@
 <html><head><meta charset="utf-8">
 <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;900&display=block" rel="stylesheet">
 <style>
+:root{--ct-display:'Poppins',sans-serif;--ct-body:'Poppins',sans-serif}
+
 *,*::before,*::after{margin:0;padding:0;box-sizing:border-box;}
 body{background:#FAFAFF;}
 .canvas{position:relative;width:1080px;height:1920px;overflow:hidden;
@@ -46,7 +48,7 @@ body{background:#FAFAFF;}
 .logo-wrap{z-index:4;display:flex;flex-direction:column;align-items:center;gap:16px;flex-shrink:0;}
 .logo{height:100px;width:auto;}
 .badge{display:inline-flex;align-items:center;gap:8px;background:#FF6B00;color:#fff;
-  font-family:'Poppins',sans-serif;font-weight:700;font-size:22px;letter-spacing:1.5px;
+  font-family:var(--ct-display);font-weight:700;font-size:22px;letter-spacing:1.5px;
   text-transform:uppercase;padding:9px 24px;border-radius:999px;
   box-shadow:0 8px 22px rgba(255,107,0,.32);margin-bottom:20px;}
 .bdot{width:10px;height:10px;border-radius:50%;background:#fff;
@@ -56,7 +58,7 @@ body{background:#FAFAFF;}
 .center{flex:1;width:950px;display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:2;gap:0;}
 
 /* HEADLINE — Poppins Black + stroke */
-.ct-hl{font-family:'Poppins',sans-serif;font-weight:900;text-align:center;
+.ct-hl{font-family:var(--ct-display);font-weight:900;text-align:center;
   line-height:1.0;color:#FF6B00;
   -webkit-text-stroke:2px #FF6B00;paint-order:stroke fill;}
 .ct-hl--xl{font-size:152px;}
@@ -64,7 +66,7 @@ body{background:#FAFAFF;}
 .ct-hl--md{font-size:94px;}
 
 /* product name */
-.product-name{font-family:'Poppins',sans-serif;font-weight:700;font-size:58px;
+.product-name{font-family:var(--ct-display);font-weight:700;font-size:58px;
   color:#0000FF;text-align:center;letter-spacing:-.5px;margin-top:16px;}
 
 /* plate */
@@ -75,27 +77,27 @@ body{background:#FAFAFF;}
 .price-badge{position:absolute;right:20px;bottom:10px;
   width:120px;height:120px;border-radius:50%;background:#0000FF;color:#fff;
   display:flex;align-items:center;justify-content:center;
-  font-family:'Poppins',sans-serif;font-weight:900;font-size:38px;
+  font-family:var(--ct-display);font-weight:900;font-size:38px;
   box-shadow:0 10px 28px rgba(0,0,255,.38);}
 
 /* date pill */
 .date-pill{display:inline-flex;align-items:center;gap:10px;margin-top:24px;
   border:2px solid #0000FF;color:#0000FF;background:rgba(0,0,255,.05);
-  font-family:'Poppins',sans-serif;font-weight:600;font-size:22px;
+  font-family:var(--ct-body);font-weight:600;font-size:22px;
   padding:10px 26px;border-radius:999px;}
 
 /* CTA */
 .cta{display:inline-flex;align-items:center;gap:14px;margin-top:30px;
   background:{{CTA_COLOR}};color:#fff;
-  font-family:'Poppins',sans-serif;font-weight:700;font-size:40px;
+  font-family:var(--ct-display);font-weight:700;font-size:40px;
   padding:22px 54px;border-radius:999px;
   box-shadow:0 14px 32px rgba(0,0,0,.20);white-space:nowrap;}
 
 /* INFO BOTTOM — flotante, bottom safe zone */
 .bottom{display:flex;flex-direction:column;align-items:center;gap:12px;z-index:4;flex-shrink:0;}
-.hashtag{font-family:'Poppins',sans-serif;font-weight:700;font-size:42px;
+.hashtag{font-family:var(--ct-display);font-weight:700;font-size:42px;
   color:#0000FF;letter-spacing:1px;}
-.web{font-family:'Poppins',sans-serif;font-weight:400;font-size:33px;
+.web{font-family:var(--ct-body);font-weight:400;font-size:33px;
   color:#0B0B12;opacity:.45;}
 </style></head><body>
 <div class="canvas">
@@ -124,12 +126,6 @@ body{background:#FAFAFF;}
       Válido hasta el {{DATE}}
     </div>
     <div class="cta">{{CTA_TEXT}}</div>
-  </div>
-
-  <!-- INFO BOTTOM — flotante, sin barra -->
-  <div class="bottom">
-    <div class="hashtag">#MantenteTOP</div>
-    <div class="web">chilaquilestop.com</div>
   </div>
 </div>
 </body></html>

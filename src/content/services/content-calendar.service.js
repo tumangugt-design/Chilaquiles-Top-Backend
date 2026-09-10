@@ -1,6 +1,7 @@
 import { ContentCalendar } from '../models/ContentCalendar.model.js';
 import { ContentDraft } from '../models/ContentDraft.model.js';
 import { publishToFacebook, publishToInstagram } from './publish.service.js';
+import { normalizeFormat } from '../config/brand.config.js';
 
 export const schedulePublication = async (draftId, platform, format, scheduledAt) => {
   const draft = await ContentDraft.findById(draftId);
@@ -50,7 +51,7 @@ export const runScheduler = async () => {
       const draft = item.contentDraftId;
       const imageUrl = draft.visual?.imageUrl;
       const caption = draft.copy?.post || draft.copy?.story || draft.copy?.caption || draft.title;
-      const isHistoria = item.format === 'historia' || draft.formats?.includes('historia');
+      const isHistoria = normalizeFormat(item.format, draft.formats) === 'historia';
 
       if (item.platform === 'facebook') {
         await publishToFacebook(imageUrl, caption);

@@ -5,6 +5,7 @@ import { getClaudeCompletion } from './claude.service.js';
 import { BrandKnowledge } from '../models/BrandKnowledge.model.js';
 import { ContentStandard } from '../models/ContentStandard.model.js';
 import { AssetCatalog, resolveAsset } from '../config/asset.catalog.js';
+import { buildBrandContext, BRAND_CONTACT, normalizeFormat, getCanvas, enforceHeadlineSize, buildFooterRight, buildBottomRight, cleanUnfilledSlots, buildCta } from '../config/brand.config.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -45,20 +46,21 @@ export const generateContentFromIdea = async (ideaData) => {
   const rulesText = rules.map(r => `- [${r.type}] ${r.content}`).join('\n') || '(Sin reglas adicionales)';
   const standardsText = standards.map(s => `- [Estándar: ${s.scope}] ${s.value}`).join('\n') || '(Sin estándares)';
 
-  const finalFormat = format || (formats && formats.length > 0 ? formats[0] : 'post');
-  const isPost = finalFormat.includes('post') || finalFormat.includes('feed') || finalFormat.includes('reel');
+  const finalFormat = normalizeFormat(format, formats);
+  const isPost = finalFormat === 'post';
   const captionField = isPost ? '\n    "caption": "Caption para red social",' : '';
 
-  const systemPrompt = `Eres un profesional experto en marketing, redes sociales, edición y renderización de HTML para artes gráficos de "Chilaquiles TOP", restaurante en Villa Nueva, Guatemala.
-Tu objetivo es analizar la idea y generar un JSON con el contenido exacto y persuasivo para publicar en redes sociales.
+  const systemPrompt = `Eres el redactor de "Chilaquiles TOP". Tu tarea es devolver un JSON
+con el copy exacto y persuasivo de una publicación.
 
-Reglas del negocio:
-- Solo entregamos en Villa Nueva.
-- No inventes promociones que no te pasemos.
-- No inventes precios ni horarios.
-- El tono debe ser: ${tone || 'antojable, claro, juvenil y confiable'}.
-- Todo el copy debe estar en ESPAÑOL correcto, sin anglicismos.
-- El CTA siempre refiere a la página web: chilaquilestop.com
+${buildBrandContext()}
+
+TONO DE ESTA PIEZA: ${tone || 'antojable, claro y con energía'}
+
+REGLAS DEL COPY
+- No inventes promociones: solo usa la que te pasemos.
+- CTA único. En texto impreso usa "${BRAND_CONTACT.ctaPrinted}"; el enlace clicable
+  (whatsappText) usa "${BRAND_CONTACT.ctaLink}".
 
 Base de Conocimiento de Marca:
 ${rulesText}
@@ -129,7 +131,10 @@ Formato de salida REQUERIDO (JSON puro, sin markdown ni explicaciones):
 };
 
 export const generateDesignSpecWithAI = async (requestData) => {
-  const { topic, format, promotionData, includePlate, selectedPlate } = requestData;
+  // includeTopIA se desestructura aunque hoy no se use: antes viajaba hasta aca
+  // y se perdia en silencio, asi que el flag mentia. Queda cableado y apagado
+  // hasta que los templates tengan un lugar definido para el personaje.
+  const { topic, format, formats, promotionData, includePlate, selectedPlate, includeTopIA = false } = requestData;
 
   console.log('[Content AI] Generando HTML con Claude Art Director...');
 
@@ -146,7 +151,9 @@ export const generateDesignSpecWithAI = async (requestData) => {
   }
 
   // 2. Determinar archivo de template basado en el request
-  const isPost = format === 'post';
+  const finalFormat = normalizeFormat(format, formats);
+  const canvas = getCanvas(finalFormat);
+  const isPost = finalFormat === 'post';
   const folder = isPost ? 'Posts' : 'Historias';
   let templateFilename = '';
   
@@ -157,11 +164,14 @@ export const generateDesignSpecWithAI = async (requestData) => {
   }
 
   const templateHtml = readTemplate(`${folder}/${templateFilename}`);
-  const systemPrompt = readGuide();
+  // El arte recibe el MISMO contexto de marca que el copy. Antes la guia de
+  // composicion era todo lo que veia, y las reglas que se ensenaban al sistema
+  // (BrandKnowledge/ContentStandard) solo afectaban al caption.
+  const systemPrompt = `${readGuide()}\n\n---\n\n${buildBrandContext()}`;
 
   // 3. Preparar User Prompt para inyectar a Claude
   let userPrompt = `A continuación tienes la solicitud para el nuevo arte.
-Formato seleccionado: ${format}
+Formato: ${finalFormat} (${canvas.width}x${canvas.height}px)
 Tema: ${topic}
 `;
 
@@ -183,7 +193,14 @@ URLs CONSTANTES A UTILIZAR:
     userPrompt += `- PLATE_URL: ${plateUrl}\n`;
   }
 
+  const cta = buildCta('web');
   userPrompt += `
+CTA (usa exactamente estos valores, no los cambies):
+- CTA_TEXT: ${cta.text}
+- CTA_COLOR: ${cta.color}
+
+NO rellenes {{FOOTER_RIGHT}}: lo pone el sistema. Dejalo tal cual.
+
 TU TAREA:
 Rellena el siguiente template HTML con las variables {{}} solicitadas, basándote en la información anterior y tu creatividad. 
 DEVUELVE ÚNICAMENTE EL CÓDIGO HTML PURO, SIN EXPLICACIONES, SIN MARKDOWN (\`\`\`html).
@@ -205,10 +222,22 @@ ${templateHtml}
     }
 
     // Limpieza agresiva de markdown
-    const finalHtml = aiResponse
+    const cleanHtml = aiResponse
       .replace(/```html/gi, '')
       .replace(/```/g, '')
       .trim();
+
+    // Red de seguridad: el modelo escoge el tamano del titular y se equivoca
+    // seguido. .canvas tiene overflow:hidden, asi que un titular muy grande se
+    // come el CTA y el pie sin avisar. Aqui se corrige por largo real.
+    // Cromo determinista: el modelo no decide el pie, ni si el precio existe.
+    let finalHtml = enforceHeadlineSize(cleanHtml, finalFormat, !!includePlate);
+    finalHtml = finalHtml.replace(/\{\{FOOTER_RIGHT\}\}/g, buildFooterRight(promotionData?.endDate || ''));
+    finalHtml = finalHtml.replace(/\{\{BOTTOM_RIGHT\}\}/g, buildBottomRight(promotionData?.endDate || ''));
+    finalHtml = finalHtml.replace(/\{\{CTA_ICON\}\}/g, cta.icon);
+    finalHtml = finalHtml.replace(/\{\{CTA_COLOR\}\}/g, cta.color);
+    finalHtml = finalHtml.replace(/\{\{CTA_TEXT\}\}/g, cta.text);
+    finalHtml = cleanUnfilledSlots(finalHtml);
 
     return finalHtml;
 
