@@ -95,7 +95,7 @@ export const convertAmountToCatalogUnit = (amount, inputUnit, catalogUnit) => {
   return round(numericAmount * conversionFactor)
 }
 
-const getPortionQtyInBaseUnit = (name, portionMap, inventoryMap) => {
+export const getPortionQtyInBaseUnit = (name, portionMap, inventoryMap) => {
   const portion = portionMap[name]
   const inv = inventoryMap[name]
   if (!portion) {

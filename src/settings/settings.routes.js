@@ -21,7 +21,7 @@ import {
   getDeliveryConfig,
   updateDeliveryConfig
 } from './settings.controller.js'
-import { verifyAuthToken } from '../middlewares/auth.middleware.js'
+import { verifyAuthToken, optionalAuthToken } from '../middlewares/auth.middleware.js'
 import { requireApprovedStatus, requireRole } from '../middlewares/role.middleware.js'
 import { USER_ROLES } from '../helpers/constants.js'
 
@@ -30,7 +30,9 @@ const router = Router()
 router.get('/operating-hours', getOperatingHours)
 router.patch('/operating-hours', verifyAuthToken, requireApprovedStatus, requireRole([USER_ROLES.ADMIN]), updateOperatingHours)
 
-router.get('/promotions', getPromotions)
+// Publico (lo consume el flujo de pedido), pero si viene token de admin la
+// respuesta incluye el costeo. Sin token, el costeo se omite.
+router.get('/promotions', optionalAuthToken, getPromotions)
 router.patch('/promotions', verifyAuthToken, requireApprovedStatus, requireRole([USER_ROLES.ADMIN]), updatePromotions)
 router.post('/promotions/send-blast', verifyAuthToken, requireApprovedStatus, requireRole([USER_ROLES.ADMIN]), sendPromotionBlast)
 router.get('/promotions/campaigns', verifyAuthToken, requireApprovedStatus, requireRole([USER_ROLES.ADMIN]), getCampaignHistory)

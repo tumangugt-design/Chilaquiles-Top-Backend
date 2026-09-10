@@ -1,11 +1,27 @@
 import { getOperatingHoursSetting, isOperatingNow, updateOperatingHoursSetting, deactivateExpiredPromotions, validatePromotionsPayload, getDeliveryConfig as getDeliveryConfigService, updateDeliveryConfig as updateDeliveryConfigService } from './settings.service.js'
 import Setting from './settings.model.js'
+import { USER_ROLES } from '../helpers/constants.js'
 import { getTaxConfig as getTaxConfigService, updateTaxConfig as updateTaxConfigService } from '../finances/finances.service.js'
 import { sendPromotionBlastMessage } from '../bot/whatsapp.service.js'
 import User from '../users/user.model.js'
 import { Campaign } from './campaign.model.js'
 import { generateMarketingMessage } from '../bot/ai.service.js'
-import { costPromotion, validatePromotionMargin, proposePackaging } from './promotion-costing.service.js'
+import { costPromotion, validatePromotionMargin, proposePackaging, loadPortionResolver } from './promotion-costing.service.js'
+
+const COSTING_FIELDS = [
+  'estimatedTotalCost', 'estimatedProfit', 'estimatedMargin',
+  'estimatedNetProfit', 'estimatedNetMargin', 'fiscalSnapshot',
+  'costCoverage', 'costedAt', 'estimatedUnitCost', 'minMarginAlertPercent',
+  'allowLowMargin', 'packaging', 'packagingMode',
+]
+
+/** Quita de una promo todo lo que es cuenta interna, para respuestas publicas. */
+const stripCosting = (promo) => {
+  if (!promo || typeof promo !== 'object') return promo
+  const limpia = { ...promo }
+  for (const campo of COSTING_FIELDS) delete limpia[campo]
+  return limpia
+}
 
 const ALLOWED_PROMOTION_IMAGE_MIME_TYPES = ['image/jpeg', 'image/png', 'image/webp']
 
@@ -80,11 +96,18 @@ export const getPromotions = async (req, res) => {
     // sin que cada pantalla tenga que revisar fechas por su cuenta.
     const promos = await deactivateExpiredPromotions()
 
+    // Este endpoint es publico: lo consume el flujo de pedido del cliente.
+    // El costeo sellado al guardar (costo, utilidad, margen neto, desglose
+    // fiscal) es informacion interna — un curl sin token no tiene por que ver
+    // cuanto se gana con cada promo. Solo el admin recibe esos campos.
+    const esAdmin = req.user?.role === USER_ROLES.ADMIN
+    const visibles = esAdmin ? promos : promos.map(stripCosting)
+
     res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate')
     res.set('Pragma', 'no-cache')
     res.set('Expires', '0')
 
-    return res.status(200).json(promos)
+    return res.status(200).json(visibles)
   } catch (error) {
     return res.status(500).json({ message: 'No se pudieron cargar las promociones', error: error.message })
   }
@@ -320,7 +343,7 @@ export const costPromotionPreview = async (req, res) => {
     let proposal = null
     let packaging = sharedPackaging || null
     if (packagingMode === 'compartido' && !packaging) {
-      proposal = proposePackaging(plates, 'compartido')
+      proposal = proposePackaging(plates, 'compartido', await loadPortionResolver())
       packaging = proposal.items
     }
 
@@ -364,7 +387,7 @@ export const proposePromotionPackaging = async (req, res) => {
       return res.status(400).json({ message: 'Se necesita al menos un plato para proponer el empaque' })
     }
 
-    const { items, reasoning } = proposePackaging(plates, mode)
+    const { items, reasoning } = proposePackaging(plates, mode, await loadPortionResolver())
     const costing = await costPromotion(plates, { packagingMode: 'compartido', sharedPackaging: items })
 
     res.set('Cache-Control', 'no-store')

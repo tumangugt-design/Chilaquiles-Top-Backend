@@ -2,7 +2,7 @@ import Order from '../orders/order.model.js'
 import InventoryLog from '../inventory/inventoryLog.model.js'
 import Purchase from '../purchases/purchase.model.js'
 import PurchaseAllocation from '../purchases/purchase-allocation.model.js'
-import { toDisplayLabel } from '../helpers/constants.js'
+import { toDisplayLabel, ORDER_STATUS } from '../helpers/constants.js'
 import Supplier from '../suppliers/supplier.model.js'
 import Setting from '../settings/settings.model.js'
 import { getGuatemalaDayRange, getGuatemalaMonthRange, getGuatemalaWeekRange, GUATEMALA_TIMEZONE } from '../helpers/timezone.helper.js'
@@ -119,7 +119,11 @@ const summarizeRealCogs = (outLogs) => {
 const totalCargaFiscalYComisiones = (fiscal) => round2(fiscal.ivaNetoEstimado + (fiscal.isrEstimado || 0) + fiscal.comisionRecurrente + fiscal.facturacionFeeRecurrente)
 
 const getPeriodStats = async (start, end, cfg, { isrMonthly = false } = {}) => {
-  const orders = await Order.find({ createdAt: { $gte: start, $lt: end }, status: { $ne: 'cancelado' } }).select('total paymentMethod')
+  // 'cancelado' no existe en ORDER_STATUS, asi que este filtro no filtraba
+  // nada: todo pedido con tarjeta abandonado en el checkout se contaba como
+  // ingreso, y encima se le cargaba comision de Recurrente, FEL e ISR sobre
+  // una venta que nunca ocurrio.
+  const orders = await Order.find({ createdAt: { $gte: start, $lt: end }, status: { $ne: ORDER_STATUS.PENDIENTE_PAGO } }).select('total paymentMethod')
   const revenue = orders.reduce((sum, order) => sum + (order.total || 0), 0)
 
   const logsIn = await InventoryLog.find({ type: 'IN', createdAt: { $gte: start, $lt: end } }).select('price')

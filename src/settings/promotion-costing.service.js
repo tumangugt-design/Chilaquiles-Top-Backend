@@ -1,9 +1,11 @@
 import Inventory from '../inventory/inventory.model.js';
-import { peekCurrentBatchCost } from '../inventory/inventory.service.js';
+import Portion from '../inventory/portion.model.js';
+import { peekCurrentBatchCost, getPortionQtyInBaseUnit } from '../inventory/inventory.service.js';
 import Order from '../orders/order.model.js';
 import { getTaxConfig, calculateISR } from '../finances/finances.service.js';
 import { getGuatemalaMonthRange } from '../helpers/timezone.helper.js';
 import {
+  ORDER_STATUS,
   INVENTORY_CATALOG_MAP,
   DEFAULT_RECIPE_CONSUMPTION,
   SAUCE_FULL_PORTION_ML,
@@ -59,15 +61,44 @@ const toStockName = (value, category) => {
   return resolveStockName(String(value).trim().toLowerCase());
 };
 
-const portionFor = (name) =>
+// Porciones: el Recetario manda.
+//
+// Antes esto leia solo las constantes del codigo. El consumo real del pedido
+// lee primero la coleccion Portion — que es lo que se edita en Recetario — y
+// cae a las constantes solo si no hay documento. Eran dos fuentes de verdad
+// para el mismo dato: bajar el queso de 60 g a 50 g cambiaba lo que se
+// descontaba pero no lo que se costeaba, y la promo se aprobaba con una
+// receta vieja.
+//
+// La porcion viaja como parametro (`portionOf`), no como estado del modulo:
+// dos costeos simultaneos no pueden pisarse el mapa.
+
+/** Respaldo cuando no hay Recetario cargado: las constantes del catalogo. */
+const portionFromConstants = (name) =>
   Number(DEFAULT_RECIPE_CONSUMPTION[name] ?? INVENTORY_CATALOG_MAP[name]?.usedPerPlate ?? 0);
+
+/** Resolutor de porciones con los mismos mapas que usa el descuento del pedido. */
+/** Carga el Recetario y devuelve el resolutor listo para usar. */
+export const loadPortionResolver = async () => {
+  const [portions, inventory] = await Promise.all([Portion.find({}).lean(), Inventory.find({}).lean()]);
+  return buildPortionResolver(
+    Object.fromEntries(portions.map((p) => [p.name, p])),
+    Object.fromEntries(inventory.map((i) => [i.name, i]))
+  );
+};
+
+export const buildPortionResolver = (portionMap, inventoryMap) => (name) => {
+  const fromRecetario = Number(getPortionQtyInBaseUnit(name, portionMap, inventoryMap));
+  if (Number.isFinite(fromRecetario) && fromRecetario > 0) return fromRecetario;
+  return portionFromConstants(name);
+};
 
 /**
  * Ingredientes de un plato, con la cantidad que consume.
  * Divorciados parte la salsa a la mitad de cada una, igual que en el menu.
  */
-export const recipeRowsForPlate = (plate = {}) => {
-  const rows = FIXED_RECIPE_INGREDIENT_NAMES.map((name) => ({ name, amount: portionFor(name) }));
+export const recipeRowsForPlate = (plate = {}, portionOf = portionFromConstants) => {
+  const rows = FIXED_RECIPE_INGREDIENT_NAMES.map((name) => ({ name, amount: portionOf(name) }));
 
   const sauce = String(plate.sauce || '').toUpperCase();
   if (sauce === 'DIVORCIADOS') {
@@ -75,13 +106,13 @@ export const recipeRowsForPlate = (plate = {}) => {
     rows.push({ name: 'salsa verde', amount: SAUCE_HALF_PORTION_ML });
   } else if (sauce) {
     const n = toStockName(sauce, 'Salsas');
-    if (n) rows.push({ name: n, amount: portionFor(n) || SAUCE_FULL_PORTION_ML });
+    if (n) rows.push({ name: n, amount: portionOf(n) || SAUCE_FULL_PORTION_ML });
   }
 
   for (const [value, category] of [[plate.protein, 'Proteínas'], [plate.complement, 'Complementos']]) {
     if (!value) continue;
     const n = toStockName(value, category);
-    if (n) rows.push({ name: n, amount: portionFor(n) });
+    if (n) rows.push({ name: n, amount: portionOf(n) });
   }
 
   // baseRecipe marca lo que se QUITA: ausente o true = lleva.
@@ -90,17 +121,17 @@ export const recipeRowsForPlate = (plate = {}) => {
     const included = Array.isArray(plate.selectedBases)
       ? plate.selectedBases.includes(name)
       : plate.baseRecipe?.[key] !== false;
-    if (included) rows.push({ name, amount: portionFor(name) });
+    if (included) rows.push({ name, amount: portionOf(name) });
   }
 
   return rows.filter((r) => r.amount > 0);
 };
 
 /** Empaque de un plato individual, con los ajustes manuales aplicados. */
-export const packagingRowsForPlate = (plate = {}) => {
+export const packagingRowsForPlate = (plate = {}, portionOf = portionFromConstants) => {
   const sauce = String(plate.sauce || 'ROJA').toUpperCase();
   const auto = [
-    ...FIXED_PACKAGING_NAMES.map((name) => ({ name, qty: portionFor(name) || 1 })),
+    ...FIXED_PACKAGING_NAMES.map((name) => ({ name, qty: portionOf(name) || 1 })),
     ...(SAUCE_PACKAGING[sauce] || SAUCE_PACKAGING.ROJA),
   ];
   const overrides = plate.packagingOverrides || {};
@@ -148,9 +179,12 @@ const unitCostFor = async (name, invByName) => {
 /** Renta bruta acumulada del mes en curso, para saber en que tramo cae el ISR. */
 const monthToDateRentaBruta = async (cfg) => {
   const { start, end } = getGuatemalaMonthRange(new Date());
+  // 'cancelado' no existe en ORDER_STATUS: filtrar por ese valor no filtraba
+  // nada. Lo que hay que dejar fuera es el pedido con tarjeta que quedo en
+  // pendiente_pago porque el cliente abandono el checkout — nunca fue venta.
   const orders = await Order.find({
     createdAt: { $gte: start, $lt: end },
-    status: { $ne: 'cancelado' },
+    status: { $ne: ORDER_STATUS.PENDIENTE_PAGO },
   }).select('total').lean();
   const revenue = orders.reduce((s, o) => s + (Number(o.total) || 0), 0);
   const ivaFactor = cfg.ivaRate / (1 + cfg.ivaRate);
@@ -216,6 +250,13 @@ export const costPromotion = async (plates = [], opts = {}) => {
   const inventory = await Inventory.find({}).lean();
   const invByName = new Map(inventory.map((i) => [i.name, i]));
 
+  // Mismas porciones que usa el descuento real del pedido.
+  const portions = await Portion.find({}).lean();
+  const portionOf = buildPortionResolver(
+    Object.fromEntries(portions.map((p) => [p.name, p])),
+    Object.fromEntries(inventory.map((i) => [i.name, i]))
+  );
+
   const cache = new Map();
   const costOf = async (name) => {
     if (!cache.has(name)) cache.set(name, await unitCostFor(name, invByName));
@@ -229,7 +270,7 @@ export const costPromotion = async (plates = [], opts = {}) => {
   for (const [idx, plate] of plates.entries()) {
     const items = [];
 
-    for (const row of recipeRowsForPlate(plate)) {
+    for (const row of recipeRowsForPlate(plate, portionOf)) {
       const { cost, traced } = await costOf(row.name);
       lines += 1;
       if (!traced) untraced += 1;
@@ -237,7 +278,7 @@ export const costPromotion = async (plates = [], opts = {}) => {
     }
 
     if (packagingMode === 'porPlato') {
-      for (const row of packagingRowsForPlate(plate)) {
+      for (const row of packagingRowsForPlate(plate, portionOf)) {
         const { cost, traced } = await costOf(row.name);
         lines += 1;
         if (!traced) untraced += 1;
@@ -354,7 +395,45 @@ export const validatePromotionMargin = async (plates, opts = {}) => {
   return { ok: true, costing, threshold };
 };
 
-export const proposePackaging = (plates = [], mode = 'compartido') => {
+// Cuantas porciones de un mismo tipo caben en un vasito de 8 onz cuando la
+// promo se reparte: dos. Y dos servilletas por persona. Son las dos reglas
+// que Denilson ya aplica a mano al armar un combo.
+const PORTIONS_PER_CUP = 2;
+const NAPKINS_PER_PERSON = 2;
+
+/** Mililitros de cada salsa que pide el conjunto de platos. */
+const sauceVolumes = (plates = [], portionOf = portionFromConstants) => {
+  const vol = {};
+  const add = (name, ml) => {
+    if (!name || !(ml > 0)) return;
+    vol[name] = (vol[name] || 0) + ml;
+  };
+  for (const plate of plates) {
+    const sauce = String(plate?.sauce || '').toUpperCase();
+    if (sauce === 'DIVORCIADOS') {
+      add('salsa roja', SAUCE_HALF_PORTION_ML);
+      add('salsa verde', SAUCE_HALF_PORTION_ML);
+    } else if (sauce) {
+      const name = toStockName(sauce, 'Salsas');
+      add(name, portionOf(name) || SAUCE_FULL_PORTION_ML);
+    }
+  }
+  return vol;
+};
+
+/** Cuantos platos piden cada opcion de una categoria del menu. */
+const countBy = (plates = [], category) => {
+  const field = category === 'Proteínas' ? 'protein' : 'complement';
+  const out = {};
+  for (const plate of plates) {
+    const name = toStockName(plate?.[field], category);
+    if (!name) continue;
+    out[name] = (out[name] || 0) + 1;
+  }
+  return out;
+};
+
+export const proposePackaging = (plates = [], mode = 'compartido', portionOf = portionFromConstants) => {
   const people = plates.length;
   const items = {};
   const reasoning = [];
@@ -366,14 +445,14 @@ export const proposePackaging = (plates = [], mode = 'compartido') => {
 
   if (mode === 'porPlato') {
     for (const p of plates) {
-      for (const row of packagingRowsForPlate(p)) add(row.name, row.qty, 'empaque individual del plato');
+      for (const row of packagingRowsForPlate(p, portionOf)) add(row.name, row.qty, 'empaque individual del plato');
     }
     return { items, reasoning };
   }
 
   // Salsas: un vasito de 8 oz por cada porcion de 200 ml de una misma salsa.
   // Divorciados parte en dos de 4 oz, asi que ese caso se cuenta aparte.
-  const vol = sauceVolumes(plates);
+  const vol = sauceVolumes(plates, portionOf);
   let cups8 = 0;
   for (const [salsa, ml] of Object.entries(vol)) {
     const n = Math.ceil(ml / SAUCE_FULL_PORTION_ML);
