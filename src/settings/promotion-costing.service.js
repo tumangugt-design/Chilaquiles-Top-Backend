@@ -242,3 +242,102 @@ export const validatePromotionMargin = async (plates, opts = {}) => {
   }
   return { ok: true, costing, threshold };
 };
+
+// ============================================================
+// PROPUESTA DE EMPAQUE
+//
+// El empaque de una promocion NO se deriva del plato. Una promo de
+// cuatro que se reparte lleva una caja grande y platos de papel, no
+// cuatro envases individuales. Por eso hoy toca ir plato por plato
+// borrando lo que sobra: hay una regla automatica peleando contra un
+// caso que no le toca.
+//
+// Esto propone la lista de toda la promo, derivada de la composicion.
+// La propuesta NO es la verdad: se guarda con la promo y el admin (o
+// el agente) la ajusta. Lo que se costea es la lista guardada.
+// ============================================================
+
+const PORTIONS_PER_CUP = 2;      // un vasito de 8 oz sirve a dos personas
+const NAPKINS_PER_PERSON = 2;
+
+/** Volumen de cada salsa que consume la promo completa, en ml. */
+const sauceVolumes = (plates) => {
+  const vol = {};
+  for (const p of plates) {
+    for (const row of recipeRowsForPlate(p)) {
+      if (row.name === 'salsa roja' || row.name === 'salsa verde') {
+        vol[row.name] = (vol[row.name] || 0) + row.amount;
+      }
+    }
+  }
+  return vol;
+};
+
+/** Cuenta cuantos platos llevan cada proteina y cada complemento. */
+const countBy = (plates, category) => {
+  const out = {};
+  for (const p of plates) {
+    const value = category === 'Proteínas' ? p.protein : p.complement;
+    const name = toStockName(value, category);
+    if (name) out[name] = (out[name] || 0) + 1;
+  }
+  return out;
+};
+
+/**
+ * @param {Array}  plates
+ * @param {string} mode 'compartido' (se reparte) o 'porPlato' (individuales)
+ * @returns {{items: object, reasoning: Array}} lista y por que de cada linea
+ */
+export const proposePackaging = (plates = [], mode = 'compartido') => {
+  const people = plates.length;
+  const items = {};
+  const reasoning = [];
+  const add = (name, qty, why) => {
+    if (qty <= 0) return;
+    items[name] = (items[name] || 0) + qty;
+    reasoning.push({ name, qty, why });
+  };
+
+  if (mode === 'porPlato') {
+    for (const p of plates) {
+      for (const row of packagingRowsForPlate(p)) add(row.name, row.qty, 'empaque individual del plato');
+    }
+    return { items, reasoning };
+  }
+
+  // Salsas: un vasito de 8 oz por cada porcion de 200 ml de una misma salsa.
+  // Divorciados parte en dos de 4 oz, asi que ese caso se cuenta aparte.
+  const vol = sauceVolumes(plates);
+  let cups8 = 0;
+  for (const [salsa, ml] of Object.entries(vol)) {
+    const n = Math.ceil(ml / SAUCE_FULL_PORTION_ML);
+    cups8 += n;
+    reasoning.push({ name: 'plato de 8 onz', qty: n, why: `${ml} ml de ${salsa} = ${n} vasito(s) de 200 ml` });
+  }
+
+  // Proteina y complemento: un vasito por cada dos personas del mismo tipo.
+  for (const category of ['Proteínas', 'Complementos']) {
+    for (const [name, count] of Object.entries(countBy(plates, category))) {
+      const n = Math.ceil(count / PORTIONS_PER_CUP);
+      cups8 += n;
+      reasoning.push({ name: 'plato de 8 onz', qty: n, why: `${count} porcion(es) de ${name} = ${n} vasito(s) para repartir` });
+    }
+  }
+
+  if (cups8 > 0) {
+    items['plato de 8 onz'] = cups8;
+    items['tapadera de 8 onz'] = cups8;
+    reasoning.push({ name: 'tapadera de 8 onz', qty: cups8, why: 'una tapa por vasito' });
+  }
+
+  // Los totopos de toda la promo van en una sola caja grande.
+  add('plato familiar', 1, `totopos de ${people} platos en una caja`);
+  add('plato papel familiar', people, 'un plato de papel por persona');
+  add('tenedor', people, 'un tenedor por persona');
+  add('servilleta', people * NAPKINS_PER_PERSON, `${NAPKINS_PER_PERSON} servilletas por persona`);
+  add('sticker', 1, 'un sticker en la caja');
+  add('bolsa kraft', 1, 'una bolsa por pedido');
+
+  return { items, reasoning };
+};
