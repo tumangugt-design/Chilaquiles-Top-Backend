@@ -83,7 +83,22 @@ export const confirmOrderPaymentByCheckout = async ({ checkoutId, successUrl }) 
     return order;
   }
 
-  order.paymentConfirmedAt = new Date();
+  // Reclamo ATOMICO del pago. Antes se leia paymentConfirmedAt arriba, se
+  // descontaba el inventario, y hasta el final se guardaba la marca: si Svix
+  // reintentaba mientras el primero seguia en vuelo, o si el save fallaba, el
+  // inventario se descontaba DOS VECES por un solo pedido pagado. Con este
+  // findOneAndUpdate condicionado, solo un proceso se queda con el pedido.
+  const claimed = await Order.findOneAndUpdate(
+    { _id: order._id, paymentConfirmedAt: null },
+    { $set: { paymentConfirmedAt: new Date() } },
+    { new: true }
+  );
+  if (!claimed) {
+    // Otro proceso ya lo confirmo: no es error, es el reintento haciendo su
+    // trabajo. Se devuelve el pedido tal como quedo.
+    return await Order.findById(order._id);
+  }
+  order = claimed;
 
   // El pedido con tarjeta se creo en PENDIENTE_PAGO (sin descontar inventario, sin
   // avisar a cocina/admin y sin mandar WhatsApp). Todo eso pasa hasta aqui, ya con

@@ -1,8 +1,12 @@
 import Purchase from './purchase.model.js';
+import { canonicalUnit } from '../helpers/units.js';
 
 const round = (value) => Math.round(Number(value || 0) * 1000) / 1000;
 const roundMoney = (value) => Math.round(Number(value || 0) * 100) / 100;
 const normalize = (value = '') => String(value || '').trim().toLowerCase();
+// Una sola tabla de unidades para todo el sistema (helpers/units.js): antes
+// esta funcion no conocia "lbs" ni "libras" y la de Inventario si.
+const unitOf = (value = '') => canonicalUnit(value) || normalize(value);
 
 // Grupos de conversion (misma logica/factores que inventory.service.js, pero
 // generalizada para convertir entre CUALQUIER par de unidades del mismo tipo,
@@ -12,8 +16,8 @@ const MASS_TO_GRAMS = { g: 1, kg: 1000, lb: 453.59237, oz: 28.349523125 };
 const VOLUME_TO_ML = { ml: 1, l: 1000, oz: 29.5735295625 };
 
 export const convertBetweenUnits = (amount, fromUnit, toUnit) => {
-  const from = normalize(fromUnit);
-  const to = normalize(toUnit);
+  const from = unitOf(fromUnit);
+  const to = unitOf(toUnit);
   if (from === to) return amount;
   if (from === 'und' || to === 'und') {
     if (from === to) return amount;
@@ -62,10 +66,16 @@ export const planPurchaseConsumption = async (ingredientName, requiredQty, reque
 
     const newRemaining = round(lot.remainingQuantity - takeInLotUnit);
     const depleted = newRemaining <= 0.001;
+    // $inc con guarda, no $set con un valor calculado desde una lectura vieja.
+    // Con $set, dos consumos simultaneos del mismo lote leian 1000, ambos
+    // escribian 800, y el lote quedaba en 800 habiendo entregado 400.
+    // Con $inc + filtro, el segundo no encuentra documento y no escribe nada.
     bulkOps.push({
       updateOne: {
-        filter: { _id: lot._id },
-        update: { $set: { remainingQuantity: depleted ? 0 : newRemaining, isDepleted: depleted } }
+        filter: { _id: lot._id, remainingQuantity: { $gte: takeInLotUnit } },
+        update: depleted
+          ? { $set: { remainingQuantity: 0, isDepleted: true } }
+          : { $inc: { remainingQuantity: -takeInLotUnit } }
       }
     });
 
@@ -83,7 +93,13 @@ export const planPurchaseConsumption = async (ingredientName, requiredQty, reque
 
 // Aplica de verdad (ya validado) los descuentos de remainingQuantity de un plan.
 export const commitPurchaseConsumption = async (plan) => {
-  if (plan.bulkOps.length > 0) {
-    await Purchase.bulkWrite(plan.bulkOps);
+  if (plan.bulkOps.length === 0) return;
+  const res = await Purchase.bulkWrite(plan.bulkOps);
+  // Si alguna guarda no encontro documento, otro proceso ya se llevo ese lote
+  // entre el plan y el commit. Mejor fallar que descontar de menos en silencio.
+  if ((res.matchedCount ?? 0) < plan.bulkOps.length) {
+    const error = new Error('Otro proceso consumio parte de estos lotes mientras se registraba. Volve a intentarlo.');
+    error.statusCode = 409;
+    throw error;
   }
 };

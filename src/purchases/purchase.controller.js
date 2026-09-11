@@ -1,4 +1,6 @@
 import Purchase from './purchase.model.js';
+import { roundUnitCost } from '../helpers/money.js';
+import { assertKnownUnit } from '../helpers/units.js';
 import PurchaseAllocation from './purchase-allocation.model.js';
 import Inventory from '../inventory/inventory.model.js';
 import InventoryLog from '../inventory/inventoryLog.model.js';
@@ -66,7 +68,10 @@ export const createPurchase = async (req, res) => {
   try {
     const ingredientName = normalize(req.body.ingredientName);
     const quantity = Number(req.body.quantity);
-    const unit = String(req.body.unit || '').trim();
+    // La unidad se escribe a mano. Sin esta validacion, un "lbs" en vez de
+    // "lb" no convertia, se acreditaba el numero crudo y el costo por gramo
+    // quedaba 450 veces mayor — con respuesta 200. Ahora se rechaza antes.
+    const unit = assertKnownUnit(String(req.body.unit || '').trim(), 'unidad de compra');
     const totalCost = Number(req.body.totalCost);
 
     if (!ingredientName) {
@@ -149,7 +154,8 @@ export const createPurchase = async (req, res) => {
         producedUnit: unit,
         remainingQuantity: roundQty(quantity),
         inheritedCost: roundMoney(totalCost),
-        costPerProducedUnit: roundMoney(totalCost / quantity),
+        // Costo por gramo / mililitro: seis decimales (ver helpers/money.js).
+        costPerProducedUnit: roundUnitCost(totalCost / quantity),
         processNames: [],
         isPassThrough: true,
         allocationDate: req.body.purchaseDate || Date.now(),
@@ -260,7 +266,7 @@ export const createProductionBatch = async (req, res) => {
   try {
     const stockItemName = normalize(req.body.stockItemName);
     const producedQuantity = roundQty(Number(req.body.producedQuantity));
-    const producedUnit = String(req.body.producedUnit || '').trim();
+    const producedUnit = assertKnownUnit(String(req.body.producedUnit || '').trim(), 'unidad producida');
     const inputs = Array.isArray(req.body.inputs) ? req.body.inputs : [];
     const recipeId = req.body.recipeId || null;
     const processNames = (Array.isArray(req.body.processNames) ? req.body.processNames : [req.body.processName])
@@ -362,6 +368,20 @@ export const createProductionBatch = async (req, res) => {
           rawPlans.push({ input: inp, item, plan: null, neededInStoredUnit, fromLegacyStock: true });
           continue;
         }
+
+        // Los lotes alcanzan, pero el espejo de Stock puede estar mas bajo (un
+        // conteo fisico lo corrigio). Antes eso se descubria hasta el final, en
+        // debitInputStock, que recortaba en silencio y dejaba la merma del lote
+        // en un numero falso. Se valida aqui, antes de escribir nada.
+        let enStock = inp.quantity;
+        try {
+          enStock = roundQty(convertBetweenUnits(inp.quantity, inp.unit, item.unit));
+        } catch (conversionError) {
+          throw badRequest(`La unidad "${inp.unit}" no es compatible con "${item.displayLabel || toDisplayLabel(item.name)}" (se mide en ${item.unit}).`);
+        }
+        if (Number(item.stock || 0) + 0.001 < enStock) {
+          throw badRequest(`Los lotes de "${item.displayLabel || toDisplayLabel(item.name)}" alcanzan, pero en Stock solo hay ${roundQty(item.stock)} ${item.unit} y se necesitan ${enStock}. Revisa el conteo fisico.`);
+        }
       }
       {
         // Insumo listo: ya está acreditado a Stock, se valida contra existencia.
@@ -411,7 +431,8 @@ export const createProductionBatch = async (req, res) => {
     }
 
     const inheritedCost = roundMoney(rawInputs.reduce((sum, r) => sum + r.cost, 0));
-    const costPerProducedUnit = roundMoney(inheritedCost / producedQuantity);
+    // Costo por gramo / mililitro: seis decimales (ver helpers/money.js).
+    const costPerProducedUnit = roundUnitCost(inheritedCost / producedQuantity);
 
     // --- Merma real del lote ---
     // Entra X, sale Y: la diferencia es lo que se descartó al picar, pelar,

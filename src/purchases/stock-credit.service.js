@@ -1,4 +1,5 @@
 import Inventory from '../inventory/inventory.model.js';
+import { roundUnitCost } from '../helpers/money.js';
 import Portion from '../inventory/portion.model.js';
 import { manualStockAdjustment, convertAmountToCatalogUnit } from '../inventory/inventory.service.js';
 import { convertBetweenUnits } from './purchase.service.js';
@@ -61,19 +62,25 @@ export const creditStock = async ({ stockItemName, quantity, unit, totalCost, ac
   }
 
   const storedUnit = stockItem.unit || unit;
-  let amountInStoredUnit = quantity;
-  try {
-    amountInStoredUnit = roundQty(convertBetweenUnits(quantity, unit, storedUnit));
-  } catch (conversionError) {
-    amountInStoredUnit = quantity;
-  }
 
-  const unitPriceInStoredUnit = amountInStoredUnit > 0 ? roundMoney(totalCost / amountInStoredUnit) : 0;
+  // Antes, si la conversion fallaba se usaba el numero crudo como si ya
+  // estuviera en la unidad destino: 10 lbs de queso entraban como 10 GRAMOS y
+  // el costo salia a Q30 el gramo, con respuesta 200 y sin un solo error
+  // visible. Ahora se propaga: es mejor rechazar la compra que acreditarla
+  // 450 veces mal.
+  const amountInStoredUnit = roundQty(convertBetweenUnits(quantity, unit, storedUnit));
+
+  // Costo POR GRAMO / POR MILILITRO: seis decimales, no dos. A dos decimales
+  // un insumo barato queda en Q0.00 y uno normal se desvia hasta 43%.
+  const unitPriceInStoredUnit = amountInStoredUnit > 0 ? roundUnitCost(totalCost / amountInStoredUnit) : 0;
 
   let portionPrice;
   if (portionItem) {
     let portionInStoredUnit = portionItem.usedPerPlate;
     if (portionItem.unit !== storedUnit) {
+      // Aqui si se tolera: la porcion es un dato de Recetario, no de la compra.
+      // Si no convierte, se usa tal cual y el costo queda aproximado, pero la
+      // compra no se pierde.
       try {
         portionInStoredUnit = convertAmountToCatalogUnit(portionItem.usedPerPlate, portionItem.unit, storedUnit);
       } catch (conversionError) {
@@ -107,30 +114,30 @@ export const debitInputStock = async ({ ingredientName, quantity, unit, actor, r
   const item = await Inventory.findOne({ name: normalized });
   if (!item) return null;
 
-  let amountInStoredUnit = quantity;
-  try {
-    amountInStoredUnit = roundQty(convertBetweenUnits(quantity, unit, item.unit));
-  } catch (conversionError) {
-    amountInStoredUnit = quantity;
-  }
+  // Sin respaldo al numero crudo: si la unidad no convierte, se propaga.
+  const amountInStoredUnit = roundQty(convertBetweenUnits(quantity, unit, item.unit));
   if (!amountInStoredUnit || amountInStoredUnit <= 0) return null;
 
   // Lotes anteriores al espejo de Stock pueden dejar existencia en 0: nunca se
-  // baja de cero para no inventar inventario negativo.
+  // baja de cero para no inventar inventario negativo. Pero si se pide MAS de
+  // lo que hay, ya no se recorta en silencio: antes un lote podia declarar que
+  // consumio 1000 g y haber descontado 300, dejando la merma del lote en un
+  // numero falso — que es justo la metrica que este modulo existe para medir.
   const available = Number(item.stock || 0);
   if (available <= 0) return null;
-  if (amountInStoredUnit > available) amountInStoredUnit = roundQty(available);
-
-  try {
-    return await manualStockAdjustment({
-      name: normalized,
-      amount: -amountInStoredUnit,
-      type: 'OUT',
-      actor,
-      reason
-    });
-  } catch (error) {
-    console.error(`[debitInputStock] No se pudo descontar ${normalized}:`, error.message);
-    return null;
+  if (amountInStoredUnit > available + 0.001) {
+    const error = new Error(
+      `No hay suficiente "${normalized}" en Stock: se necesitan ${amountInStoredUnit} ${item.unit} y hay ${available}. Revisa el conteo fisico o registra la compra.`
+    );
+    error.statusCode = 400;
+    throw error;
   }
+
+  return await manualStockAdjustment({
+    name: normalized,
+    amount: -Math.min(amountInStoredUnit, available),
+    type: 'OUT',
+    actor,
+    reason
+  });
 };

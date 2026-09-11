@@ -28,7 +28,7 @@ const middlewares = (app) => {
   }));
   app.use(express.urlencoded({ extended: false, limit: '10mb' }));
   app.use(helmet());
-  app.use(morgan('dev'));
+  app.use(morgan(process.env.NODE_ENV === 'production' ? 'combined' : 'dev'));
 };
 
 const routes = (app) => {
@@ -47,20 +47,39 @@ const routes = (app) => {
   app.use('/api/finances', financeRoutes);
   app.use('/api/content', contentRoutes);
   app.use('/api/canva', canvaRoutes);
+
+  // Manejador de error global. Sin esto, Express 5 responde con el stack trace
+  // completo cuando NODE_ENV no es 'production': se filtran rutas del
+  // contenedor y estructura interna. El detalle va al log, no al cliente.
+  app.use((err, req, res, next) => {
+    if (res.headersSent) return next(err);
+    const status = err.statusCode || err.status || 500;
+    console.error(`[${req.method} ${req.originalUrl}]`, err);
+    res.status(status).json({
+      message: status >= 500 ? 'Ocurrió un error en el servidor.' : err.message
+    });
+  });
+};
+
+// Ningun seed puede tumbar el arranque. Normalizar datos no es requisito para
+// servir trafico: si un seed falla se registra y el servidor levanta igual.
+// Antes solo seedInventory estaba protegido; con dos instancias arrancando a la
+// vez en Cloud Run, seedSettings podia chocar con un E11000 (la llave de
+// Setting es unica) y tumbar las dos — y nadie recibia pedidos.
+const seedSeguro = async (nombre, fn) => {
+  try {
+    await fn();
+  } catch (seedError) {
+    console.error(`[${nombre}] Falló y se continuó sin él:`, seedError);
+  }
 };
 
 const connectDependencies = async () => {
+  // La base SI es requisito: sin ella no hay nada que servir.
   await dbConnection();
-  await seedAdminUser();
-  // El seed del catalogo normaliza datos, no es requisito para servir: si algo
-  // falla, se registra y el servidor levanta igual. Antes un error aqui
-  // tumbaba el contenedor completo en Cloud Run.
-  try {
-    await seedInventory();
-  } catch (seedError) {
-    console.error('[seedInventory] Falló la normalización del catálogo:', seedError);
-  }
-  await seedSettings();
+  await seedSeguro('seedAdminUser', seedAdminUser);
+  await seedSeguro('seedInventory', seedInventory);
+  await seedSeguro('seedSettings', seedSettings);
 };
 
 export const initServer = async () => {
@@ -68,10 +87,13 @@ export const initServer = async () => {
   const port = process.env.PORT || 5000;
 
   middlewares(app);
-  await connectDependencies();
-  routes(app);
 
+  // El puerto se abre ANTES de conectar dependencias: asi /health responde
+  // aunque Mongo tarde, y Cloud Run no mata el contenedor por startup timeout.
+  routes(app);
   app.listen(port, () => {
     console.log(`Server running on port ${port}`);
   });
+
+  await connectDependencies();
 };

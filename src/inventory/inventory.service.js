@@ -1,4 +1,5 @@
 import Inventory from './inventory.model.js'
+import { roundUnitCost } from '../helpers/money.js';
 import InventoryLog from './inventoryLog.model.js'
 import Portion from './portion.model.js'
 import PurchaseAllocation from '../purchases/purchase-allocation.model.js'
@@ -112,6 +113,12 @@ export const getPortionQtyInBaseUnit = (name, portionMap, inventoryMap) => {
   }
 }
 
+// Divorciados son DOS salsas, y dos salsas no caben en un envase: van en dos
+// de 4 onz, una cada una. Antes esto se leia de la porcion de 'plato de 4 onz'
+// en Recetario, que vale 1 porque significa "cuantos lleva un plato", no
+// "cuantos lleva divorciados": se descontaba 1 envase donde se usaban 2.
+const SAUCE_CUPS_DIVORCIADOS = 2
+
 const getConsumptionForItem = (item, portionMap, inventoryMap, sauceTemperature = 'CALIENTE') => {
   const sauce = normalizeOptionValue(item.sauce)
   const protein = normalizeOptionValue(item.protein)
@@ -139,7 +146,7 @@ const getConsumptionForItem = (item, portionMap, inventoryMap, sauceTemperature 
     } else if (sauce === 'DIVORCIADOS') {
       consumption['salsa roja'] = round(getQty('salsa roja') / 2)
       consumption['salsa verde'] = round(getQty('salsa verde') / 2)
-      saucePlates = getQty('plato de 4 onz') // configurado en Recetario (hoy: 2)
+      saucePlates = SAUCE_CUPS_DIVORCIADOS
     } else if (sauce) {
       const dbSauceName = resolveStockName(sauce.toLowerCase().replace(/_/g, ' '))
       consumption[dbSauceName] = getQty(dbSauceName)
@@ -159,8 +166,8 @@ const getConsumptionForItem = (item, portionMap, inventoryMap, sauceTemperature 
     } else if (sauce === 'DIVORCIADOS') {
       consumption['salsa roja'] = round(getQty('salsa roja') / 2)
       consumption['salsa verde'] = round(getQty('salsa verde') / 2)
-      consumption['plato de 4 onz'] = getQty('plato de 4 onz')
-      consumption['tapadera de 4 onz'] = getQty('tapadera de 4 onz')
+      consumption['plato de 4 onz'] = SAUCE_CUPS_DIVORCIADOS
+      consumption['tapadera de 4 onz'] = SAUCE_CUPS_DIVORCIADOS
     } else if (sauce) {
       const dbSauceName = resolveStockName(sauce.toLowerCase().replace(/_/g, ' '))
       consumption[dbSauceName] = getQty(dbSauceName)
@@ -349,10 +356,15 @@ export const consumeFifoBatches = async (ingredientName, requiredQty, inventoryU
 
     const newRemaining = round(allocation.remainingQuantity - takeInProducedUnit)
     const depleted = newRemaining <= 0.001
+    // $inc con guarda, no $set con un valor calculado desde una lectura vieja.
+    // Dos ventas simultaneas del mismo lote leian 1000, ambas escribian 800, y
+    // el lote quedaba en 800 habiendo entregado 400.
     bulkOps.push({
       updateOne: {
-        filter: { _id: allocation._id },
-        update: { $set: { remainingQuantity: depleted ? 0 : newRemaining, isDepleted: depleted } }
+        filter: { _id: allocation._id, remainingQuantity: { $gte: takeInProducedUnit } },
+        update: depleted
+          ? { $set: { remainingQuantity: 0, isDepleted: true } }
+          : { $inc: { remainingQuantity: -takeInProducedUnit } }
       }
     })
 
@@ -398,7 +410,9 @@ export const peekCurrentBatchCost = async (ingredientName, catalogUnit) => {
     if (!factor) return null
 
     return {
-      costPerCatalogUnit: round(allocation.costPerProducedUnit / factor),
+      // Seis decimales: a tres, un costo de Q0.20/lb sobre un producto en
+      // gramos se caia a 0.000 y el insumo quedaba gratis.
+      costPerCatalogUnit: roundUnitCost(allocation.costPerProducedUnit / factor),
       allocationId: allocation._id,
       allocationDate: allocation.allocationDate,
       remainingQuantity: allocation.remainingQuantity,
@@ -438,11 +452,27 @@ export const discountInventoryForOrder = async (items = [], orderId, actor, sauc
 
   await Promise.all(
     Object.entries(consumption).map(async ([name, qty]) => {
+      // Guarda atomica: el filtro exige que la existencia alcance EN EL
+      // MOMENTO del descuento. Sin ella, dos pedidos que pasaron la validacion
+      // con el mismo stock lo descontaban los dos y el inventario quedaba
+      // negativo — el `min: 0` del esquema no protege, porque Mongoose no corre
+      // validadores en $inc sin runValidators.
       const previousItem = await Inventory.findOneAndUpdate(
-        { name: normalizeName(name) },
+        { name: normalizeName(name), stock: { $gte: qty } },
         { $inc: { stock: -qty } },
         { new: false }
       )
+
+      if (!previousItem) {
+        const existente = await Inventory.findOne({ name: normalizeName(name) }).select('stock unit displayLabel name')
+        const error = new Error(
+          existente
+            ? `Se agoto "${existente.displayLabel || existente.name}" mientras se registraba el pedido: quedan ${round(existente.stock)} ${existente.unit} y se necesitan ${qty}.`
+            : `El producto "${name}" ya no existe en inventario.`
+        )
+        error.statusCode = 409
+        throw error
+      }
 
       if (previousItem) {
         let fifo = null

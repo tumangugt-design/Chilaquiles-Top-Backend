@@ -309,9 +309,15 @@ export const saveInventoryItem = async (req, res) => {
 export const previewRecipeConsumption = async (req, res) => {
   try {
     const items = Array.isArray(req.body.items) ? req.body.items : []
-    const validation = await validateInventoryAvailability(items)
+    // La temperatura cambia el empaque: en frio la salsa va en 4 onz y ademas
+    // lleva un envase extra para la proteina. Sin este parametro la simulacion
+    // asumia CALIENTE y mentia en todo pedido frio — decia "1 plato de 8 onz"
+    // donde el descuento real usa 2 o 3 de 4 onz.
+    const sauceTemperature = String(req.body.sauceTemperature || 'CALIENTE').trim().toUpperCase()
+    const validation = await validateInventoryAvailability(items, sauceTemperature)
     return res.status(200).json({
-      consumption: await getAggregatedConsumption(items),
+      sauceTemperature,
+      consumption: await getAggregatedConsumption(items, sauceTemperature),
       validation,
       futurePhase: 'Ready for detailed recipe breakdown per plate and sub-ingredient.'
     })

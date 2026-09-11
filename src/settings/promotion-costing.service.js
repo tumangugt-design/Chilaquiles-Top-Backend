@@ -141,13 +141,27 @@ export const packagingRowsForPlate = (plate = {}, portionOf = portionFromConstan
 };
 
 /**
- * Costo unitario vigente de un producto, en su unidad de catalogo.
- * traced=false significa que el producto aun no paso por Compras y el
- * costo es una estimacion, no un dato trazado a un lote.
+ * Costo vigente de UNA unidad de catalogo (un gramo, un mililitro, una pieza).
+ *
+ * Dos fuentes, en orden:
+ *  1. El lote FIFO vigente (peekCurrentBatchCost), que ya devuelve el costo
+ *     por unidad de catalogo. Eso es un costo trazado.
+ *  2. Si el producto todavia no paso por Compras, Inventory.lastPrice.
+ *
+ * OJO con la segunda: `lastPrice` NO es el costo por gramo. Es el costo de
+ * UNA PORCION — se escribe como `unitPrice x usedPerPlate` en
+ * stock-credit.service.js:83. Usarlo tal cual multiplicaba el precio de una
+ * porcion por los gramos de esa misma porcion: el queso entraba a Q3.97 x 60,
+ * la salsa a su porcion x 200, y un solo plato costeaba Q913 en vez de ~Q20.
+ * Dividirlo entre la porcion lo devuelve a costo por unidad.
+ *
+ * traced=false marca que el numero es una estimacion, no un costo trazado a
+ * un lote real — el llamador lo reporta como cobertura.
  */
-const unitCostFor = async (name, invByName) => {
+const unitCostFor = async (name, invByName, portionOf) => {
   const item = invByName.get(name);
   const unit = item?.unit || INVENTORY_CATALOG_MAP[name]?.unit || 'und';
+
   try {
     const peek = await peekCurrentBatchCost(name, unit);
     if (peek && peek.costPerCatalogUnit != null) {
@@ -156,78 +170,13 @@ const unitCostFor = async (name, invByName) => {
   } catch {
     // unidad del lote incompatible: se cae al respaldo
   }
-  return { cost: Number(item?.lastPrice || 0), traced: false };
-};
 
-// ============================================================
-// CAPA FISCAL
-//
-// El costo de insumos no es lo unico que se lleva el precio. Una promo se
-// factura como cualquier otro pedido, asi que antes de que quede utilidad
-// pasan por encima el IVA, la comision de Recurrente y el ISR.
-//
-// Misma metodologia que Finanzas (finances.service.js), aplicada a UNA venta
-// en vez de a un periodo, y leyendo la misma taxConfig — si manana la SAT o
-// Recurrente cambian una tarifa, se cambia en un solo lugar.
-//
-// Lo que NO se descuenta, a proposito: el credito fiscal del IVA de compras.
-// Finanzas tampoco lo descuenta, porque todavia no se traza que cada compra
-// tenga factura valida. Eso deja el calculo del lado conservador: el margen
-// real es un poco mejor que el que se muestra, nunca peor.
-// ============================================================
-
-/** Renta bruta acumulada del mes en curso, para saber en que tramo cae el ISR. */
-const monthToDateRentaBruta = async (cfg) => {
-  const { start, end } = getGuatemalaMonthRange(new Date());
-  // 'cancelado' no existe en ORDER_STATUS: filtrar por ese valor no filtraba
-  // nada. Lo que hay que dejar fuera es el pedido con tarjeta que quedo en
-  // pendiente_pago porque el cliente abandono el checkout — nunca fue venta.
-  const orders = await Order.find({
-    createdAt: { $gte: start, $lt: end },
-    status: { $ne: ORDER_STATUS.PENDIENTE_PAGO },
-  }).select('total').lean();
-  const revenue = orders.reduce((s, o) => s + (Number(o.total) || 0), 0);
-  const ivaFactor = cfg.ivaRate / (1 + cfg.ivaRate);
-  return cfg.pricesIncludeIva ? revenue - revenue * ivaFactor : revenue;
-};
-
-/**
- * Lo que el fisco y Recurrente se llevan de una venta de `price`.
- *
- * @param {number} price         precio cobrado al cliente (IVA incluido)
- * @param {object} cfg           taxConfig
- * @param {string} paymentMethod 'tarjeta' cobra comision de Recurrente; en efectivo no hay
- * @param {number} monthRentaBruta  renta bruta que ya lleva el mes, para el tramo del ISR
- */
-export const applyFiscalLayer = (price, cfg, { paymentMethod = 'tarjeta', monthRentaBruta = 0 } = {}) => {
-  const p = Number(price) || 0;
-  if (p <= 0) return null;
-
-  // El precio al cliente ya trae el IVA adentro: se extrae, no se suma encima.
-  // Ese pedazo del precio nunca fue mio.
-  const ivaFactor = cfg.ivaRate / (1 + cfg.ivaRate);
-  const ivaDebito = cfg.pricesIncludeIva ? p * ivaFactor : p * cfg.ivaRate;
-  const rentaBruta = cfg.pricesIncludeIva ? p - ivaDebito : p;
-
-  const conTarjeta = paymentMethod === 'tarjeta';
-  const comisionRecurrente = conTarjeta ? cfg.recurrenteFeeFixed + p * cfg.recurrenteFeeRate : 0;
-  const facturacionFee = conTarjeta ? cfg.recurrenteInvoiceFee : 0;
-
-  // ISR marginal: no el 5% o el 7% en abstracto, sino cuanto ISR le AGREGA
-  // esta venta al mes que va corriendo. Restar los dos tramos resuelve solo
-  // el caso en que la venta cruza los Q30,000.
-  const isr = calculateISR(monthRentaBruta + rentaBruta, cfg) - calculateISR(monthRentaBruta, cfg);
-
-  return {
-    paymentMethod,
-    ivaDebito: round(ivaDebito),
-    rentaBruta: round(rentaBruta),
-    comisionRecurrente: round(comisionRecurrente),
-    facturacionFee: round(facturacionFee),
-    isr: round(isr),
-    isrRatePct: rentaBruta > 0 ? round((isr / rentaBruta) * 100) : 0,
-    total: round(ivaDebito + comisionRecurrente + facturacionFee + isr),
-  };
+  const perPortion = Number(item?.lastPrice || 0);
+  const portion = Number(portionOf(name)) || 0;
+  if (perPortion > 0 && portion > 0) {
+    return { cost: perPortion / portion, traced: false };
+  }
+  return { cost: 0, traced: false };
 };
 
 /**
@@ -259,7 +208,7 @@ export const costPromotion = async (plates = [], opts = {}) => {
 
   const cache = new Map();
   const costOf = async (name) => {
-    if (!cache.has(name)) cache.set(name, await unitCostFor(name, invByName));
+    if (!cache.has(name)) cache.set(name, await unitCostFor(name, invByName, portionOf));
     return cache.get(name);
   };
 

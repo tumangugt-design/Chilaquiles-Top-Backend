@@ -3,7 +3,32 @@ import { signLocalToken } from '../helpers/token.helper.js'
 import { authenticateLocalStaffUser, createLocalStaffUser, findCustomerProfileByPhone, findDriverByPhone, setDriverNameIfMissing } from '../users/user.service.js'
 import { generateAndSendOTP, verifyOTP } from './otp.service.js'
 
-const JWT_SECRET = process.env.APP_JWT_SECRET || 'change-me-please'
+// Sin respaldo publico. Antes esto era `process.env.APP_JWT_SECRET ||
+// 'change-me-please'`: si la variable faltaba, el backend arrancaba igual y
+// firmaba tokens con una cadena que esta en el repositorio — cualquiera podia
+// forjar un token de admin.
+//
+// Pero tampoco se lanza al importar: eso mataria el contenedor en el arranque,
+// que es justo lo que la regla de los seeds dice que nunca debe pasar. Se
+// avisa fuerte en el log y se falla en el momento de usarlo, asi /health sigue
+// respondiendo y el log dice exactamente que falta.
+const JWT_SECRET = process.env.APP_JWT_SECRET
+
+if (!JWT_SECRET) {
+  console.error(
+    '[AUTH] FALTA APP_JWT_SECRET. La API levanta, pero ningun login ni ninguna ' +
+    'ruta autenticada va a funcionar hasta definirla en Cloud Run.'
+  )
+}
+
+const requireJwtSecret = () => {
+  if (!JWT_SECRET) {
+    const error = new Error('El servidor no tiene APP_JWT_SECRET configurada. Avisale al administrador.')
+    error.statusCode = 500
+    throw error
+  }
+  return JWT_SECRET
+}
 
 export const staffLogin = async (req, res) => {
   try {
@@ -17,7 +42,7 @@ export const staffLogin = async (req, res) => {
       requestedRole,
     })
 
-    const token = signLocalToken({ sub: user._id.toString(), role: user.role }, JWT_SECRET)
+    const token = signLocalToken({ sub: user._id.toString(), role: user.role }, requireJwtSecret())
 
     return res.status(200).json({
       message: 'Ingreso correcto',
@@ -138,7 +163,7 @@ export const verifyDriverOTPController = async (req, res) => {
       await setDriverNameIfMissing(driver, cleanName)
     }
 
-    const token = signLocalToken({ sub: driver._id.toString(), role: driver.role }, JWT_SECRET)
+    const token = signLocalToken({ sub: driver._id.toString(), role: driver.role }, requireJwtSecret())
 
     return res.status(200).json({ message: 'Verificado correctamente', token, user: driver })
   } catch (error) {
