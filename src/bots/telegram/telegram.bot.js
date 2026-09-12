@@ -1,6 +1,13 @@
 import TelegramBot from 'node-telegram-bot-api';
 import { processAdminMessage } from './telegram.service.js';
 
+// Aviso al arrancar: con el fail-closed de abajo, si esta variable falta el
+// bot no le responde a nadie — incluido el dueno. Mejor verlo en el log que
+// descubrirlo escribiendole al bot.
+if (!process.env.TELEGRAM_ADMIN_IDS) {
+  console.error('[Telegram] TELEGRAM_ADMIN_IDS no esta configurada: el bot operativo NO va a responderle a nadie.');
+}
+
 let botInstance = null;
 
 export const initTelegramBot = () => {
@@ -35,7 +42,12 @@ export const initTelegramBot = () => {
     const adminIds = adminIdsStr.split(',').map(id => id.trim()).filter(Boolean);
     const userId = msg.from.id.toString();
 
-    if (adminIds.length > 0 && !adminIds.includes(userId)) {
+    // FAIL-CLOSED. Antes era `adminIds.length > 0 && !includes(userId)`: si
+  // TELEGRAM_ADMIN_IDS estaba vacia o mal escrita, la condicion era falsa y
+  // la funcion autorizaba a TODO EL MUNDO. Este bot tiene herramientas de
+  // escritura — puede cerrar el restaurante — asi que la ausencia de
+  // configuracion tiene que significar "nadie", no "todos".
+  if (adminIds.length === 0 || !adminIds.includes(userId)) {
       console.warn(`[Telegram Bot] Intento de acceso no autorizado por ID: ${userId}`);
       bot.sendMessage(msg.chat.id, '⛔ No tienes permisos para interactuar con este bot.');
       return false;

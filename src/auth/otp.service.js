@@ -1,9 +1,12 @@
+import crypto from 'crypto';
 import { OTP } from './otp.model.js';
 import { sendWhatsAppOTP } from '../helpers/whatsapp.helper.js';
 
 export const generateAndSendOTP = async (phone) => {
     // Generate 6 digit code
-    const code = Math.floor(100000 + Math.random() * 900000).toString();
+    // crypto.randomInt, no Math.random: este ultimo es predecible y aqui el
+  // numero es lo unico que protege la cuenta de un cliente.
+  const code = String(crypto.randomInt(100000, 1000000));
 
     // Clear previous OTPs for this phone
     await OTP.deleteMany({ phone });

@@ -43,7 +43,28 @@ export const getAICompletion = async (messages, options = {}) => {
   }
 };
 
-export const prepareBotContext = (customerName, orderHistory, operatingHours, conversationSummary) => {
+// El nombre del cliente lo elige el CLIENTE (diciendo "me llamo X" el bot
+// emite [SET_NAME] y lo guarda). Interpolarlo crudo dentro del system prompt
+// permitia cerrar la comilla y escribir reglas nuevas al mismo nivel que las
+// del negocio — y persistia, porque queda guardado en el usuario. Se limita a
+// letras, espacios y guiones, y a 40 caracteres.
+const nombreSeguro = (valor = '') =>
+  String(valor || '')
+    // solo letras, espacios, apostrofes y guiones: se van comillas, corchetes,
+    // dos puntos y saltos de linea, que es con lo que se cierra el string y se
+    // abre una instruccion nueva
+    .replace(/[^\p{L}\p{M} '-]/gu, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    // y como maximo tres palabras: un nombre real cabe de sobra, una
+    // instruccion disfrazada de nombre no
+    .split(' ')
+    .slice(0, 3)
+    .join(' ')
+    .slice(0, 32);
+
+export const prepareBotContext = (rawCustomerName, orderHistory, operatingHours, conversationSummary) => {
+  const customerName = nombreSeguro(rawCustomerName);
   const menuInfo = INVENTORY_CATALOG.filter(item => 
     ['Salsas', 'Proteínas', 'Complementos'].includes(item.category)
   ).map(item => `- ${item.label}`).join('\n');

@@ -27,9 +27,24 @@ export const processIncomingMessage = async (rawPhone, messageText, platform = '
       memory = new BotMemory({ phone: phone, lastMessages: [] });
     }
 
+    // La cuarentena VENCE. Antes era permanente y no habia forma de revertirla
+    // salvo editando Mongo a mano: tres mensajes marcados desde un telefono
+    // dejaban a ese cliente sin atencion para siempre, en silencio. Con el
+    // webhook de Instagram abierto, ademas, se podia usar contra un cliente
+    // real haciendose pasar por el.
+    const CUARENTENA_HORAS = 24;
     if (memory.securityFlags && memory.securityFlags.isQuarantined) {
-      console.warn(`[Security] Phone ${phone} is quarantined. Ignored message.`);
-      return { success: true, ignored: true };
+      const desde = memory.securityFlags.lastFlagAt?.getTime() || 0;
+      const vencida = Date.now() - desde > CUARENTENA_HORAS * 60 * 60 * 1000;
+      if (vencida) {
+        memory.securityFlags.isQuarantined = false;
+        memory.securityFlags.totalFlags = 0;
+        await memory.save();
+        console.warn(`[Security] Cuarentena vencida para ${phone}: se reanuda la atencion.`);
+      } else {
+        console.warn(`[Security] ${phone} en cuarentena (vence ${CUARENTENA_HORAS}h despues del ultimo flag). Mensaje ignorado.`);
+        return { success: true, ignored: true };
+      }
     }
 
     // 4. Security Scan (PRE-AI)
@@ -90,7 +105,7 @@ export const processIncomingMessage = async (rawPhone, messageText, platform = '
     aiResponse = aiResponse.replace(/\[SET_NAME:\s*.+?\]/gi, '').trim();
 
     // 9. Save to Memory
-    memory.lastMessages.push({ role: 'user', content: messageText });
+    memory.lastMessages.push({ role: 'user', content: safeMessageText });
     memory.lastMessages.push({ role: 'assistant', content: aiResponse });
     await memory.save();
     

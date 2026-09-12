@@ -33,7 +33,17 @@ export const handleRecurrenteWebhook = async (req, res) => {
     const checkoutId = payload.checkout?.id || payload.checkout?.latest_intent?.id || null
     const successUrl = payload.checkout?.success_url || null
 
-    await confirmOrderPaymentByCheckout({ checkoutId, successUrl })
+    // El monto cobrado se compara contra el total del pedido. Antes se ignoraba
+    // por completo: un checkout reutilizado o cobrado por otro monto marcaba el
+    // pedido como pagado igual. Si Recurrente no manda el monto en este evento,
+    // se pasa null y la validacion se omite (no se inventa un numero).
+    const centavosCobrados =
+      payload.checkout?.amount_in_cents ??
+      payload.checkout?.latest_intent?.amount_in_cents ??
+      payload.amount_in_cents ??
+      null
+
+    await confirmOrderPaymentByCheckout({ checkoutId, successUrl, centavosCobrados })
 
     return res.status(200).json({ received: true })
   } catch (error) {

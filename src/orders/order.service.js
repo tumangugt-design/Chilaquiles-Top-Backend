@@ -60,7 +60,7 @@ export const getOrderConfirmation = async (orderNumber) => {
 // Matches the order by the Recurrente checkout id we stored at creation time, falling
 // back to parsing the order number out of the checkout's success_url if needed.
 // Idempotent: a webhook retry for an already-confirmed order is a no-op.
-export const confirmOrderPaymentByCheckout = async ({ checkoutId, successUrl }) => {
+export const confirmOrderPaymentByCheckout = async ({ checkoutId, successUrl, centavosCobrados = null }) => {
   let order = null;
 
   if (checkoutId) {
@@ -81,6 +81,21 @@ export const confirmOrderPaymentByCheckout = async ({ checkoutId, successUrl }) 
 
   if (order.paymentConfirmedAt) {
     return order;
+  }
+
+  // El monto tiene que cuadrar con el total del pedido. Se tolera 1 centavo de
+  // diferencia por redondeo. Si no cuadra, NO se confirma: se registra y se
+  // deja el pedido en pendiente_pago para revisarlo a mano.
+  if (centavosCobrados !== null && Number.isFinite(Number(centavosCobrados))) {
+    const esperados = Math.round(Number(order.total) * 100);
+    if (Math.abs(Number(centavosCobrados) - esperados) > 1) {
+      console.error('[Recurrente Webhook] El monto cobrado no coincide con el total del pedido', {
+        orderNumber: order.orderNumber,
+        cobrado: Number(centavosCobrados) / 100,
+        esperado: order.total,
+      });
+      return null;
+    }
   }
 
   // Reclamo ATOMICO del pago. Antes se leia paymentConfirmedAt arriba, se

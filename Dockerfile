@@ -22,6 +22,10 @@ ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
 ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/google-chrome-stable
 
 EXPOSE 8080
+# Sin esto, Express 5 manda el stack trace completo en el cuerpo de la
+# respuesta ante cualquier error no manejado: se filtran rutas del contenedor
+# y estructura interna.
+ENV NODE_ENV=production
 ENV PORT=8080
 
 CMD ["node", "index.js"]

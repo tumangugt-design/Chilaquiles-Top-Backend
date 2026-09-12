@@ -19,7 +19,32 @@ import contentRoutes from '../src/content/routes/content.routes.js';
 import canvaRoutes from '../src/content/routes/canva.routes.js';
 
 const middlewares = (app) => {
-  app.use(cors());
+  // CORS restringido a los dominios propios. Antes era cors() sin opciones:
+  // Access-Control-Allow-Origin: * para toda la API, incluidas las rutas de
+  // pedidos y configuracion, asi que cualquier sitio podia llamarlas desde el
+  // navegador de un visitante.
+  const origenesPermitidos = [
+    process.env.CUSTOMER_FRONTEND_URL,
+    process.env.MARKETING_FRONTEND_URL,
+    process.env.VITE_FRONTEND_URL,
+    'https://admin.chilaquilestop.com',
+    'https://pedidos.chilaquilestop.com',
+    'https://chef.chilaquilestop.com',
+    'https://repartidor.chilaquilestop.com',
+    'https://chilaquilestop.com',
+  ].filter(Boolean);
+
+  app.use(cors({
+    origin: (origin, cb) => {
+      // Sin Origin = peticion servidor-a-servidor (webhooks de Meta, Cloud
+      // Scheduler, curl). Esas no las protege CORS: las protege su firma.
+      if (!origin) return cb(null, true);
+      if (origenesPermitidos.includes(origin)) return cb(null, true);
+      console.warn(`[CORS] Origen no permitido: ${origin}`);
+      return cb(null, false);
+    },
+    credentials: true,
+  }));
   app.use(express.json({
     limit: '10mb',
     verify: (req, res, buf) => {

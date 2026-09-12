@@ -54,7 +54,7 @@ const executeTool = async (toolCall) => {
       } else {
         filter.status = { $ne: 'cancelado' };
       }
-      if (args.customerName) filter.name = { $regex: args.customerName, $options: 'i' };
+      if (args.customerName) filter.name = { $regex: escaparRegex(args.customerName), $options: 'i' };
       
       const limit = args.limit ? Math.min(args.limit, 500) : 100;
       const orders = await Order.find(filter).sort({ createdAt: -1 }).limit(limit).lean();
@@ -95,9 +95,9 @@ const executeTool = async (toolCall) => {
     }
 
     else if (name === 'getInventory') {
-      const filter = args.itemName ? { name: { $regex: args.itemName, $options: 'i' } } : {};
+      const filter = args.itemName ? { name: { $regex: escaparRegex(args.itemName), $options: 'i' } } : {};
       const items = await Inventory.find(filter).lean();
-      const portions = await Portion.find(args.itemName ? { name: { $regex: args.itemName, $options: 'i' } } : {}).lean();
+      const portions = await Portion.find(args.itemName ? { name: { $regex: escaparRegex(args.itemName), $options: 'i' } } : {}).lean();
 
       // Merge inventory with portion data for complete cost info
       const portionMap = Object.fromEntries(portions.map(p => [p.name, p]));
@@ -158,7 +158,11 @@ const executeTool = async (toolCall) => {
 
     else if (name === 'getUsers') {
       if (args.phone) {
-        const user = await User.findOne({ phone: { $regex: args.phone, $options: 'i' } }).lean();
+        // Proyeccion explicita: sin ella esto devolvia el documento COMPLETO,
+      // passwordHash incluido, y el modelo podia repetirlo en el chat.
+      const user = await User.findOne({ phone: { $regex: escaparRegex(args.phone), $options: 'i' } })
+        .select('name phone role status createdAt')
+        .lean();
         return JSON.stringify(user || { error: "No se encontró usuario con ese teléfono." });
       }
       if (args.role) {
@@ -194,7 +198,7 @@ const executeTool = async (toolCall) => {
 
     else if (name === 'getInventoryLogs') {
       const filter = {};
-      if (args.ingredientName) filter.ingredientName = { $regex: args.ingredientName, $options: 'i' };
+      if (args.ingredientName) filter.ingredientName = { $regex: escaparRegex(args.ingredientName), $options: 'i' };
       if (args.type) filter.type = args.type;
       const limit = args.limit ? Math.min(args.limit, 100) : 20;
 
