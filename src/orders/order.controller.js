@@ -54,9 +54,32 @@ export const createOrder = async (req, res) => {
       return res.status(400).json({ message: 'Nombre, teléfono, dirección e items son obligatorios' })
     }
 
-    // El OTP se valida antes de llegar a este punto en el flujo público.
     // En administración se crea el pedido interno con sesión ADMIN y sin OTP.
     if (req.user?.role !== USER_ROLES.ADMIN) {
+      // El OTP ahora SI se hace cumplir del lado del servidor. Antes esto era
+      // solo un comentario: verify-otp no emitia ningun token, asi que el
+      // backend no tenia forma de exigir nada y la validacion vivia unicamente
+      // en el navegador. Un script con datos inventados creaba pedidos reales.
+      //
+      // El token trae el telefono que se verifico, y tiene que ser el mismo
+      // del pedido: no basta con tener UN token, tiene que ser el de ESE
+      // numero.
+      if (req.user?.scope !== 'customer') {
+        return res.status(401).json({
+          message: 'Verificá tu número antes de hacer el pedido.',
+          code: 'OTP_REQUERIDO'
+        })
+      }
+
+      const telefonoToken = String(req.user.phone || '').replace(/\D/g, '')
+      const telefonoPedido = String(customer.phone || '').replace(/\D/g, '')
+      if (!telefonoToken || telefonoToken !== telefonoPedido) {
+        return res.status(403).json({
+          message: 'El número del pedido no coincide con el que verificaste.',
+          code: 'OTP_TELEFONO_DISTINTO'
+        })
+      }
+
       const openNow = await isOperatingNow()
       if (!openNow?.isCurrentlyOpen) {
         return res.status(403).json({ message: 'Estamos cerrados por el momento. Vuelve más tarde.' })

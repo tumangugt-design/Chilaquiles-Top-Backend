@@ -1,6 +1,9 @@
 import { Router } from 'express';
 import { verifyCronToken } from '../middlewares/cron.middleware.js';
 import { rateLimit } from '../middlewares/rateLimit.middleware.js';
+import { verifyAuthToken } from '../middlewares/auth.middleware.js';
+import { requireRole } from '../middlewares/role.middleware.js';
+import { USER_ROLES } from '../helpers/constants.js';
 
 // Cada mensaje entrante dispara una llamada al LLM, que cuesta. Techo por IP.
 const limiteBot = rateLimit({ ventanaMs: 60 * 1000, maximo: 60, nombre: 'bot-webhook' });
@@ -11,8 +14,7 @@ import {
   handleWhatsAppWebhook,
   verifyInstagramWebhook,
   handleInstagramWebhook,
-  triggerSurveyCronJob
-} from './bot.controller.js';
+  triggerSurveyCronJob, listBotConversations, getBotConversation } from './bot.controller.js';
 import { getTelegramBotInstance } from '../bots/telegram/telegram.bot.js';
 
 import { verifyMetaSignature } from './metaSignature.middleware.js';
@@ -52,5 +54,10 @@ router.post('/cron-survey', verifyCronToken, triggerSurveyCronJob);
 // ==========================================
 router.get('/webhook', verifyWebhook);
 router.post('/webhook', limiteBot, verifyMetaSignature, handleIncomingMessage);
+
+// La pecera: solo lectura, solo admin. No existe endpoint para responderle a
+// un cliente desde aca — la atencion la hace el bot.
+router.get('/conversations', verifyAuthToken, requireRole([USER_ROLES.ADMIN]), listBotConversations);
+router.get('/conversations/:platform/:contactId', verifyAuthToken, requireRole([USER_ROLES.ADMIN]), getBotConversation);
 
 export default router;

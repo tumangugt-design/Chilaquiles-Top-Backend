@@ -95,7 +95,23 @@ export const verifyOTPController = async (req, res) => {
 
     const customer = await findCustomerProfileByPhone(phone)
 
-    return res.status(200).json({ message: 'Verificado correctamente', customer })
+    // Token de cliente, ligado al telefono verificado y de vida corta.
+    //
+    // Antes esto no emitia nada: el comentario del controlador de pedidos
+    // decia "el OTP se valida antes de llegar aqui", pero el backend no tenia
+    // COMO exigirlo — la validacion vivia solo en el navegador. Un script con
+    // nombre y telefono inventados creaba pedidos reales que descontaban
+    // inventario y entraban a la cola del chef.
+    //
+    // 6 horas alcanza de sobra para armar un pedido sin que el cliente tenga
+    // que volver a verificarse a media compra.
+    const customerToken = signLocalToken(
+      { sub: customer?._id?.toString() || null, phone, scope: 'customer' },
+      requireJwtSecret(),
+      60 * 60 * 6
+    )
+
+    return res.status(200).json({ message: 'Verificado correctamente', customer, token: customerToken })
   } catch (error) {
     return res.status(500).json({ message: error.message })
   }

@@ -60,13 +60,30 @@ export const optionalAuthToken = async (req, res, next) => {
 
   try {
     const localPayload = verifyLocalToken(token, requireJwtSecret())
+
+    // Token de cliente (el que emite verify-otp). No siempre tiene un User
+    // detras — un cliente nuevo se crea hasta que hace el pedido — asi que lo
+    // que importa del payload es el scope y el telefono verificado. Sin esto,
+    // req.user quedaba en undefined y el pedido no tenia como demostrar que
+    // paso por el OTP.
+    if (localPayload.scope === 'customer') {
+      const user = localPayload.sub ? await User.findById(localPayload.sub) : null
+      req.user = {
+        ...(user ? user.toObject() : {}),
+        scope: 'customer',
+        phone: localPayload.phone,
+      }
+      req.authType = 'CUSTOMER_OTP'
+      return next()
+    }
+
     const user = await User.findById(localPayload.sub)
     if (user) {
       req.user = user
       req.authType = 'LOCAL'
     }
   } catch (error) {
-    // If token is invalid, just proceed as guest
+    // Token invalido: sigue como invitado, y la ruta decide si eso alcanza.
   }
   return next()
 }

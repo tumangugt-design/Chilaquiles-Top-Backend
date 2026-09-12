@@ -7,6 +7,42 @@ import { sendWhatsAppMessage } from './whatsapp.service.js';
 import { sendInstagramMessage } from './instagram.service.js';
 import { normalizePhone } from '../helpers/order.helper.js';
 import { scanMessage, sanitizeForContext } from './security.service.js';
+import BotConversation from './conversation.model.js';
+
+/**
+ * Archiva el intercambio para que el admin pueda verlo.
+ *
+ * Va aparte de BotMemory a proposito: esa es la ventana de contexto del modelo
+ * (10 mensajes) y se recorta; esto es el historial. Nunca debe tumbar la
+ * atencion al cliente, asi que cualquier error aqui solo se registra.
+ */
+const archivarIntercambio = async ({ contactId, platform, displayName, userId, entrante, saliente, securityAction, riskScore }) => {
+  try {
+    const nuevos = [];
+    if (entrante) nuevos.push({ role: 'user', content: entrante, at: new Date(), securityAction, riskScore });
+    if (saliente) nuevos.push({ role: 'assistant', content: saliente, at: new Date() });
+    if (nuevos.length === 0) return;
+
+    await BotConversation.findOneAndUpdate(
+      { contactId, platform },
+      {
+        $push: { messages: { $each: nuevos, $slice: -500 } },
+        $set: {
+          lastMessageAt: new Date(),
+          ...(displayName ? { displayName } : {}),
+          ...(userId ? { userId } : {}),
+        },
+        $inc: {
+          totalMessages: nuevos.length,
+          flaggedCount: securityAction && securityAction !== 'ALLOW' ? 1 : 0,
+        },
+      },
+      { upsert: true, new: true }
+    );
+  } catch (error) {
+    console.error('[Conversaciones] No se pudo archivar el intercambio:', error.message);
+  }
+};
 
 export const processIncomingMessage = async (rawPhone, messageText, platform = 'whatsapp') => {
   try {
@@ -61,6 +97,15 @@ export const processIncomingMessage = async (rawPhone, messageText, platform = '
       }
       await memory.save();
       const blockMessage = "Lo siento, no puedo procesar esa solicitud.";
+      // Lo bloqueado es lo mas importante de poder ver despues.
+      await archivarIntercambio({
+        contactId: phone,
+        platform,
+        entrante: messageText,
+        saliente: blockMessage,
+        securityAction: 'BLOCK',
+        riskScore: securityResult?.riskScore ?? null,
+      });
       if (platform === 'instagram') await sendInstagramMessage(phone, blockMessage);
       else await sendWhatsAppMessage(phone, blockMessage);
       return { success: true, blocked: true };
@@ -108,6 +153,17 @@ export const processIncomingMessage = async (rawPhone, messageText, platform = '
     memory.lastMessages.push({ role: 'user', content: safeMessageText });
     memory.lastMessages.push({ role: 'assistant', content: aiResponse });
     await memory.save();
+
+    await archivarIntercambio({
+      contactId: phone,
+      platform,
+      displayName: user?.name || '',
+      userId: user?._id || null,
+      entrante: messageText,
+      saliente: aiResponse,
+      securityAction: securityResult?.action || 'ALLOW',
+      riskScore: securityResult?.riskScore ?? null,
+    });
     
     // 10. Send Message
     if (platform === 'instagram') {

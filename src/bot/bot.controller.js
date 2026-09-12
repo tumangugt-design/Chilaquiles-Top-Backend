@@ -2,6 +2,7 @@ import { processIncomingMessage } from './bot.service.js';
 import Order from '../orders/order.model.js';
 import { generateOrderSummary } from '../orders/order.service.js';
 import { sendOrderReceivedMessage, sendOrderEnRouteMessage, sendOrderDeliveredMessage, sendWhatsAppTemplate, sendPaymentConfirmedMessage } from './whatsapp.service.js';
+import BotConversation from './conversation.model.js';
 
 // ==========================================
 // WHATSAPP WEBHOOK CONTROLLERS (DEDICATED)
@@ -412,3 +413,65 @@ export const triggerSurveyCronJob = async (req, res) => {
     res.status(500).send('Error interno ejecutando crons');
   }
 };
+
+// ==========================================
+// CONVERSACIONES (solo lectura, para el admin)
+//
+// La "pecera": ver lo que el bot conversa con los clientes, WhatsApp e
+// Instagram en un solo lugar. No hay endpoint para responder — a proposito.
+// ==========================================
+
+export const listBotConversations = async (req, res) => {
+  try {
+    const { platform, soloMarcadas, q } = req.query
+    const filtro = {}
+    if (platform === 'whatsapp' || platform === 'instagram') filtro.platform = platform
+    if (soloMarcadas === 'true') filtro.flaggedCount = { $gt: 0 }
+    if (q) {
+      const escapado = String(q).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+      filtro.$or = [
+        { contactId: { $regex: escapado, $options: 'i' } },
+        { displayName: { $regex: escapado, $options: 'i' } },
+      ]
+    }
+
+    // Sin los mensajes: la lista solo necesita el ultimo, no el hilo entero.
+    const conversaciones = await BotConversation.find(filtro)
+      .sort({ lastMessageAt: -1 })
+      .limit(100)
+      .select('contactId platform displayName lastMessageAt totalMessages flaggedCount isQuarantined messages')
+      .lean()
+
+    const resumen = conversaciones.map((c) => {
+      const ultimo = c.messages?.[c.messages.length - 1]
+      return {
+        contactId: c.contactId,
+        platform: c.platform,
+        displayName: c.displayName || '',
+        lastMessageAt: c.lastMessageAt,
+        totalMessages: c.totalMessages,
+        flaggedCount: c.flaggedCount,
+        isQuarantined: c.isQuarantined,
+        ultimoMensaje: ultimo ? { role: ultimo.role, content: String(ultimo.content).slice(0, 160), at: ultimo.at } : null,
+      }
+    })
+
+    res.set('Cache-Control', 'no-store')
+    return res.status(200).json(resumen)
+  } catch (error) {
+    return res.status(500).json({ message: 'No se pudieron cargar las conversaciones', error: error.message })
+  }
+}
+
+export const getBotConversation = async (req, res) => {
+  try {
+    const { platform, contactId } = req.params
+    const conversacion = await BotConversation.findOne({ contactId, platform }).lean()
+    if (!conversacion) return res.status(404).json({ message: 'Esa conversación no existe.' })
+
+    res.set('Cache-Control', 'no-store')
+    return res.status(200).json(conversacion)
+  } catch (error) {
+    return res.status(500).json({ message: 'No se pudo cargar la conversación', error: error.message })
+  }
+}
