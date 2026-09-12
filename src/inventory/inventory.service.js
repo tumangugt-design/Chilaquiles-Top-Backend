@@ -517,6 +517,66 @@ export const discountInventoryForOrder = async (items = [], orderId, actor, sauc
   return consumption
 }
 
+/**
+ * Devuelve al inventario lo que consumio un pedido que se cancela.
+ *
+ * Hasta ahora no existia reversa en ninguna parte del proyecto: un pedido que
+ * fallaba despues de descontar se borraba y el stock se quedaba descontado
+ * para siempre — el faltante aparecia despues como merma sin explicacion.
+ *
+ * Se reconstruye desde los InventoryLog de tipo OUT de ese pedido, no
+ * recalculando el consumo: si la receta cambio entre la venta y la
+ * cancelacion, hay que devolver lo que de verdad salio, no lo que saldria hoy.
+ *
+ * Lo que NO se hace: reponer los lotes FIFO. El costo de esa venta quedo
+ * asentado y se compensa con el movimiento de entrada; reabrir un lote ya
+ * consumido reescribiria historia contable. La cobertura de costo del periodo
+ * queda correcta porque entra y sale la misma cifra.
+ */
+export const restoreInventoryForOrder = async (orderId, actor, motivo = '') => {
+  const salidas = await InventoryLog.find({ orderId, type: 'OUT' }).lean()
+  if (salidas.length === 0) return { devueltos: 0, items: [] }
+
+  // Si ya se devolvio antes, no se devuelve dos veces.
+  const yaDevuelto = await InventoryLog.findOne({ orderId, type: 'IN', reason: { $regex: '^Cancelacion', $options: 'i' } }).lean()
+  if (yaDevuelto) return { devueltos: 0, items: [], yaDevuelto: true }
+
+  const logs = []
+  const items = []
+
+  for (const salida of salidas) {
+    const qty = Number(salida.amount) || 0
+    if (qty <= 0) continue
+
+    const item = await Inventory.findOneAndUpdate(
+      { name: normalizeName(salida.ingredientName) },
+      { $inc: { stock: qty } },
+      { new: false }
+    )
+    if (!item) continue
+
+    items.push({ name: salida.ingredientName, amount: qty, unit: item.unit })
+    logs.push({
+      ingredient: item._id,
+      ingredientName: item.name,
+      type: 'IN',
+      amount: qty,
+      previousStock: item.stock,
+      newStock: round(item.stock + qty),
+      orderId,
+      userId: actor?._id,
+      userName: actor?.name,
+      reason: `Cancelacion de pedido${motivo ? ` - ${motivo}` : ''}`,
+      // Se compensa el costo de la salida para que el COGS del periodo cuadre.
+      ...(salida.totalCost != null ? { costPerUnit: salida.costPerUnit, totalCost: salida.totalCost } : {}),
+    })
+  }
+
+  if (logs.length > 0) await InventoryLog.insertMany(logs)
+
+  return { devueltos: logs.length, items }
+}
+
 export const getAvailablePlatesCount = async () => {
   const inventory = await Inventory.find({})
   const portions = await Portion.find({})

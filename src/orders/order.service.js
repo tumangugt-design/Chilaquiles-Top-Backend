@@ -2,9 +2,9 @@
 import Order from './order.model.js';
 import Setting from '../settings/settings.model.js';
 import { buildMapsLink, calculateOrderTotal, normalizePhone } from '../helpers/order.helper.js';
-import { ORDER_STATUS, USER_ROLES, CHEF_ALLOWED_TRANSITIONS, DELIVERY_ALLOWED_TRANSITIONS, DELIVERY_PAYOUT_STATUS } from '../helpers/constants.js';
+import { ORDER_STATUS, CANCELABLE_STATUSES, USER_ROLES, CHEF_ALLOWED_TRANSITIONS, DELIVERY_ALLOWED_TRANSITIONS, DELIVERY_PAYOUT_STATUS } from '../helpers/constants.js';
 import { getDeliveryConfig } from '../settings/settings.service.js';
-import { discountInventoryForOrder, validateInventoryAvailability } from '../inventory/inventory.service.js';
+import { restoreInventoryForOrder, discountInventoryForOrder, validateInventoryAvailability } from '../inventory/inventory.service.js';
 import { publishOrderRealtimeEvent } from '../realtime/realtime.service.js';
 import { getGuatemalaOrderDatePrefix, getGuatemalaParts } from '../helpers/timezone.helper.js';
 import { notifyAdminNewOrder } from '../helpers/email.helper.js';
@@ -837,4 +837,62 @@ export const settleDeliveryPayout = async ({ repartidorId, orderIds }) => {
       'deliveryPayout.paidAt': new Date(),
     },
   });
+};
+
+/**
+ * Cancela un pedido y devuelve el inventario.
+ *
+ * Antes esto no existia: ORDER_STATUS no tenia 'cancelado' y no habia
+ * endpoint. Un pedido que entraba por error — el changarro quedo abierto, el
+ * cliente no contesta, la direccion esta fuera de rango — solo se podia
+ * "resolver" dejandolo colgado en la cola del chef para siempre, con el
+ * inventario descontado.
+ *
+ * El pedido NO se borra: se marca cancelado, con quien lo cancelo, cuando y
+ * por que. El historial y los movimientos de inventario siguen apuntando a
+ * algo que existe.
+ */
+export const cancelOrder = async (orderId, { actor, motivo = '' } = {}) => {
+  const order = await Order.findById(orderId);
+  if (!order) {
+    const error = new Error('Ese pedido no existe.');
+    error.statusCode = 404;
+    throw error;
+  }
+
+  if (order.status === ORDER_STATUS.CANCELADO) {
+    const error = new Error('Ese pedido ya estaba cancelado.');
+    error.statusCode = 409;
+    throw error;
+  }
+
+  if (!CANCELABLE_STATUSES.includes(order.status)) {
+    const error = new Error(`Un pedido ${order.status} ya no se puede cancelar.`);
+    error.statusCode = 409;
+    throw error;
+  }
+
+  // El inventario se devuelve ANTES de marcar el estado: si la devolucion
+  // falla, el pedido sigue vivo y se puede reintentar. Al reves quedaria un
+  // pedido cancelado con el stock todavia descontado.
+  let devolucion = { devueltos: 0, items: [] };
+  try {
+    devolucion = await restoreInventoryForOrder(order._id, actor, motivo);
+  } catch (inventoryError) {
+    const error = new Error(`No se pudo devolver el inventario: ${inventoryError.message}. El pedido NO se cancelo.`);
+    error.statusCode = 500;
+    throw error;
+  }
+
+  order.status = ORDER_STATUS.CANCELADO;
+  order.cancelledAt = new Date();
+  order.cancelledBy = actor?._id || null;
+  order.cancelReason = String(motivo || '').slice(0, 300);
+  await order.save();
+
+  await publishOrderRealtimeEvent(order);
+
+  console.log(`[Pedidos] ${order.orderNumber} cancelado por ${actor?.name || 'admin'}: ${motivo || 'sin motivo'} | ${devolucion.devueltos} insumos devueltos`);
+
+  return { order, devolucion };
 };

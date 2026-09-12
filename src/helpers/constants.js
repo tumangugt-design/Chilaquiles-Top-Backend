@@ -18,7 +18,10 @@ export const ORDER_STATUS = {
   LISTO_PARA_DESPACHO: 'listo_para_despacho',
   RECOLECTADO: 'recolectado',
   EN_CAMINO: 'en_camino',
-  ENTREGADO: 'entregado'
+  ENTREGADO: 'entregado',
+  // Un pedido se cancela: no se borra. Borrarlo perderia el historial y dejaria
+  // los movimientos de inventario apuntando a un pedido inexistente.
+  CANCELADO: 'cancelado'
 }
 
 export const ORDER_STATUS_FLOW = {
@@ -27,8 +30,21 @@ export const ORDER_STATUS_FLOW = {
   [ORDER_STATUS.LISTO_PARA_DESPACHO]: [ORDER_STATUS.RECOLECTADO],
   [ORDER_STATUS.RECOLECTADO]: [ORDER_STATUS.EN_CAMINO],
   [ORDER_STATUS.EN_CAMINO]: [ORDER_STATUS.ENTREGADO],
-  [ORDER_STATUS.ENTREGADO]: []
+  [ORDER_STATUS.ENTREGADO]: [],
+  [ORDER_STATUS.CANCELADO]: []
 }
+
+// Desde donde se puede cancelar: desde cualquier estado MENOS entregado (ya
+// salio) y cancelado (ya esta). La cancelacion no va por el flujo normal —
+// tiene su propio endpoint porque ademas devuelve el inventario.
+export const CANCELABLE_STATUSES = [
+  ORDER_STATUS.PENDIENTE_PAGO,
+  ORDER_STATUS.RECIBIDO,
+  ORDER_STATUS.EN_PROCESO,
+  ORDER_STATUS.LISTO_PARA_DESPACHO,
+  ORDER_STATUS.RECOLECTADO,
+  ORDER_STATUS.EN_CAMINO,
+]
 
 export const CHEF_ALLOWED_TRANSITIONS = {
   [ORDER_STATUS.RECIBIDO]: [ORDER_STATUS.EN_PROCESO],

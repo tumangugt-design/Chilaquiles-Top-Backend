@@ -1,5 +1,5 @@
 import { Router } from 'express'
-import { createOrder, getOrders, getOrderHistory, updateOrderStatus, getOrderWorkflowHelp, clearDeliveredOrders, trackOrder, getOrderConfirmationDetails, getDispatchOrders, assignDriver, getDeliveryPayoutsController, settleDeliveryPayoutController } from './order.controller.js'
+import { createOrder, getOrders, getOrderHistory, updateOrderStatus, getOrderWorkflowHelp, clearDeliveredOrders, trackOrder, getOrderConfirmationDetails, getDispatchOrders, assignDriver, getDeliveryPayoutsController, settleDeliveryPayoutController, cancelOrderController } from './order.controller.js'
 import { rateLimit } from '../middlewares/rateLimit.middleware.js'
 import { verifyAuthToken, optionalAuthToken } from '../middlewares/auth.middleware.js'
 import { requireApprovedStatus, requireRole } from '../middlewares/role.middleware.js'
@@ -23,5 +23,9 @@ router.post('/delivery-payouts/settle', requireRole([USER_ROLES.ADMIN]), settleD
 router.patch('/:orderId/assign-driver', requireRole([USER_ROLES.ADMIN]), assignDriver)
 router.get('/', requireRole([USER_ROLES.ADMIN, USER_ROLES.CHEF, USER_ROLES.REPARTIDOR]), getOrders)
 router.patch('/:orderId/status', requireRole([USER_ROLES.ADMIN, USER_ROLES.CHEF, USER_ROLES.REPARTIDOR]), updateOrderStatus)
+
+// Cancelar: solo admin, y devuelve el inventario. Va aparte del flujo de
+// estados porque no es una transicion mas — es una reversa.
+router.post('/:orderId/cancel', requireRole([USER_ROLES.ADMIN]), cancelOrderController)
 
 export default router

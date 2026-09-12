@@ -1,4 +1,4 @@
-import { createOrderRecord, getOrdersByRole, getOrderHistoryForAdmin, updateOrderStatusRecord, hideDeliveredOrdersRecord, getOrderForTracking, getOrderConfirmation, getDispatchBoard, assignOrderToDriver, getDeliveryPayouts, settleDeliveryPayout } from './order.service.js'
+import { createOrderRecord, getOrdersByRole, getOrderHistoryForAdmin, updateOrderStatusRecord, hideDeliveredOrdersRecord, getOrderForTracking, getOrderConfirmation, getDispatchBoard, assignOrderToDriver, getDeliveryPayouts, settleDeliveryPayout, cancelOrder } from './order.service.js'
 import { isOperatingNow } from '../settings/settings.service.js'
 import { USER_ROLES } from '../helpers/constants.js'
 
@@ -251,5 +251,25 @@ export const settleDeliveryPayoutController = async (req, res) => {
     return res.status(200).json({ message: 'Pagos marcados como liquidados', result })
   } catch (error) {
     return res.status(error.statusCode || 500).json({ message: error.message || 'No se pudo liquidar' })
+  }
+}
+
+// Cancelar un pedido. Solo ADMIN: devuelve inventario y cierra la comanda.
+export const cancelOrderController = async (req, res) => {
+  try {
+    const { orderId } = req.params
+    const motivo = String(req.body?.motivo || req.body?.reason || '').trim()
+
+    const { order, devolucion } = await cancelOrder(orderId, { actor: req.user, motivo })
+
+    return res.status(200).json({
+      message: devolucion.devueltos > 0
+        ? `Pedido cancelado. Se devolvieron ${devolucion.devueltos} insumos al inventario.`
+        : 'Pedido cancelado. No había inventario descontado que devolver.',
+      order,
+      devolucion,
+    })
+  } catch (error) {
+    return res.status(error.statusCode || 500).json({ message: error.message || 'No se pudo cancelar el pedido' })
   }
 }

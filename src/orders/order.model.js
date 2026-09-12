@@ -121,7 +121,14 @@ const orderSchema = new mongoose.Schema({
     orderDelivered: { sent: { type: Boolean, default: false }, sentAt: { type: Date }, method: { type: String, enum: ['normal', 'template'] }, error: { type: String }, wamid: { type: String } },
     paymentConfirmed: { sent: { type: Boolean, default: false }, sentAt: { type: Date }, method: { type: String, enum: ['normal', 'template'] }, error: { type: String }, wamid: { type: String } },
     survey: { sent: { type: Boolean, default: false }, sentAt: { type: Date }, method: { type: String, enum: ['normal_flow', 'template_flow'] }, error: { type: String }, wamid: { type: String } }
-  }
+  },
+
+  // Cancelacion: el pedido no se borra, se marca — asi el historial y los
+  // movimientos de inventario siguen apuntando a algo que existe.
+  cancelledAt: { type: Date, default: null },
+  cancelledBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
+  cancelReason: { type: String, default: '' },
+
 }, { timestamps: true });
 
 export default mongoose.model('Order', orderSchema);

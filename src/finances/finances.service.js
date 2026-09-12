@@ -119,11 +119,12 @@ const summarizeRealCogs = (outLogs) => {
 const totalCargaFiscalYComisiones = (fiscal) => round2(fiscal.ivaNetoEstimado + (fiscal.isrEstimado || 0) + fiscal.comisionRecurrente + fiscal.facturacionFeeRecurrente)
 
 const getPeriodStats = async (start, end, cfg, { isrMonthly = false } = {}) => {
-  // 'cancelado' no existe en ORDER_STATUS, asi que este filtro no filtraba
-  // nada: todo pedido con tarjeta abandonado en el checkout se contaba como
-  // ingreso, y encima se le cargaba comision de Recurrente, FEL e ISR sobre
-  // una venta que nunca ocurrio.
-  const orders = await Order.find({ createdAt: { $gte: start, $lt: end }, status: { $ne: ORDER_STATUS.PENDIENTE_PAGO } }).select('total paymentMethod')
+  // Fuera de los ingresos: el pedido con tarjeta abandonado en el checkout
+  // (nunca se pago) y el cancelado (se revirtio). Antes el filtro decia
+  // { $ne: 'cancelado' } con un estado que NO existia en ORDER_STATUS, asi que
+  // no filtraba nada y los abandonados se contaban como venta, con comision de
+  // Recurrente, FEL e ISR encima.
+  const orders = await Order.find({ createdAt: { $gte: start, $lt: end }, status: { $nin: [ORDER_STATUS.PENDIENTE_PAGO, ORDER_STATUS.CANCELADO] } }).select('total paymentMethod')
   const revenue = orders.reduce((sum, order) => sum + (order.total || 0), 0)
 
   const logsIn = await InventoryLog.find({ type: 'IN', createdAt: { $gte: start, $lt: end } }).select('price')
@@ -270,7 +271,7 @@ export const getFinancialSummary = async () => {
   ])
 
   const [globalOrders, globalLogsIn, globalLogsOut, valorInventario, gastoPorProveedor] = await Promise.all([
-    Order.find({ status: { $ne: 'cancelado' } }).select('total paymentMethod createdAt'),
+    Order.find({ status: { $nin: [ORDER_STATUS.PENDIENTE_PAGO, ORDER_STATUS.CANCELADO] } }).select('total paymentMethod createdAt'),
     InventoryLog.find({ type: 'IN' }).select('price createdAt'),
     InventoryLog.find({ type: 'OUT' }).select('totalCost createdAt'),
     getInventoryValuation(),
@@ -378,7 +379,7 @@ export const getFinancialSummary = async () => {
 // una proyeccion); esto es lo que realmente paso, orden por orden.
 export const getPromotionsProfitabilityReport = async () => {
   const orders = await Order.find({
-    status: { $ne: 'cancelado' },
+    status: { $nin: [ORDER_STATUS.PENDIENTE_PAGO, ORDER_STATUS.CANCELADO] },
     $or: [
       { 'appliedPromo.id': { $ne: null } },
       { 'appliedPromos.0': { $exists: true } }
