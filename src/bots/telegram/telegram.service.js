@@ -5,6 +5,9 @@ import Portion from '../../inventory/portion.model.js';
 import User from '../../users/user.model.js';
 import Setting from '../../settings/settings.model.js';
 import { isOperatingNow, getOperatingHoursSetting, updateOperatingHoursSetting, deactivateExpiredPromotions } from '../../settings/settings.service.js';
+
+// Mismo orden que usa isOperatingNow para resolver el dia de la semana.
+const DAY_KEYS = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
 import { getAdminAICompletion, prepareAdminBotContext } from './telegram.ai.js';
 import TelegramBotMemory from './bot_memory.model.js';
 import { getFinancialSummary } from '../../finances/finances.service.js';
@@ -186,23 +189,64 @@ const ejecutarHerramienta = async (toolCall) => {
     }
 
     else if (name === 'updateOperatingHours') {
-      // Merge the incoming partial update with current settings
       const current = await getOperatingHoursSetting();
       const payload = { ...current };
 
+      // Un dia tiene que quedar COMPLETO: isOpen + openTime + closeTime.
+      //
+      // El esquema le dice al modelo "manda solo los campos a cambiar", asi que
+      // ante "abre hasta las 3 pm hoy" mandaba { closeTime: '15:00' } y nada
+      // mas. isOperatingNow arranca con `if (!schedule.isOpen) return cerrado`,
+      // asi que el local quedaba CERRADO — y el bot contestaba "horario
+      // configurado", porque la escritura si habia ocurrido. Pasó de verdad el
+      // 14 de septiembre de 2026.
+      //
+      // Se completa contra lo que ya habia para ese dia, y mencionar una hora
+      // sin decir isOpen:false se toma como intencion de abrir.
+      const completarDia = (parcial = {}, base = {}) => {
+        const dia = { ...base, ...parcial };
+        const mencionaHora = parcial.openTime !== undefined || parcial.closeTime !== undefined;
+        if (parcial.isOpen === undefined && mencionaHora) dia.isOpen = true;
+        if (dia.isOpen && !dia.openTime) dia.openTime = base.openTime || '10:00';
+        if (dia.isOpen && !dia.closeTime) dia.closeTime = base.closeTime || '21:00';
+        return dia;
+      };
+
       if (args.weekly) {
-        payload.weekly = { ...current.weekly, ...args.weekly };
+        payload.weekly = { ...current.weekly };
+        for (const [dia, parcial] of Object.entries(args.weekly)) {
+          payload.weekly[dia] = completarDia(parcial, current.weekly?.[dia] || {});
+        }
       }
+
       if (args.specialDates) {
-        payload.specialDates = { ...(current.specialDates || {}), ...args.specialDates };
+        payload.specialDates = { ...(current.specialDates || {}) };
+        for (const [fecha, parcial] of Object.entries(args.specialDates)) {
+          // La base de una fecha especial es lo que ya habia para esa fecha; si
+          // no habia nada, el horario semanal de ese dia de la semana.
+          const diaSemana = DAY_KEYS[new Date(`${fecha}T12:00:00-06:00`).getDay()];
+          const base = current.specialDates?.[fecha] || current.weekly?.[diaSemana] || {};
+          payload.specialDates[fecha] = completarDia(parcial, base);
+        }
       }
+
       if (args.dateRanges) {
         payload.dateRanges = args.dateRanges;
       }
 
       const updated = await updateOperatingHoursSetting(payload);
       const newStatus = await isOperatingNow();
-      return JSON.stringify({ message: "Horario actualizado correctamente.", updatedSchedule: updated, currentStatus: newStatus });
+
+      // El resultado dice si el local quedo ABIERTO DE VERDAD. Antes el modelo
+      // solo veia "actualizado" y reportaba exito con el local cerrado.
+      return JSON.stringify({
+        message: newStatus.isCurrentlyOpen
+          ? 'Horario actualizado. El local esta ABIERTO en este momento.'
+          : 'Horario actualizado, pero el local sigue CERRADO en este momento. Avisale al usuario y explicale por que (revisa openTime, closeTime e isOpen del dia).',
+        abiertoAhora: newStatus.isCurrentlyOpen,
+        horarioDeHoy: { isOpen: newStatus.isOpen, openTime: newStatus.openTime, closeTime: newStatus.closeTime },
+        updatedSchedule: updated,
+      });
     }
 
     else if (name === 'getUsers') {
