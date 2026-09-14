@@ -39,7 +39,16 @@ const fetchContextData = async () => {
 // ejecutan cuando la persona responde que si. La confirmacion vive 5 minutos
 // y es por chat.
 // ============================================================
-const HERRAMIENTAS_QUE_ESCRIBEN = new Set(['updateOperatingHours', 'generateContentDraft']);
+// updateOperatingHours SALIO de esta lista a proposito. Cambiar el horario es
+// la accion mas frecuente del dueno, es reversible y se ve al instante en la
+// tienda. Tenerla detras de una confirmacion que el modelo debia transmitir
+// costo una apertura: el 14/09/2026 el modelo recibio el aviso de confirmacion
+// como resultado de herramienta y, en vez de preguntar, contesto "el horario
+// semanal ha sido actualizado" — sin que se escribiera una sola linea.
+// Aca solo quedan las acciones que publican o gastan.
+const HERRAMIENTAS_QUE_ESCRIBEN = new Set(['generateContentDraft']);
+
+const MARCA_CONFIRMACION = 'CONFIRMACION_REQUERIDA:';
 
 const RESUMEN_DE_ESCRITURA = {
   updateOperatingHours: (args) => `cambiar el horario o el estado del restaurante\n${JSON.stringify(args, null, 2)}`,
@@ -70,7 +79,7 @@ const executeTool = async (toolCall, { chatId = null, yaConfirmado = false } = {
       pendientes.set(String(chatId), { toolCall, vence: Date.now() + VENCE_MS });
     }
     const resumen = RESUMEN_DE_ESCRITURA[toolCall.function.name]?.(argsPreview) || toolCall.function.name;
-    return `CONFIRMACION_REQUERIDA: esta accion cambia el negocio. Decile al usuario exactamente esto y pedile que responda SI para ejecutarla: ${resumen}`;
+    return `${MARCA_CONFIRMACION} ${resumen}`;
   }
 
   return ejecutarHerramienta(toolCall);
@@ -387,6 +396,16 @@ export const processAdminMessage = async (text, chatId) => {
         for (const toolCall of aiMessage.tool_calls) {
           console.log(`[Agent] Executing tool: ${toolCall.function.name}`);
           const result = await executeTool(toolCall, { chatId });
+
+          // La pregunta de confirmacion NO pasa por el modelo. Si se la
+          // devolvemos como resultado de herramienta, el modelo puede
+          // parafrasearla, ignorarla o —como paso el 14/09/2026— reportar
+          // exito de algo que nunca se ejecuto. Se corta la vuelta y se le
+          // escribe al usuario tal cual.
+          if (typeof result === 'string' && result.startsWith(MARCA_CONFIRMACION)) {
+            const detalle = result.slice(MARCA_CONFIRMACION.length).trim();
+            return `Antes de hacerlo necesito que confirmes:\n\n${detalle}\n\nRespondé SI para ejecutarlo.`;
+          }
 
           // El resultado se marca como DATO, no como instruccion. Adentro
           // viajan strings que escribio un cliente (el nombre de un pedido,
