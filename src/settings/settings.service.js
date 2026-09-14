@@ -45,13 +45,29 @@ const normalizeWeekly = (weekly = {}) => {
   }, {})
 }
 
+// specialDates se indexa por fecha 'YYYY-MM-DD'. En produccion aparecieron
+// llaves basura ('value', 'key': 20260605) que entraron al guardar el documento
+// Setting completo en vez de su .value. No rompen la busqueda por fecha, pero
+// ensucian el objeto y revientan cualquier recorrido que asuma fechas.
+// Se limpian en la normalizacion: getOperatingHoursSetting reescribe el
+// documento cuando el normalizado difiere, asi que se corrige solo en la base.
+const FECHA_ISO = /^\d{4}-\d{2}-\d{2}$/
+
+const normalizeSpecialDates = (specialDates = {}) => {
+  if (!specialDates || typeof specialDates !== 'object') return {}
+  return Object.entries(specialDates).reduce((acc, [fecha, horario]) => {
+    if (FECHA_ISO.test(String(fecha)) && horario && typeof horario === 'object') acc[fecha] = horario
+    return acc
+  }, {})
+}
+
 const normalizeOperatingHours = (value = {}) => {
   const merged = { ...DEFAULT_OPERATING_HOURS, ...(value || {}) }
 
   return {
     ...merged,
     weekly: normalizeWeekly(merged.weekly),
-    specialDates: merged.specialDates || {},
+    specialDates: normalizeSpecialDates(merged.specialDates),
     dateRanges: Array.isArray(merged.dateRanges) ? merged.dateRanges : [],
     isOpen: merged.isOpen === undefined ? true : Boolean(merged.isOpen),
     openTime: sanitizeTime(merged.openTime) || '08:00',
@@ -100,35 +116,53 @@ const getGuatemalaDateTime = () => {
   return { dateString: gt.dateString, totalMinutes, dayOfWeek: gt.dayOfWeek }
 }
 
+// Una excepcion (specialDates o dateRanges) puede llegar incompleta: el agente
+// de Telegram manda SOLO los campos que cambian ("cierro a las 15:00"), y el
+// admin puede guardar solo una hora. Antes eso dejaba isOpen en undefined, que
+// cae en el `if (!schedule.isOpen)` de abajo y apagaba la tienda aunque la
+// intencion fuera abrir. Aca completamos lo que falte con el horario del dia.
+// Es defensa en la LECTURA: arregla tambien las excepciones incompletas que ya
+// esten guardadas en la base, no solo las que se escriban de ahora en adelante.
+const completarConBase = (parcial, base = {}) => {
+  if (!parcial) return parcial
+  const horario = { ...parcial }
+  if (horario.isOpen === undefined || horario.isOpen === null) {
+    // Si menciona horas, la intencion era abrir. Si no, hereda el dia.
+    horario.isOpen = (horario.openTime || horario.closeTime) ? true : Boolean(base.isOpen)
+  }
+  if (horario.isOpen) {
+    if (!horario.openTime) horario.openTime = base.openTime || '10:00'
+    if (!horario.closeTime) horario.closeTime = base.closeTime || '21:00'
+  }
+  return horario
+}
+
 export const isOperatingNow = async () => {
   const settings = await getOperatingHoursSetting()
   const { dateString, totalMinutes, dayOfWeek } = getGuatemalaDateTime()
+
+  // Horario base del dia (semanal, o el legacy si no hay semanal). Sirve como
+  // relleno de cualquier excepcion que venga a medias.
+  const dayKey = DAY_KEYS[dayOfWeek]
+  const base = (settings.weekly && (settings.weekly[dayKey] || settings.weekly[String(dayOfWeek)])) ||
+    { isOpen: settings.isOpen, openTime: settings.openTime, closeTime: settings.closeTime }
 
   let schedule = null
 
   // 1. Check special dates (exceptions)
   if (settings.specialDates && settings.specialDates[dateString]) {
-    schedule = settings.specialDates[dateString]
+    schedule = completarConBase(settings.specialDates[dateString], base)
   }
 
   // 2. Check date ranges
   if (!schedule && settings.dateRanges && Array.isArray(settings.dateRanges)) {
-    // Sort ranges by start date descending to get the most specific/recent one if they overlap
     const activeRange = settings.dateRanges.find(r => dateString >= r.start && dateString <= r.end)
-    if (activeRange) {
-      schedule = activeRange
-    }
+    if (activeRange) schedule = completarConBase(activeRange, base)
   }
 
-  // 3. Check weekly schedule
-  if (!schedule && settings.weekly) {
-    const dayKey = DAY_KEYS[dayOfWeek]
-    schedule = settings.weekly[dayKey] || settings.weekly[String(dayOfWeek)] || settings.weekly[dayOfWeek]
-  }
-
-  // 4. Fallback to legacy
+  // 3. Sin excepcion que aplique: el horario del dia tal cual.
   if (!schedule) {
-    schedule = { isOpen: settings.isOpen, openTime: settings.openTime, closeTime: settings.closeTime }
+    schedule = base
   }
 
   if (!schedule.isOpen) return { ...schedule, isCurrentlyOpen: false }
