@@ -246,12 +246,27 @@ const ejecutarHerramienta = async (toolCall) => {
       const updated = await updateOperatingHoursSetting(payload);
       const newStatus = await isOperatingNow();
 
+      // Precedencia real: fecha especial > rango > semanal. Si se cambia el
+      // horario SEMANAL pero hoy tiene una excepcion guardada, el cambio NO se
+      // ve hoy en la tienda — y parece que el bot desobedecio.
+      //
+      // Paso el 16/09/2026: a las 12:01 se puso "hoy hasta las 3 pm" (excepcion
+      // para 2026-09-16) y a las 12:02 "de lunes a viernes de 10 a 7". El
+      // semanal quedo bien, pero la tienda siguio mostrando 10:00-15:00 porque
+      // la excepcion de hoy pisa. El bot reporto exito sin mencionarlo.
+      const hoyISO = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Guatemala' }).format(new Date());
+      const excepcionHoy = updated.specialDates?.[hoyISO];
+      const semanalPisadoHoy = Boolean(args.weekly && excepcionHoy);
+
       // El resultado dice si el local quedo ABIERTO DE VERDAD. Antes el modelo
       // solo veia "actualizado" y reportaba exito con el local cerrado.
       return JSON.stringify({
         message: newStatus.isCurrentlyOpen
           ? 'Horario actualizado. El local esta ABIERTO en este momento.'
           : 'Horario actualizado, pero el local sigue CERRADO en este momento. Avisale al usuario y explicale por que (revisa openTime, closeTime e isOpen del dia).',
+        ...(semanalPisadoHoy ? {
+          AVISO_OBLIGATORIO: `El horario semanal quedo guardado, pero HOY (${hoyISO}) NO cambia: hoy tiene una excepcion de ${excepcionHoy.openTime} a ${excepcionHoy.closeTime} que pisa el horario semanal. Decile esto al usuario SI O SI en tu respuesta y preguntale si quiere que hoy tambien quede con el horario nuevo.`
+        } : {}),
         abiertoAhora: newStatus.isCurrentlyOpen,
         horarioDeHoy: { isOpen: newStatus.isOpen, openTime: newStatus.openTime, closeTime: newStatus.closeTime },
         updatedSchedule: updated,
