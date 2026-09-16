@@ -19,6 +19,22 @@ const inventoryLogSchema = new mongoose.Schema({
     enum: ['IN', 'OUT', 'ADJUSTMENT', 'MERMA'],
     required: true
   },
+  // Por que se movio, cuando el movimiento vino de una rectificacion.
+  // CONTEO            conteo fisico o corte de arranque
+  // MERMA             se perdio, se cayo, se echo a perder
+  // DESCUADRE_RECETA  la receta descuenta distinto de lo que se usa de verdad
+  // DEVOLUCION        entro de vuelta
+  //
+  // No es cosmetico: separa "perdi producto" de "mi receta esta mal medida".
+  // El primero es plata que se fue; el segundo es que tu costo teorico por
+  // plato no corresponde con el real, y se arregla en el recetario, no
+  // rectificando todos los dias.
+  rectificationClass: {
+    type: String,
+    enum: ['CONTEO', 'MERMA', 'DESCUADRE_RECETA', 'DEVOLUCION', null],
+    default: null,
+    index: true
+  },
   amount: {
     type: Number,
     required: true

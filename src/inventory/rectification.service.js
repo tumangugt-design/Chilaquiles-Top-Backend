@@ -40,6 +40,24 @@ const normalizar = (valor = '') => String(valor || '').trim().toLowerCase()
 
 const MODOS = new Set(['CORTE', 'AJUSTE'])
 
+// Por que se movio el inventario. No es una etiqueta decorativa: decide de
+// donde sale el costo cuando el movimiento es hacia ARRIBA.
+//
+//   CONTEO            contaste y hay mas de lo que decia el sistema, o es el
+//                     corte de arranque. Es valor que ENTRA -> exige costo.
+//   DESCUADRE_RECETA  el sistema descontó de mas. La receta dice 100 ml por
+//                     plato y el cocinero sirve 90, asi que cada 10 platos
+//                     sobran 100 ml REALES que el sistema ya dio por
+//                     consumidos. Ese producto nunca debio salir: no es valor
+//                     nuevo, es valor que vuelve -> reingresa al costo del
+//                     lote vigente, no a uno inventado.
+//   DEVOLUCION        volvio producto que ya habia salido. Mismo trato.
+//   MERMA             se perdio, se cayo, se echo a perder. Solo hacia abajo.
+const CLASES = new Set(['CONTEO', 'MERMA', 'DESCUADRE_RECETA', 'DEVOLUCION'])
+
+// Clases cuyo costo NO se declara: ya existia en los lotes.
+const CLASES_QUE_REINGRESAN = new Set(['DESCUADRE_RECETA', 'DEVOLUCION'])
+
 const errorPeticion = (mensaje) => {
   const error = new Error(mensaje)
   error.statusCode = 400
@@ -77,6 +95,18 @@ const costoUnitarioVigente = async (name) => {
     .select('costPerProducedUnit')
     .lean()
   return lote ? Number(lote.costPerProducedUnit || 0) : null
+}
+
+// Cuando ya no quedan lotes vivos (todo consumido) pero hay que reingresar
+// producto, el costo sale del ultimo lote que existio de ese producto. Es una
+// aproximacion honesta: el producto que reaparece salio de ese lote.
+const ultimoCostoConocido = async (name) => {
+  const lote = await PurchaseAllocation.findOne({ stockItemName: name })
+    .sort({ createdAt: -1 })
+    .select('costPerProducedUnit')
+    .lean()
+  const costo = lote ? Number(lote.costPerProducedUnit || 0) : 0
+  return costo > 0 ? costo : null
 }
 
 // ------------------------------------------------------------
@@ -124,8 +154,16 @@ const armarPlan = async ({ modo, items = [] }) => {
       ? null
       : roundUnitCost(costoUnitarioEntrada / factor)
 
+    // En CORTE todo es conteo por definicion. En AJUSTE hay que decirlo:
+    // adivinar la clase seria adivinar el costo.
+    const clase = String(bruto?.clase || (modo === 'CORTE' ? 'CONTEO' : '')).trim().toUpperCase()
+    if (!CLASES.has(clase)) {
+      throw errorPeticion(`"${item.name}" necesita clase. Opciones: ${[...CLASES].join(', ')}.`)
+    }
+
     declarados.set(item.name, {
       ...item,
+      clase,
       cantidadDeclarada: cantidadFinal,
       entrada: { cantidad: cantidadCruda, unidad: unidadEntrada, costoUnitario: costoUnitarioEntrada },
       costoPorUnidadCatalogo
@@ -145,6 +183,7 @@ const armarPlan = async ({ modo, items = [] }) => {
         unidadCatalogo: inv.unit || 'und',
         categoria: inv.category || 'Otros',
         stockActual: Number(inv.stock || 0),
+        clase: 'CONTEO',
         cantidadDeclarada: 0,
         entrada: { cantidad: 0, unidad: inv.unit || 'und', costoUnitario: null },
         costoPorUnidadCatalogo: null
@@ -167,11 +206,31 @@ const armarPlan = async ({ modo, items = [] }) => {
     else if (delta < 0) accion = 'BAJA'
 
     let valor = null
+    let costoAplicado = item.costoPorUnidadCatalogo
+
     if (accion === 'ALTA') {
-      if (item.costoPorUnidadCatalogo === null) {
-        advertencias.push(`"${item.name}": subis ${Math.abs(delta)} ${item.unidadCatalogo} sin costo unitario. Va a entrar a Q0.00 y todo plato que lo use va a reportar margen inflado.`)
+      if (item.clase === 'MERMA') {
+        throw errorPeticion(`"${item.name}" viene como MERMA pero la cantidad SUBE. La merma solo va hacia abajo.`)
       }
-      valor = roundMoney(Math.abs(delta) * Number(item.costoPorUnidadCatalogo || 0))
+
+      if (CLASES_QUE_REINGRESAN.has(item.clase) && costoAplicado === null) {
+        // No es producto nuevo: es producto que el sistema dio por consumido
+        // y sigue ahi. Vuelve al costo que ya tenia.
+        costoAplicado = await costoUnitarioVigente(item.name)
+        if (costoAplicado === null) {
+          const ultimo = await ultimoCostoConocido(item.name)
+          costoAplicado = ultimo
+          if (ultimo !== null) {
+            advertencias.push(`"${item.name}": no hay lotes vivos, asi que el reingreso usa el ultimo costo conocido (Q${ultimo}/${item.unidadCatalogo}).`)
+          }
+        }
+      }
+
+      if (costoAplicado === null) {
+        advertencias.push(`"${item.name}": subis ${Math.abs(delta)} ${item.unidadCatalogo} sin costo unitario y no hay de donde heredarlo. Va a entrar a Q0.00 y todo plato que lo use va a reportar margen inflado.`)
+      }
+
+      valor = roundMoney(Math.abs(delta) * Number(costoAplicado || 0))
     } else if (accion === 'BAJA') {
       const vigente = await costoUnitarioVigente(item.name)
       if (vigente === null) {
@@ -189,8 +248,10 @@ const armarPlan = async ({ modo, items = [] }) => {
       stockActual: roundMoney(item.stockActual),
       stockDeclarado: roundMoney(item.cantidadDeclarada),
       accion,
+      clase: item.clase,
       delta: roundMoney(delta),
-      costoUnitario: item.costoPorUnidadCatalogo,
+      costoUnitario: costoAplicado,
+      costoDeclarado: item.costoPorUnidadCatalogo,
       valorEstimado: valor,
       declaradoComo: item.entrada
     })
@@ -211,7 +272,19 @@ const armarPlan = async ({ modo, items = [] }) => {
       sinCambio: lineas.filter((l) => l.accion === 'SIN_CAMBIO').length,
       valorQueEntra: valorAlta,
       valorQueSale: valorBaja,
-      valorInventarioResultante: valorAlta
+      valorInventarioResultante: valorAlta,
+      // Separado a proposito: perdida real y descuadre de receta se arreglan
+      // de formas distintas. La perdida se controla en la cocina; el
+      // descuadre se arregla en el recetario.
+      porClase: [...CLASES].reduce((acc, clase) => {
+        const delClase = lineas.filter((l) => l.clase === clase && l.accion !== 'SIN_CAMBIO')
+        if (delClase.length === 0) return acc
+        acc[clase] = {
+          productos: delClase.length,
+          valor: roundMoney(delClase.reduce((sum, l) => sum + Number(l.valorEstimado || 0), 0))
+        }
+        return acc
+      }, {})
     }
   }
 }
@@ -243,6 +316,12 @@ const fotografiarEstado = async () => {
 // ------------------------------------------------------------
 // EJECUCION
 // ------------------------------------------------------------
+const tipoDeLog = (linea) => {
+  if (linea.clase === 'MERMA') return 'MERMA'
+  if (linea.accion === 'ALTA' && linea.clase === 'CONTEO') return 'IN'
+  return 'ADJUSTMENT'
+}
+
 const crearLoteRectificacion = async ({ item, cantidad, costoUnitario, motivo }) => {
   const costo = Number(costoUnitario || 0)
   const inheritedCost = roundMoney(cantidad * costo)
@@ -373,8 +452,14 @@ export const rectificarInventario = async ({
       await InventoryLog.create({
         ingredient: item._id,
         ingredientName: item.name,
-        // MERMA para bajas, IN para altas, ADJUSTMENT para el resto.
-        type: linea.accion === 'BAJA' ? 'MERMA' : (linea.accion === 'ALTA' ? 'IN' : 'ADJUSTMENT'),
+        // El tipo lo decide la CLASE, no la direccion:
+        //   MERMA        producto perdido. Su costo es perdida, no venta.
+        //   IN           producto que entra de verdad (conteo por encima).
+        //   ADJUSTMENT   correccion de un descuadre o una devolucion: el
+        //                producto no entro ni salio del negocio, solo estaba
+        //                mal contado.
+        type: tipoDeLog(linea),
+        rectificationClass: linea.clase,
         amount: Math.abs(linea.delta),
         previousStock: stockPrevio,
         newStock: stockFinal,
