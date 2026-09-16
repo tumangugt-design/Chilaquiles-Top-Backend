@@ -3,6 +3,7 @@ import InventoryLog from './inventoryLog.model.js'
 import Portion from './portion.model.js'
 import Supplier from '../suppliers/supplier.model.js'
 import { getAggregatedConsumption, validateInventoryAvailability, manualStockAdjustment, getAvailablePlatesCount, convertAmountToCatalogUnit, peekCurrentBatchCosts } from './inventory.service.js'
+import { rectificarInventario } from './rectification.service.js'
 import { INVENTORY_CATALOG, INVENTORY_CATALOG_MAP, ITEM_TYPES, ITEM_TYPE_VALUES, toDisplayLabel } from '../helpers/constants.js'
 
 const PROTECTED_PACKAGING_NAMES = INVENTORY_CATALOG
@@ -492,6 +493,28 @@ export const updateInventoryItemDetails = async (req, res) => {
     return res.status(200).json({ message: 'Detalles actualizados correctamente', item })
   } catch (error) {
     return res.status(500).json({ message: 'Error updating item details', error: error.message })
+  }
+}
+
+// Rectificacion de inventario. Ver rectification.service.js para el por que.
+// dryRun arranca en true a proposito: para escribir hay que pedirlo explicito.
+// Nadie deberia poder reescribir el inventario por mandar un body incompleto.
+export const rectifyInventory = async (req, res) => {
+  try {
+    const resultado = await rectificarInventario({
+      modo: req.body?.modo,
+      motivo: req.body?.motivo,
+      items: req.body?.items,
+      dryRun: req.body?.dryRun !== false,
+      confirmarBorrado: req.body?.confirmarBorrado === true,
+      actor: req.user
+    })
+    return res.status(200).json(resultado)
+  } catch (error) {
+    return res.status(error.statusCode || 500).json({
+      message: error.message || 'Error rectificando inventario',
+      error: error.message
+    })
   }
 }
 

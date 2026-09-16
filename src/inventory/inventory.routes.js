@@ -5,7 +5,8 @@ import {
   deleteInventoryItem, 
   renameInventoryItem,
   updateInventoryItemDetails,
-  adjustInventoryStock, 
+  adjustInventoryStock,
+  rectifyInventory, 
   previewRecipeConsumption, 
   getInventoryLogs, 
   getAvailablePlates, 
@@ -64,6 +65,8 @@ router.post('/sync', requireRole([USER_ROLES.ADMIN]), syncInventory);
 router.delete('/:name', requireRole([USER_ROLES.ADMIN]), deleteInventoryItem);
 router.patch('/:name/details', requireRole([USER_ROLES.ADMIN]), updateInventoryItemDetails);
 router.patch('/:name/rename', requireRole([USER_ROLES.ADMIN]), renameInventoryItem);
+// Mueve stock Y lotes FIFO a la vez. Las dos rutas de abajo mueven solo stock.
+router.post('/rectification', requireRole([USER_ROLES.ADMIN]), rectifyInventory);
 router.patch('/:name/stock', requireRole([USER_ROLES.ADMIN]), adjustInventoryStock);
 router.patch('/:name/direct-stock', requireRole([USER_ROLES.ADMIN]), updateInventoryItemStock);
 router.patch('/:name/toggle-status', requireRole([USER_ROLES.ADMIN]), toggleInventoryItemStatus);

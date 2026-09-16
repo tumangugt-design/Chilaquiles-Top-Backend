@@ -35,10 +35,27 @@ const purchaseAllocationSchema = new mongoose.Schema({
       cost: { type: Number, required: true, min: 0 }
     }],
     required: true,
+    // Un lote de PRODUCCION siempre sale de insumos: rawInputs no puede ir
+    // vacio. Un lote de RECTIFICACION no sale de nada — es una cantidad que
+    // alguien conto y declaro, con su costo. Por eso ahi si se permite vacio.
     validate: {
-      validator: (v) => Array.isArray(v) && v.length > 0,
+      validator: function (v) {
+        if (this.origin === 'RECTIFICACION') return Array.isArray(v)
+        return Array.isArray(v) && v.length > 0
+      },
       message: 'rawInputs debe tener al menos un ingrediente.'
     }
+  },
+  // De donde salio este lote. PRODUCCION es el flujo normal (Compras ->
+  // Produccion). RECTIFICACION es una declaracion humana: corte de apertura,
+  // conteo fisico por encima, stock que aparecio. Se distingue para que el
+  // reporte de costos pueda decir que parte del inventario tiene costo
+  // trazado de verdad y que parte se declaro a mano.
+  origin: {
+    type: String,
+    enum: ['PRODUCCION', 'RECTIFICACION'],
+    default: 'PRODUCCION',
+    index: true
   },
   // Nombre del producto de Stock que resulta de la transformacion (debe
   // coincidir con el nombre normalizado usado en Inventory/Portion, ej.

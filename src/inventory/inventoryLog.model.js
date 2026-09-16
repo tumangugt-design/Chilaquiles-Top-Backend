@@ -12,7 +12,11 @@ const inventoryLogSchema = new mongoose.Schema({
   },
   type: {
     type: String,
-    enum: ['IN', 'OUT', 'ADJUSTMENT'],
+    // MERMA: baja declarada (se cayo, se echo a perder, conteo por debajo).
+    // Se separa de OUT a proposito: OUT es producto que se vendio y su costo
+    // es COGS; MERMA es producto que se perdio y su costo es perdida. Meterlos
+    // en la misma bolsa hace que el margen mienta.
+    enum: ['IN', 'OUT', 'ADJUSTMENT', 'MERMA'],
     required: true
   },
   amount: {
